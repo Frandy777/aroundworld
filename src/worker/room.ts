@@ -2,8 +2,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { MAX_PLAYERS, PLAYER_DEFS } from '../shared/data';
 import { DEFAULT_SETTINGS, LEAVE, NAME_MAX, REPLACED, ROUNDS_MAX, ROUNDS_MIN, type C2S, type Fail, type RoomInfo, type S2C } from '../shared/protocol';
 import type { Ev, Settings } from '../shared/types';
-import { Game, type Host } from './game';
-import { stop } from './util';
+import { Game, fresh, type Host, type Saved } from './game';
 
 export interface Env { ROOM: DurableObjectNamespace<Room> }
 
@@ -12,34 +11,104 @@ const IDLE_MS = 5 * 60_000; // nobody connected for this long: the room is disso
 
 interface Seat {
   pid: string; seat: number; name: string; pi: number; // pi: player index in the game, -1 before it starts
-  ws: WebSocket | null; left: boolean; drop?: ReturnType<typeof setTimeout>;
+  left: boolean; drop: number; // drop: when the seat of a player who vanished is let go (epoch ms; 0: it is held)
 }
+// What is written to storage of a room (see `save`). The connections are not: the runtime keeps them.
+interface Stored { code: string; host: string; settings: Settings; idle: number; seats: Seat[]; game?: Saved }
 
 const cleanName = (raw: string, seat: number) => Array.from(raw.replace(/[\u0000-\u001f\u007f]/g, '').trim()).slice(0, NAME_MAX).join('').trim() || PLAYER_DEFS[seat].name;
 
-// One room = one object. Everything lives in memory: when the room dissolves the object keeps nothing, and a gone room's code is free again.
+// One room = one object, written to storage whenever it changes: an object that was evicted or restarted comes back as the room it was (`restore`). The connections hibernate with it (the runtime
+// keeps them, tagged with their player's id, and wakes the object for what they say), and everything that waits for a time is a deadline, which the alarm watches (`save` sets it).
+// When the room dissolves the object keeps nothing, and a gone room's code is free again.
 export class Room extends DurableObject<Env> implements Host {
   private code = ''; // '' while there is no room
   private seats: Seat[] = [];
   private host = ''; // pid of the host
   private settings: Settings = { ...DEFAULT_SETTINGS };
   private game: Game | null = null;
+  private idle = 0; // when a room nobody is connected to is dissolved (epoch ms; 0: somebody is)
   private batch: string[] = []; // events of this tick, already serialised: they go out together
-  private idle?: ReturnType<typeof setTimeout>;
+  private stored = ''; // what storage holds of the room
+  private alarmAt = NaN; // what the alarm is set to (NaN: unknown)
+
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    // A ping is answered by the runtime, without waking the room: with an empty batch of events, which a client takes in stride.
+    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('{"t":"ping"}', '{"t":"ev","ev":[]}'));
+    void ctx.blockConcurrencyWhile(() => this.restore());
+  }
+
+  /** An object that was evicted or restarted starts empty: bring its room back, and the game with it. */
+  private async restore() {
+    const json = this.ctx.storage.kv.get<string>('room');
+    if (!json) return;
+    try {
+      const { game, ...room }: Stored = JSON.parse(json);
+      this.stored = json;
+      Object.assign(this, room);
+      if (game) {
+        const g = (this.game = new Game(this, game.ckpt));
+        await g.resume(game);
+        for (const s of this.seats) if (s.left) g.forfeit(s.pi);
+      }
+      if (!this.anyOnline()) this.presence(); // the connections are gone (a restart cuts them): nobody can be waited for
+    } catch (err) {
+      console.error('room lost', err);
+      this.dissolve();
+    }
+  }
+
+  /** Write the room down, and set the alarm for the first deadline there is. Called wherever something may have changed. */
+  save() {
+    if (!this.code) return; // dissolved: nothing is kept
+    const { code, host, settings, idle, seats } = this;
+    const json = JSON.stringify({ code, host, settings, idle, seats, game: this.game?.saved } satisfies Stored);
+    if (json !== this.stored) this.ctx.storage.kv.put('room', (this.stored = json));
+    const at = Math.min(...[idle, this.game?.due ?? 0, ...seats.map((s) => s.drop)].filter(Boolean)); // Infinity: nothing to wait for
+    if (at === this.alarmAt) return;
+    this.alarmAt = at;
+    void (at < Infinity ? this.ctx.storage.setAlarm(at) : this.ctx.storage.deleteAlarm());
+  }
 
   /** Claim a code for a new room: false when it is taken. */
   create(code: string) {
     if (this.code) return false;
     this.code = code;
+    this.idle = Date.now() + IDLE_MS; // nobody is connected yet: if nobody comes, the room must not stay for ever
+    this.save();
     return true;
   }
 
   async fetch(req: Request): Promise<Response> {
-    const q = new URL(req.url).searchParams;
+    const q = new URL(req.url).searchParams, pid = q.get('pid') ?? '';
+    for (const old of this.conns(pid)) old.close(REPLACED, 'replaced'); // the new connection of a player replaces their old one
     const { 0: client, 1: server } = new WebSocketPair();
-    server.accept();
-    this.join(server, q.get('pid') ?? '', q.get('name') ?? '');
+    this.ctx.acceptWebSocket(server, [pid.slice(0, 64)]); // the connection is tagged with its player's id (cut short, so that a bad one is turned away by `join` instead of throwing here)
+    this.join(server, pid, q.get('name') ?? '');
+    this.save();
     return new Response(null, { status: 101, webSocket: client });
+  }
+
+  // ---- Events from the runtime ----
+  webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer) {
+    const s = this.seatOf(ws);
+    if (s) this.onMessage(s, raw);
+    this.save();
+  }
+  webSocketClose(ws: WebSocket, code: number) { this.onClose(ws, code); }
+  webSocketError(ws: WebSocket) { this.onClose(ws, 1006); }
+
+  /** A deadline has come: of a room nobody is in, of the seat of a player who vanished, or of the question that waits for an answer. */
+  alarm() {
+    this.alarmAt = NaN; // spent
+    const now = Date.now();
+    if (this.idle && this.idle <= now) this.dissolve();
+    else {
+      this.seats.filter((s) => s.drop && s.drop <= now).forEach((s) => this.leave(s));
+      this.game?.tick(now);
+    }
+    this.save();
   }
 
   // ---- Host (what the game needs of its room) ----
@@ -47,12 +116,18 @@ export class Room extends DurableObject<Env> implements Host {
     if (!this.batch.length) queueMicrotask(() => this.flush());
     this.batch.push(JSON.stringify(ev));
   }
-  online(pi: number) { return !!this.seats.find((s) => s.pi === pi)?.ws; }
-  anyOnline() { return this.seats.some((s) => s.ws); }
+  online(pi: number) { return this.seats.some((s) => s.pi === pi && this.up(s)); }
+  anyOnline() { return this.seats.some((s) => this.up(s)); }
 
   // ---- Wire ----
+  private conns(pid?: string) { return this.ctx.getWebSockets(pid).filter((w) => w.readyState === WebSocket.OPEN); } // a closing one may still be listed
+  private up(s: Seat) { return this.conns(s.pid).length > 0; }
+  private seatOf(ws: WebSocket) { const [pid] = this.ctx.getTags(ws); return this.seats.find((s) => s.pid === pid); }
   private send(s: Seat, msg: S2C | string) {
-    try { s.ws?.send(typeof msg === 'string' ? msg : JSON.stringify(msg)); } catch { /* the socket is closing: its close event follows */ }
+    const raw = typeof msg === 'string' ? msg : JSON.stringify(msg);
+    for (const w of this.conns(s.pid)) {
+      try { w.send(raw); } catch { /* the socket is closing: its close event follows */ }
+    }
   }
   private flush() {
     if (!this.batch.length) return;
@@ -63,7 +138,7 @@ export class Room extends DurableObject<Env> implements Host {
   private info(s: Seat): RoomInfo {
     return {
       code: this.code, settings: this.settings, started: !!this.game, me: s.seat,
-      seats: [...this.seats].sort((a, b) => a.seat - b.seat).map((x) => ({ seat: x.seat, name: x.name, online: !!x.ws, host: x.pid === this.host, pi: x.pi })),
+      seats: [...this.seats].sort((a, b) => a.seat - b.seat).map((x) => ({ seat: x.seat, name: x.name, online: this.up(x), host: x.pid === this.host, pi: x.pi })),
     };
   }
   private broadcastRoom() { this.seats.forEach((s) => this.send(s, { t: 'room', room: this.info(s) })); }
@@ -81,59 +156,58 @@ export class Room extends DurableObject<Env> implements Host {
     if (!s) {
       if (this.seats.length >= MAX_PLAYERS) return this.fail(ws, 'full');
       const seat = PLAYER_DEFS.findIndex((_, k) => !this.seats.some((x) => x.seat === k));
-      s = { pid, seat, name: cleanName(name, seat), pi: -1, ws: null, left: false };
+      s = { pid, seat, name: cleanName(name, seat), pi: -1, left: false, drop: 0 };
       this.seats.push(s);
       if (!this.host) this.host = pid;
     }
-    const seat = s, old = seat.ws;
-    seat.ws = ws;
-    old?.close(REPLACED, 'replaced');
-    stop(seat.drop);
-    stop(this.idle);
-    ws.addEventListener('message', (e) => this.onMessage(seat, e.data));
-    ws.addEventListener('close', (e) => this.onClose(seat, ws, e.code));
-    ws.addEventListener('error', () => this.onClose(seat, ws, 1006));
     this.flush(); // what the others have been told is what the snapshot below contains
-    this.broadcastRoom();
-    if (this.game) this.send(seat, { t: 'game', me: seat.pi, state: this.game.S, ask: this.game.pendingEv });
-    this.game?.presence();
+    this.presence();
+    if (this.game) this.send(s, { t: 'game', me: s.pi, state: this.game.S, ask: this.game.pendingEv });
   }
 
-  private onClose(s: Seat, ws: WebSocket, code: number) {
-    if (s.ws !== ws) return; // a newer connection of the same player replaced this one
-    s.ws = null;
-    if (code === LEAVE) return this.leave(s);
-    if (!this.game) s.drop = setTimeout(() => this.leave(s), SEAT_GRACE_MS);
-    this.presence();
+  private onClose(ws: WebSocket, code: number) {
+    const s = this.seatOf(ws);
+    if (s && !s.left && !this.up(s)) { // not a seat that has left already, nor a connection that a newer one of the same player replaced
+      if (code === LEAVE) this.leave(s); else this.presence();
+    }
+    this.save();
   }
 
   // The player is gone for good: their seat is freed, or in a running game they forfeit.
   private leave(s: Seat) {
-    stop(s.drop);
+    s.drop = 0;
     if (this.game) { s.left = true; this.game.forfeit(s.pi); } else this.seats = this.seats.filter((x) => x !== s);
     if (this.host === s.pid) this.host = this.seats.find((x) => !x.left)?.pid ?? '';
     if (this.seats.every((x) => x.left)) return this.dissolve();
     this.presence();
   }
 
+  /** Somebody connected or vanished: tell the room, and set the clocks of whatever waits for a player (the open question, a lobby seat, the room itself). */
   private presence() {
     this.broadcastRoom();
     this.game?.presence();
-    stop(this.idle);
-    if (!this.anyOnline()) this.idle = setTimeout(() => this.dissolve(), IDLE_MS);
+    const now = Date.now();
+    for (const s of this.seats) {
+      if (this.up(s)) s.drop = 0;
+      else if (!this.game) s.drop ||= now + SEAT_GRACE_MS;
+    }
+    this.idle = this.anyOnline() ? 0 : this.idle || now + IDLE_MS;
   }
 
   /** The room ends: nothing of it is kept. */
   private dissolve() {
-    stop(this.idle);
     this.game?.dispose();
-    for (const s of this.seats) { stop(s.drop); s.ws?.close(1000, 'room closed'); }
+    this.conns().forEach((w) => w.close(1000, 'room closed'));
     this.seats = [];
     this.game = null;
     this.batch = [];
     this.host = '';
     this.settings = { ...DEFAULT_SETTINGS };
     this.code = '';
+    this.idle = 0;
+    this.stored = '';
+    this.alarmAt = NaN;
+    void this.ctx.storage.deleteAll();
   }
 
   // ---- Messages ----
@@ -164,7 +238,7 @@ export class Room extends DurableObject<Env> implements Host {
   private start() {
     [...this.seats].sort((a, b) => a.seat - b.seat).forEach((s, i) => (s.pi = i));
     const players = [...this.seats].sort((a, b) => a.pi - b.pi).map((s) => ({ name: s.name, color: PLAYER_DEFS[s.seat].color }));
-    this.game = new Game(this, players, this.settings);
+    this.game = new Game(this, fresh(players, this.settings));
     this.broadcastRoom();
     this.game.run().catch((err) => console.error('game crashed', err));
   }
@@ -174,7 +248,7 @@ export class Room extends DurableObject<Env> implements Host {
     this.game?.dispose();
     this.game = null;
     this.batch = [];
-    this.seats = this.seats.filter((s) => !s.left && s.ws);
+    this.seats = this.seats.filter((s) => !s.left && this.up(s));
     this.seats.forEach((s) => (s.pi = -1));
     if (!this.seats.some((s) => s.pid === this.host)) this.host = this.seats[0]?.pid ?? '';
     if (!this.seats.length) return this.dissolve();

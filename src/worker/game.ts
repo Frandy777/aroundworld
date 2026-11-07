@@ -3,7 +3,6 @@ import { B, P, T, m, money } from '../shared/msg';
 import { apply, maxRounds, ranking, stats } from '../shared/state';
 import type { Answer, Block, CasinoRoll, Ev, GameState, Msg, Notice, OrderPass, Owned, PickItem, Prompt, Row, Settings, Tone } from '../shared/types';
 import { NEWS } from './news';
-import { d6, pick, stop } from './util';
 
 const N = TILE_COUNT;
 const JAIL = kindAt('jail');
@@ -15,11 +14,26 @@ export interface Host {
   emit(ev: Ev): void; // tell every client
   online(pi: number): boolean;
   anyOnline(): boolean;
+  save(): void; // the game waits: write down where it stands
 }
-interface Pending { id: number; to: number; p: Prompt; ev: Ev; resolve(a: Answer): void; timer?: ReturnType<typeof setTimeout> }
+interface Pending { id: number; to: number; p: Prompt; ev: Ev; resolve(a: Answer): void; due: number } // due: when it answers itself (epoch ms; 0: it waits)
 // What the next move of a player is bent by (news events). They never show: the news card said it.
 export interface Mods { fuel: boolean; half: boolean; back: boolean; magnet: boolean }
 const noMods = (): Mods => ({ fuel: false, half: false, back: false, magnet: false });
+
+// What a restart keeps of a game: how a turn began (a checkpoint), and what that turn has taken from outside since (the tape: its dice, and the answers it was given; `k` is 'rnd' or the kind of prompt answered).
+interface Entry { k: string; v: unknown }
+export interface Ckpt { S: GameState; mods: Mods[]; nextId: number; gone: number[]; turn: number; round: number }
+export interface Saved { ckpt: Ckpt; tape: Entry[]; due: number }
+
+/** The game before its first turn. */
+export const fresh = (players: { name: string; color: number }[], settings: Settings): Ckpt => ({
+  S: {
+    settings, own: {}, order: players.map((_, i) => i), turn: 0, round: 1, step: null, bankrupt: [], over: false, log: [],
+    players: players.map((p) => ({ ...p, cash: START_CASH, tile: 0, jail: false, party: false, stay: false, out: 0 })),
+  },
+  mods: players.map(noMods), nextId: 1, gone: [], turn: 0, round: 1,
+});
 
 const rows = (...r: [l: string, v: string, sum?: boolean, tone?: Tone][]): Block => ({ k: 'rows', rows: r.map(([l, v, sum, tone]) => ({ l: [l], v: [v], sum, tone })) });
 const note = (...a: Msg): Block => ({ k: 'note', m: a });
@@ -72,23 +86,55 @@ export class Game {
   again = false; // Buy One, Get One: the player goes once more
   passed = new Set<number>(); // players walked past this turn
   private roll: [number, number] = [1, 1];
-  private nextId = 1;
+  private nextId: number;
   private pending: Pending | null = null;
-  private gone = new Set<number>(); // players who left: their asks answer themselves, and they drop out on their next turn
+  private gone: Set<number>; // players who left: their asks answer themselves, and they drop out on their next turn
+  private tape: Entry[] = []; // what the turn in progress has taken from outside so far
+  private replay: Entry[] | null = null; // the tape while it plays back after a restart; null once the game is live
+  private wasDue = 0; // the clock the open question had before the restart
+  private caughtUp?: () => void; // the playback is over
 
-  constructor(private host: Host, players: { name: string; color: number }[], settings: Settings) {
-    this.S = {
-      settings, own: {}, order: players.map((_, i) => i), turn: 0, round: 1, step: null, bankrupt: [], over: false, log: [],
-      players: players.map((p) => ({ ...p, cash: START_CASH, tile: 0, jail: false, party: false, stay: false, out: 0 })),
-    };
-    this.mods = players.map(noMods);
+  /** A game standing at a checkpoint: a new one (`fresh`), or the one a restart found. */
+  constructor(private host: Host, private ckpt: Ckpt) {
+    this.S = structuredClone(ckpt.S);
+    this.mods = structuredClone(ckpt.mods);
+    this.nextId = ckpt.nextId;
+    this.gone = new Set(ckpt.gone);
   }
 
   /** The ask a reconnecting client still has to see. */
   get pendingEv() { return this.pending?.ev ?? null; }
+  /** When the open question answers itself (epoch ms; 0: it waits). */
+  get due() { return this.pending?.due ?? 0; }
+  /** What a restart needs to bring the game back. */
+  get saved(): Saved { return { ckpt: this.ckpt, tape: this.tape, due: this.due }; }
+
+  // ---- Chance and the tape ----
+  // The game is a chain of awaits, which a restart cannot carry over. A turn can be played again though: from its checkpoint, fed from the tape instead of the dice and the
+  // players, it ends up where it stood. That holds while everything a turn takes from outside comes through `rnd` and `ask`, and while the clients hear nothing of the replay.
+  private next(k: string): Entry | undefined {
+    const e = this.replay?.shift();
+    if (e) {
+      if (e.k !== k) throw new Error(`the tape has ${e.k} where the game wants ${k}`);
+      this.tape.push(e);
+      return e;
+    }
+    if (this.replay) { this.replay = null; this.caughtUp?.(); } // the tape is spent: live from here
+  }
+  /** 1..n */
+  rnd(n: number): number {
+    const e = this.next('rnd');
+    if (e) return e.v as number;
+    const v = 1 + Math.floor(Math.random() * n);
+    this.tape.push({ k: 'rnd', v });
+    return v;
+  }
+  d6() { return this.rnd(6); }
+  pick<T>(a: readonly T[]): T { return a[this.rnd(a.length) - 1]; }
+  coin() { return this.rnd(2) === 1; }
 
   // ---- Events ----
-  emit(ev: Ev) { apply(this.S, ev); this.host.emit(ev); }
+  emit(ev: Ev) { apply(this.S, ev); if (!this.replay) this.host.emit(ev); } // an event of the replay is no news to the clients
   log(msg: Msg) { this.emit({ t: 'log', m: msg }); }
   toast(msg: Msg | string, tone: Tone = '') { this.emit({ t: 'toast', m: typeof msg === 'string' ? [msg] : msg, tone }); }
   notice(n: Notice) { this.emit({ t: 'notice', n }); }
@@ -100,24 +146,26 @@ export class Game {
   // ---- Prompts ----
   ask(to: number, p: Prompt): Promise<Answer> {
     return new Promise((resolve) => {
-      const id = this.nextId++, ev: Ev = { t: 'ask', id, to, p }, pend: Pending = { id, to, p, ev, resolve };
+      const id = this.nextId++, ev: Ev = { t: 'ask', id, to, p }, pend: Pending = { id, to, p, ev, resolve, due: 0 }, replaying = !!this.replay;
+      const past = this.next(p.k);
+      if (past) return resolve(past.v as Answer);
       this.pending = pend;
+      if (replaying) { pend.due = this.wasDue; return; } // it was asked before the restart: the clients know, and its clock runs on
       this.emit(ev);
-      if (this.gone.has(to)) this.settle(pend, fallback(p)); else this.arm(pend);
+      if (this.gone.has(to)) return this.settle(pend, fallback(p));
+      this.arm(pend);
+      this.host.save();
     });
   }
   private settle(pend: Pending, v: Answer) {
     if (this.pending !== pend) return;
-    stop(pend.timer);
     this.pending = null;
+    this.tape.push({ k: pend.p.k, v });
     this.emit({ t: 'close', id: pend.id });
     pend.resolve(v);
   }
   private arm(pend: Pending) {
-    stop(pend.timer);
-    pend.timer = undefined;
-    if (!this.host.anyOnline()) return; // nobody is watching: the game waits
-    pend.timer = setTimeout(() => this.settle(pend, fallback(pend.p)), this.host.online(pend.to) ? ASK_MS : OFFLINE_MS);
+    pend.due = this.host.anyOnline() ? Date.now() + (this.host.online(pend.to) ? ASK_MS : OFFLINE_MS) : 0; // nobody is watching: the game waits
   }
   answer(pi: number, id: number, v: unknown) {
     const pend = this.pending;
@@ -127,11 +175,13 @@ export class Game {
   }
   /** Somebody connected or left: the clock on the open question runs differently now. */
   presence() { if (this.pending) this.arm(this.pending); }
+  /** The clock of the open question may have run out: then the default answer is taken. */
+  tick(now: number) { if (this.pending?.due && this.pending.due <= now) this.settle(this.pending, fallback(this.pending.p)); }
   forfeit(pi: number) {
     this.gone.add(pi);
     if (this.pending?.to === pi) this.settle(this.pending, fallback(this.pending.p));
   }
-  dispose() { stop(this.pending?.timer); this.pending = null; }
+  dispose() { this.pending = null; }
 
   // ---- Who is who ----
   alive() { return this.S.order.filter((i) => !this.S.players[i].out); }
@@ -211,31 +261,52 @@ export class Game {
   }
 
   // ---- The game ----
-  async run() {
+  /** A turn begins: this is where a restart comes back to. */
+  private mark(turn: number, round: number) {
+    this.ckpt = structuredClone({ S: this.S, mods: this.mods, nextId: this.nextId, gone: [...this.gone], turn, round });
+    this.tape = [];
+  }
+
+  /** After a restart: play the turn in progress again from its checkpoint, fed from the tape. Resolves once it stands where it stood; rejects when the code no longer plays it the same way. */
+  resume({ tape, due }: Saved) {
+    if (this.S.over) return Promise.resolve();
+    return new Promise<void>((caughtUp, fail) => {
+      this.replay = tape; this.wasDue = due; this.caughtUp = caughtUp;
+      this.run(true).then(caughtUp, (err) => { if (this.replay) fail(err); else console.error('game crashed', err); });
+    });
+  }
+
+  async run(resumed = false) {
     const S = this.S;
-    this.emit({ t: 'start', state: structuredClone(S) });
-    this.rollOrder();
-    this.log(['Game started. Good luck!']);
-    let turn = 0, round = 1;
+    if (!resumed) {
+      this.emit({ t: 'start', state: structuredClone(S) });
+      this.rollOrder();
+      this.log(['Game started. Good luck!']);
+    }
+    let { turn, round } = this.ckpt;
     for (;;) {
       const pi = S.order[turn];
       do {
         this.again = false;
+        if (resumed) resumed = false; else this.mark(turn, round); // a resumed run begins in a turn that is marked already
         this.emit({ t: 'turn', turn, round });
         await this.play(pi);
+        if (this.replay) throw new Error('the turn ended before its tape did'); // the code plays it differently than it was played
       } while (this.again && !this.over() && !S.players[pi].out);
       if (this.over()) break;
       do { if (++turn >= S.order.length) { turn = 0; round++; } } while (S.players[S.order[turn]].out);
       if (round > maxRounds(S)) break;
     }
     this.emit({ t: 'over', rank: ranking(S) });
+    this.mark(turn, round); // the finished game is what a restart finds
+    this.host.save();
   }
 
   // Everyone rolls two dice, the lowest total goes first, ties roll again among themselves.
   private rollOrder() {
     const passes: OrderPass[] = [], order: number[] = [];
     const settle = (group: number[]) => {
-      const rolls = group.map((): [number, number] => [d6(), d6()]), by = new Map<number, number[]>();
+      const rolls = group.map((): [number, number] => [this.d6(), this.d6()]), by = new Map<number, number[]>();
       passes.push({ group, rolls });
       group.forEach((p, k) => { const t = rolls[k][0] + rolls[k][1]; by.set(t, [...(by.get(t) ?? []), p]); });
       for (const t of [...by.keys()].sort((a, b) => a - b)) { const g = by.get(t) ?? []; if (g.length === 1) order.push(g[0]); else settle(g); }
@@ -264,7 +335,7 @@ export class Game {
     // 2. Roll
     this.emit({ t: 'step', s: 'roll' });
     await this.ask(pi, { k: 'roll' });
-    const a = d6(), b = d6();
+    const a = this.d6(), b = this.d6();
     this.roll = [a, b];
     this.emit({ t: 'dice', a, b });
     if (a === b) this.bonus('Rio', [500, 1000, 2000]);
@@ -450,9 +521,9 @@ export class Game {
   // The Media owner is paid for every story and may throw their own away once.
   private async news(pi: number) {
     this.bonus('BBC', [500]);
-    let story = pick(NEWS)(this, pi);
+    let story = this.pick(NEWS)(this, pi);
     if (this.spOf(pi, 'BBC')) {
-      if ((await this.ask(pi, { k: 'news', card: story.card })) === true) { story = pick(NEWS)(this, pi); this.emit({ t: 'news', card: story.card }); }
+      if ((await this.ask(pi, { k: 'news', card: story.card })) === true) { story = this.pick(NEWS)(this, pi); this.emit({ t: 'news', card: story.card }); }
     } else this.emit({ t: 'news', card: story.card });
     this.log(m`News: ${B(story.card.title)}`);
     await story.run();
@@ -464,7 +535,7 @@ export class Game {
     const view = { cid, v, bet: 0, max: 0, rolls: [] as CasinoRoll[], won: 0, jail: false };
     let delta = 0, jail = false;
     if (v === 'lucky') {
-      const a = d6(), b = d6();
+      const a = this.d6(), b = this.d6();
       jail = a === b;
       delta = jail ? 0 : (a + b) * 1000;
       this.emit({ t: 'casino', view: { ...view, stage: 'end', rolls: [[a, b, delta]], won: delta, jail } });
@@ -474,7 +545,7 @@ export class Game {
       const bet = first.bet, rolls: CasinoRoll[] = [];
       let won = 0;
       for (let n = 1; n <= 2; n++) {
-        const a = d6(), b = d6(), sum = a + b, gain = Math.round(((sum - 2) / 5) * (bet - 100)), prev = rolls.at(-1);
+        const a = this.d6(), b = this.d6(), sum = a + b, gain = Math.round(((sum - 2) / 5) * (bet - 100)), prev = rolls.at(-1);
         rolls.push([a, b, gain]);
         won += gain;
         jail = !!prev && [prev[0], prev[1]].sort().join() === [a, b].sort().join() && sum > 7; // the same pair twice, above 7
