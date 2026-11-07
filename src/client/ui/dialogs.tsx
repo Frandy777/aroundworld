@@ -5,7 +5,7 @@ import { canPick } from '../../shared/state';
 import type { CasinoView, NewsCard as News, Notice, OrderPass, Player, Prompt, RankRow } from '../../shared/types';
 import { reply } from '../asks';
 import { pace } from '../render/scene';
-import { state, useCell, G, type Cell, type Open } from '../store';
+import { state, useCell, G, type Cell } from '../store';
 import { Blocks, Die, Face, Flag, Icon, Rich, hex, money, tileHead } from './bits';
 import { TileBody } from './tile';
 
@@ -214,7 +214,7 @@ export function ResultsCard({ rank, close }: { rank: RankRow[]; close(v: 'menu' 
 }
 
 // ---- Casino: one card for a whole visit, told in views (see CasinoView). Lucky is one view, high stakes is a bet, a roll, then roll again or cash out ----
-export interface Ctl { cid: number; view: Cell<CasinoView>; ask: Cell<{ id: number; mine: boolean } | null>; card: Open<void> }
+export interface Ctl { view: Cell<CasinoView>; ask: Cell<{ id: number; mine: boolean } | null> }
 
 export function CasinoCard({ ctl, close }: { ctl: Ctl; close(): void }) {
   const v = useCell(ctl.view), ask = useCell(ctl.ask), lucky = v.v === 'lucky';

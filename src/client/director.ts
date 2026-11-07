@@ -1,5 +1,5 @@
 import { apply, ranking } from '../shared/state';
-import type { Ev, GameState, Prompt } from '../shared/types';
+import type { CasinoView, Ev, GameState, Prompt } from '../shared/types';
 import { close, forget, hold, reply, wasClosed } from './asks';
 import { send } from './net';
 import { clearDice, hideDice, hop, jump, placeAt, removeToken, rollDice, setActive, tokens } from './render/actors';
@@ -7,7 +7,7 @@ import { home } from './render/layout';
 import { finishTweens, pace, wait } from './render/scene';
 import { enterDemo, enterGame, focusTok, selectTile, setOwner, showState, tokenSpot } from './stage';
 import { G, actionBtn, activeTab, bump, bumpAssets, clearCards, floatText, floats, hudLive, lastRoll, selectedTile, session, tip, toast, toasts, viewedPlayer, waitingFor, type Button, type Open } from './store';
-import { dropCasinoAsk, forgetCasino, openAsk, openNews, openNotice, openOrder, openResults, showCasino, closeCasino } from './ui/open';
+import { openAsk, openCasino, openNews, openNotice, openOrder, openResults } from './ui/open';
 import { money } from './ui/bits';
 
 // The director plays the server's events on this client's screen, one at a time. The server runs ahead (it only waits for decisions): `G.S` is the game
@@ -28,6 +28,15 @@ let shown: Open<void> | null = null; // the card being waited on that has nothin
 /** Wait for a card with nothing to decide. A hidden tab throttles the timer that closes it, and nobody sees it there: it comes down as the tab goes hidden. */
 const show = (card: Open<void>) => live((shown = card).done);
 
+let casino: ReturnType<typeof openCasino> | null = null; // the card of the casino visit in progress, if any
+/** Put a view on the casino card (the first one opens it). Settles when the card has closed. */
+function showCasino(view: CasinoView, ask: { id: number; mine: boolean } | null) {
+  if (casino?.view.get().cid === view.cid) { casino.view.set(view); casino.ask.set(ask); return casino.card.done; }
+  const c = (casino = openCasino(view, ask));
+  c.card.done.then(() => { if (casino === c) casino = null; });
+  return c.card.done;
+}
+
 /** Starts listening to the page; returns what stops it, and ends what is being played. `onLeave` is what leaves the room when a game's results are closed with MAIN MENU. */
 export function start(onLeave: () => void) {
   leave = onLeave;
@@ -42,7 +51,7 @@ function reset() {
   running = false;
   pace.speed = 1;
   forget();
-  forgetCasino();
+  casino = null;
   clearCards();
   toasts.set([]); floats.set([]); tip.set(null);
   finishTweens();
@@ -191,7 +200,7 @@ async function play(ev: Ev) {
     case 'skip': if (!quiet()) toast(ev.m, 'bad'); await pause(1.6); return;
     case 'notice': if (!quiet()) await show(openNotice(ev.n)); return;
     case 'news': if (!quiet()) await show(openNews(ev.card)); return;
-    case 'casino': if (quiet()) closeCasino(); else await live(showCasino(ev.view, null)); return;
+    case 'casino': if (quiet()) casino?.card.close(); else await live(showCasino(ev.view, null)); return;
     case 'ask': return ask(ev.id, ev.to, ev.p);
     case 'over': {
       apply(S, ev);
@@ -215,7 +224,7 @@ async function ask(id: number, to: number, p: Prompt) {
   waitingFor.set(me ? -1 : to);
   await live(over);
   card?.close();
-  if (p.k === 'casino') dropCasinoAsk(id);
+  if (p.k === 'casino' && casino?.ask.get()?.id === id) casino.ask.set(null);
   if (btn && actionBtn.get() === btn) actionBtn.set(null);
   waitingFor.set(-1);
 }

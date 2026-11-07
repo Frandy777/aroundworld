@@ -40,18 +40,8 @@ export const openMenu = (room: string, quit: () => void) => openCard((close) => 
   </>} />
 ));
 
-// ---- Casino: the card of the visit in progress, if any ----
-let casino: Ctl | null = null;
-
-/** Put a view on the casino card (the first one opens it). Settles when the card has closed. */
-export function showCasino(view: CasinoView, ask: { id: number; mine: boolean } | null): Promise<void> {
-  if (casino && casino.cid === view.cid) { casino.view.set(view); casino.ask.set(ask); return casino.card.done; }
-  const ctl: Ctl = { cid: view.cid, view: cell(view), ask: cell(ask), card: null as unknown as Open<void> };
-  ctl.card = openCard((close) => <CasinoCard ctl={ctl} close={() => close()} />);
-  ctl.card.done.then(() => { if (casino === ctl) casino = null; });
-  casino = ctl;
-  return ctl.card.done;
+/** The card of a casino visit: one card for the whole visit, which stays up while `view` and `ask` (the question put to this player, if any) change under it. */
+export function openCasino(view: CasinoView, ask: { id: number; mine: boolean } | null) {
+  const ctl: Ctl = { view: cell(view), ask: cell(ask) };
+  return { ...ctl, card: openCard((close) => <CasinoCard ctl={ctl} close={() => close()} />) };
 }
-export const dropCasinoAsk = (id: number) => { if (casino?.ask.get()?.id === id) casino.ask.set(null); };
-export const closeCasino = () => casino?.card.close();
-export const forgetCasino = () => { casino = null; };
