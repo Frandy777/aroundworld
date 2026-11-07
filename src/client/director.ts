@@ -6,7 +6,7 @@ import { clearDice, hideDice, hop, jump, placeAt, removeToken, rollDice, setActi
 import { home } from './render/layout';
 import { finishTweens, pace, wait } from './render/scene';
 import { enterDemo, enterGame, focusTok, selectTile, setOwner, showState, tokenSpot } from './stage';
-import { G, actionBtn, activeTab, bump, bumpAssets, clearCards, floatText, floats, hudLive, lastRoll, selectedTile, session, tip, toast, toasts, viewedPlayer, waitingFor, type Button, type Open } from './store';
+import { G, actionBtn, activeTab, bump, bumpAssets, cashEls, clearCards, floatText, floats, hudLive, lastRoll, selectedTile, session, tip, toast, toasts, viewedPlayer, waitingFor, type Button, type Open } from './store';
 import { openAsk, openCasino, openNews, openNotice, openOrder, openResults } from './ui/open';
 import { money } from './ui/bits';
 
@@ -102,7 +102,7 @@ export function restore(m: { me: number; state: GameState; ask: Ev | null }) {
 // ---- Floating numbers on a player's card: the token can be anywhere, off screen ----
 const air: Record<number, number> = {};
 function floatCard(pi: number, text: string, tone: string) {
-  const r = document.querySelector(`#players [data-i="${pi}"] .cash`)?.getBoundingClientRect();
+  const r = cashEls[pi]?.getBoundingClientRect();
   if (!r) return;
   floatText(r.right, r.top - 32 * (air[pi] ||= 0), text, `${tone} hud`);
   air[pi]++;

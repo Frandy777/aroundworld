@@ -4,7 +4,7 @@ import { maxRounds } from '../../shared/state';
 import type { Step } from '../../shared/types';
 import { leaveRoom } from '../controller';
 import { CAM, focusTok, lookAtMap, lookAtTile, setMinimap } from '../stage';
-import { G, actionBtn, activeTab, cards, floats, hudLive, lastRoll, selectedTile, session, state, statsOf, tip, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
+import { G, actionBtn, activeTab, cards, cashEls, floats, hudLive, lastRoll, selectedTile, session, state, statsOf, tip, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
 import { Die, Face, Flag, Icon, Named, Pips, Rich, hex, money, tileHead } from './bits';
 import { minimapToWorld } from './minimap';
 import { openMenu, openRules } from './open';
@@ -50,7 +50,7 @@ function PCard({ i, on, viewing }: { i: number; on: boolean; viewing: boolean })
   const S = useGame(), p = S.players[i], s = statsOf(i), v = useRoll(p.cash), room = useCell(session).room;
   const offline = room?.seats.find((x) => x.pi === i)?.online === false;
   return (
-    <div className={`pcard box ${on ? 'on' : ''} ${viewing ? 'viewing' : ''} ${p.out ? 'out' : ''} ${v < p.cash ? 'gain' : v > p.cash ? 'loss' : ''}`} data-i={i}
+    <div className={`pcard box ${on ? 'on' : ''} ${viewing ? 'viewing' : ''} ${p.out ? 'out' : ''} ${v < p.cash ? 'gain' : v > p.cash ? 'loss' : ''}`}
       onClick={() => { viewedPlayer.set(i); activeTab.set('assets'); focusTok(i, 2.5); }}>
       <Face color={p.color} />
       <div className="nm">
@@ -64,7 +64,7 @@ function PCard({ i, on, viewing }: { i: number; on: boolean; viewing: boolean })
           {p.stay && <span className="badge blue">STAY</span>}
         </span>
       </div>
-      <div className="cash">{money(v)}</div>
+      <div className="cash" ref={(c) => { cashEls[i] = c; }}>{money(v)}</div>
       <div className="sub">
         <span title="Cities"><Icon n="city" />{s.city}</span><span title="Investments"><Icon n="brief" />{s.inv}</span><span title="Mortgaged"><Icon n="lock" />{s.mort}</span>
         <span title="Total assets" className="gold"><Icon n="coin" />{money(s.net)}</span>
