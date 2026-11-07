@@ -4,30 +4,37 @@ import { close, forget, hold, reply, wasClosed } from './asks';
 import { send } from './net';
 import { clearDice, hideDice, hop, jump, placeAt, removeToken, rollDice, setActive, tokens } from './render/actors';
 import { home } from './render/board';
-import { finishTweens, wait } from './render/scene';
+import { finishTweens, pace, wait } from './render/scene';
 import { enterGame, focusTok, selectTile, setOwner, showState, tokenSpot } from './stage';
 import { G, actionBtn, activeTab, bump, bumpAssets, clearCards, floatText, floats, hudLive, lastRoll, selectedTile, session, tip, toast, toasts, viewedPlayer, waitingFor, type Button, type Open } from './store';
-import { dropCasinoAsk, forgetCasino, openAsk, openNews, openNewsFor, openNotice, openOrder, openResults, showCasino, closeCasino } from './ui/dialogs';
+import { dropCasinoAsk, forgetCasino, openAsk, openNews, openNotice, openOrder, openResults, showCasino, closeCasino } from './ui/dialogs';
 import { money } from './ui/bits';
 
 // The director plays the server's events on this client's screen, one at a time. The server runs ahead (it only waits for decisions): `G.S` is the game
 // as far as the screen has got, so a log line, a payment or a purchase appears when its animation does. Questions are asked of one player at a time; the
-// others see who is being waited for.
+// others see who is being waited for. When the screen is far behind (a burst of events after a stall) it plays faster, in proportion to what is waiting.
 export const hooks = { leave: () => {} };
 
 const queue: Ev[] = [];
 let running = false;
 let epoch = 0; // a reset (a snapshot, a new game, leaving) ends whatever was being played
+const BACKLOG = 10; // events waiting beyond this many speed everything up: 20 waiting play twice as fast as designed
 
 /** Hold on to a promise, but forget what comes after it if the director was reset meanwhile. */
 const live = <T>(p: Promise<T>): Promise<T> => { const e = epoch; return p.then((v) => (e === epoch ? v : new Promise<T>(() => {}))); };
 const pause = (s: number) => live(wait(s));
 const quiet = () => document.hidden; // nobody sees it: no cards, toasts or numbers, only the state
 
+let shown: Open<void> | null = null; // the card being waited on that has nothing to decide
+/** Wait for a card with nothing to decide. A hidden tab throttles the timer that closes it, and nobody sees it there: it comes down as the tab goes hidden. */
+const show = (card: Open<void>) => live((shown = card).done);
+document.addEventListener('visibilitychange', () => document.hidden && shown?.close());
+
 export function reset() {
   epoch++;
   queue.length = 0;
   running = false;
+  pace.speed = 1;
   forget();
   forgetCasino();
   clearCards();
@@ -47,6 +54,7 @@ async function pump() {
   running = true;
   const e = epoch;
   while (queue.length && e === epoch) {
+    pace.speed = Math.max(1, queue.length / BACKLOG); // each event is played at the speed its backlog asks for when it starts
     try { await play(queue.shift()!); } catch (err) { console.error(err); }
   }
   if (e === epoch) running = false;
@@ -85,7 +93,7 @@ async function beat(who: number) {
   await new Promise<void>((res) => {
     const end = () => { clearTimeout(timer); if (e === epoch && actionBtn.get() === btn) actionBtn.set(null); res(); };
     const btn: Button = { label: 'END TURN', kbd: true, click: end };
-    const timer = setTimeout(end, 1500);
+    const timer = setTimeout(end, 1500 / pace.speed);
     actionBtn.set(btn);
   });
 }
@@ -107,7 +115,7 @@ async function play(ev: Ev) {
   const cur = S.order[S.turn];
   switch (ev.t) {
     case 'order':
-      if (!quiet()) await live(openOrder(S.players, ev.passes, ev.order));
+      if (!quiet()) await show(openOrder(S.players, ev.passes, ev.order));
       apply(S, ev);
       hudLive.set(true);
       bump();
@@ -166,8 +174,8 @@ async function play(ev: Ev) {
     case 'toast': if (!quiet()) toast(ev.m, ev.tone); return;
     case 'sel': if (ev.pi === G.me) selectTile(ev.i); return;
     case 'skip': if (!quiet()) toast(ev.m, 'bad'); await pause(1.6); return;
-    case 'notice': if (!quiet()) await live(openNotice(ev.n)); return;
-    case 'news': if (!quiet()) await live(openNews(ev.card)); return;
+    case 'notice': if (!quiet()) await show(openNotice(ev.n)); return;
+    case 'news': if (!quiet()) await show(openNews(ev.card)); return;
     case 'casino': if (quiet()) closeCasino(); else await live(showCasino(ev.view, null)); return;
     case 'ask': return ask(ev.id, ev.to, ev.p);
     case 'over': {
@@ -188,7 +196,7 @@ async function ask(id: number, to: number, p: Prompt) {
   let card: Open<void> | null = null, btn: Button | null = null;
   if (p.k === 'casino') void showCasino(p.view, { id, mine: me });
   else if (p.k === 'roll') { if (me) actionBtn.set((btn = { label: 'ROLL DICE', kbd: true, click: () => reply(id, true) })); }
-  else card = me ? openAsk(id, p) : p.k === 'news' ? openNewsFor(p.card) : null;
+  else card = me ? openAsk(id, p) : p.k === 'news' ? openNews(p.card) : null;
   waitingFor.set(me ? -1 : to);
   await live(over);
   card?.close();

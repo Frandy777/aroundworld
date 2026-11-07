@@ -3,12 +3,13 @@ import { START_CASH, TILES, type Tile } from '../../shared/data';
 import { READ } from '../../shared/protocol';
 import type { CasinoView, NewsCard as News, Notice, OrderPass, Player, Prompt, RankRow } from '../../shared/types';
 import { reply } from '../asks';
+import { pace } from '../render/scene';
 import { cell, openCard, state, useCell, G, type Cell, type Open } from '../store';
 import { Blocks, Die, Face, Flag, Icon, Rich, hex, money } from './bits';
 import { TileBody, tileHead } from './tile';
 
 const d6 = () => 1 + Math.floor(Math.random() * 6);
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms / pace.speed));
 
 // ---- Card frame ----
 export function Card({ title, sub = '', tone = 0x333b66, ink = '#fff', cls = '', dismiss, foot, children }: {
@@ -27,11 +28,11 @@ export function Card({ title, sub = '', tone = 0x333b66, ink = '#fff', cls = '',
 export const Btn = ({ id, cls = '', disabled, onClick, children }: { id: string; cls?: string; disabled?: boolean; onClick(): void; children: ReactNode }) => (
   <button className={`btn ${cls}`} data-id={id} disabled={disabled} onClick={onClick}>{children}</button>
 );
-/** Run `fn` once, `ms` after the card is up: a card with nothing to decide closes itself. */
+/** Run `fn` once, `ms` after the card is up (less while the screen is catching up, see `pace`): a card with nothing to decide closes itself. */
 function useAuto(ms: number, fn: () => void) {
   const f = useRef(fn);
   f.current = fn;
-  useEffect(() => { if (!ms) return; const t = setTimeout(() => f.current(), ms); return () => clearTimeout(t); }, [ms]);
+  useEffect(() => { if (!ms) return; const t = setTimeout(() => f.current(), ms / pace.speed); return () => clearTimeout(t); }, [ms]);
 }
 
 // ---- Rules ----
@@ -80,7 +81,7 @@ function NoticeCard({ n, close }: { n: Notice; close(): void }) {
   useAuto(n.long ? 2 * READ : READ, close);
   return <Card title={n.title} sub={<Rich m={n.sub} />} tone={n.tone} foot={<Btn id="ok" cls={`primary ${n.danger ? 'danger' : ''}`} onClick={close}>{n.label}</Btn>}><Blocks blocks={n.body} /></Card>;
 }
-export const openNotice = (n: Notice) => openCard((close) => <NoticeCard n={n} close={() => close()} />).done;
+export const openNotice = (n: Notice) => openCard((close) => <NoticeCard n={n} close={() => close()} />);
 
 // ---- News ----
 function NewsCard({ c, close, redraw }: { c: News; close(): void; redraw?: (again: boolean) => void }) {
@@ -98,7 +99,8 @@ function NewsCard({ c, close, redraw }: { c: News; close(): void; redraw?: (agai
     </Card>
   );
 }
-export const openNews = (c: News) => openCard((close) => <NewsCard c={c} close={() => close()} />).done;
+/** A story to read: for everybody on a news tile, and for the players who are not asked when the Media owner may keep it. */
+export const openNews = (c: News) => openCard((close) => <NewsCard c={c} close={() => close()} />);
 
 // ---- Questions to one player: each card answers through `reply` and closes itself; the director takes it down if the answer came from elsewhere (a timeout) ----
 type Of<K extends Prompt['k']> = Extract<Prompt, { k: K }>;
@@ -165,8 +167,6 @@ export function openAsk(id: number, p: Prompt): Open<void> | null {
     default: return null;
   }
 }
-/** The same story for the players who are not asked: they only read it. */
-export const openNewsFor = (c: News) => openCard((close) => <NewsCard c={c} close={() => close()} />);
 
 // ---- Turn order: lowest total first, ties re-roll. Replays the rolls the server made ----
 function OrderCard({ players, passes, order, close }: { players: Player[]; passes: OrderPass[]; order: number[]; close(): void }) {
@@ -206,7 +206,7 @@ function OrderCard({ players, passes, order, close }: { players: Player[]; passe
     </Card>
   );
 }
-export const openOrder = (players: Player[], passes: OrderPass[], order: number[]) => openCard((close) => <OrderCard players={players} passes={passes} order={order} close={() => close()} />).done;
+export const openOrder = (players: Player[], passes: OrderPass[], order: number[]) => openCard((close) => <OrderCard players={players} passes={passes} order={order} close={() => close()} />);
 
 // ---- Results ----
 function ResultsCard({ rank, close }: { rank: RankRow[]; close(v: 'menu' | 'again'): void }) {

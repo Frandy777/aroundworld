@@ -203,12 +203,13 @@ export const resetView = () => orbitTo(() => 0);
 export const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 interface Tween { t: number; dur: number; fn: (k: number) => void; ease: (t: number) => number; res: () => void }
 const tweens = new Set<Tween>();
+export const pace = { speed: 1 }; // how many times faster than designed the tweens run (and the cards' timers, see dialogs): the director raises it when the screen is far behind the game
 export const tween = (dur: number, fn: (k: number) => void, ease = (t: number) => t) =>
   document.hidden ? (fn(ease(1)), Promise.resolve()) : new Promise<void>((res) => tweens.add({ t: 0, dur, fn, ease, res }));
 export const wait = (s: number) => tween(s, () => {});
 export function updateTweens(dt: number) {
   for (const tw of tweens) {
-    tw.t = Math.min(1, tw.t + dt / tw.dur);
+    tw.t = Math.min(1, tw.t + (dt * pace.speed) / tw.dur);
     tw.fn(tw.ease(tw.t));
     if (tw.t >= 1) { tweens.delete(tw); tw.res(); }
   }
