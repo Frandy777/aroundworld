@@ -8,7 +8,7 @@ const CASINO = {
 };
 const fxText = (t: Tile) => (t.type === 'special' ? SPECIAL[t.name] : t.type === 'invest' ? INVEST[t.kind as InvestKind].fx : t.kind === 'casino' ? CASINO[t.variant!] : PUBLIC[t.kind as PublicKind].fx);
 
-export function TileBody({ t }: { t: Tile }) {
+export function TileBody({ t, bare = false }: { t: Tile; bare?: boolean }) {
   const S = useGame(), o = S.own[t.i], p = o && S.players[o.p];
   return (
     <>
@@ -19,7 +19,7 @@ export function TileBody({ t }: { t: Tile }) {
             <tr><th>LEVEL</th><th>RENT</th></tr>
             {cityRent(t).map((v, i) => <tr key={i} className={o?.lv === i ? 'cur' : ''}><td>{LEVEL_NAMES[i]}</td><td>{money(v)}</td></tr>)}
           </tbody></table>
-          <div className="note">Own every city in {REGIONS[t.region!][0]} for a <b className="gold">+50% rent</b> region monopoly.</div>
+          {!bare && <div className="note">Own every city in {REGIONS[t.region!][0]} for a <b className="gold">+50% rent</b> region monopoly.</div>}
         </>
       )}
       {t.type === 'special' && (
@@ -39,7 +39,7 @@ export function TileBody({ t }: { t: Tile }) {
         );
       })()}
       {t.type === 'public' && <div className="note">{fxText(t)}</div>}
-      {t.type !== 'public' && (
+      {!bare && t.type !== 'public' && (
         <div className="owner">
           {p ? <><Face color={p.color} /><b style={{ color: hex(p.color) }}>{p.name}</b></> : <span className="dim">Unowned</span>}
           <span style={{ flex: 1 }} />

@@ -97,14 +97,13 @@ export function NewsCard({ c, close, redraw }: { c: News; close(): void; redraw?
 type Of<K extends Prompt['k']> = Extract<Prompt, { k: K }>;
 
 export function DeedCard({ id, p }: { id: number; p: Of<'deed'> }) {
-  const t = TILES[p.tile], hd = tileHead(t), cash = state().players[G.me].cash;
+  const t = TILES[p.tile], hd = tileHead(t);
   return (
     <Card {...hd} foot={<>
       <Btn id="skip" onClick={() => reply(id, false)}>SKIP</Btn>
       <Btn id={p.mode} cls="primary spend" onClick={() => reply(id, true)}>{p.mode === 'buy' ? 'BUY' : 'UPGRADE'} {money(p.price)}</Btn>
     </>}>
-      <TileBody t={t} />
-      <div className="row"><span>Cash after</span><b>{money(cash - p.price)}</b></div>
+      <TileBody t={t} bare={p.mode === 'buy'} />
     </Card>
   );
 }
