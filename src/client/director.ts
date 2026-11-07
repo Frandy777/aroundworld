@@ -5,7 +5,7 @@ import { send } from './net';
 import { clearDice, hideDice, hop, jump, placeAt, removeToken, rollDice, setActive, tokens } from './render/actors';
 import { home } from './render/layout';
 import { finishTweens, pace, wait } from './render/scene';
-import { enterGame, focusTok, selectTile, setOwner, showState, tokenSpot } from './stage';
+import { enterDemo, enterGame, focusTok, selectTile, setOwner, showState, tokenSpot } from './stage';
 import { G, actionBtn, activeTab, bump, bumpAssets, clearCards, floatText, floats, hudLive, lastRoll, selectedTile, session, tip, toast, toasts, viewedPlayer, waitingFor, type Button, type Open } from './store';
 import { dropCasinoAsk, forgetCasino, openAsk, openNews, openNotice, openOrder, openResults, showCasino, closeCasino } from './ui/open';
 import { money } from './ui/bits';
@@ -13,11 +13,10 @@ import { money } from './ui/bits';
 // The director plays the server's events on this client's screen, one at a time. The server runs ahead (it only waits for decisions): `G.S` is the game
 // as far as the screen has got, so a log line, a payment or a purchase appears when its animation does. Questions are asked of one player at a time; the
 // others see who is being waited for. When the screen is far behind (a burst of events after a stall) it plays faster, in proportion to what is waiting.
-export const hooks = { leave: () => {} };
-
 const queue: Ev[] = [];
 let running = false;
 let epoch = 0; // a reset (a snapshot, a new game, leaving) ends whatever was being played
+let leave = () => {}; // how to leave the room, for the player who goes to the main menu after a game: given to `start`
 const BACKLOG = 10; // events waiting beyond this many speed everything up: 20 waiting play twice as fast as designed
 
 /** Hold on to a promise, but forget what comes after it if the director was reset meanwhile. */
@@ -29,14 +28,15 @@ let shown: Open<void> | null = null; // the card being waited on that has nothin
 /** Wait for a card with nothing to decide. A hidden tab throttles the timer that closes it, and nobody sees it there: it comes down as the tab goes hidden. */
 const show = (card: Open<void>) => live((shown = card).done);
 
-/** Starts listening to the page; returns what stops it, and ends what is being played. */
-export function start() {
+/** Starts listening to the page; returns what stops it, and ends what is being played. `onLeave` is what leaves the room when a game's results are closed with MAIN MENU. */
+export function start(onLeave: () => void) {
+  leave = onLeave;
   const off = new AbortController();
   document.addEventListener('visibilitychange', () => document.hidden && shown?.close(), { signal: off.signal });
   return () => { off.abort(); reset(); };
 }
 
-export function reset() {
+function reset() {
   epoch++;
   queue.length = 0;
   running = false;
@@ -48,6 +48,15 @@ export function reset() {
   finishTweens();
   clearDice();
   actionBtn.set(null); waitingFor.set(-1); lastRoll.set(null);
+}
+
+/** Out of the game, back to the demo board (the title's and the lobby's): what is being played ends, and the screen forgets the game. */
+export function exitToDemo() {
+  reset();
+  G.S = null;
+  hudLive.set(false);
+  selectedTile.set(-1);
+  enterDemo();
 }
 
 export function push(evs: Ev[]) {
@@ -188,7 +197,7 @@ async function play(ev: Ev) {
       apply(S, ev);
       bump();
       await pause(0.6);
-      if ((await live(openResults(ev.rank))) === 'again') send({ t: 'again' }); else hooks.leave();
+      if ((await live(openResults(ev.rank))) === 'again') send({ t: 'again' }); else leave();
       return;
     }
   }
