@@ -12,7 +12,7 @@ import { openAlert, openAsk, openNews, openNotice } from './open';
 const SAMPLES: Record<string, Notice | NewsCard | Prompt> = {
   notice: {
     title: 'PAY RENT', sub: [{ t: 1 }], tone: 0xb13e53, label: 'PAY $160', danger: true,
-    body: [{ k: 'owner', p: 1, text: 'collects' }, { k: 'rows', rows: [{ l: ['Base rent'], v: ['$160'] }, { l: ['Total due'], v: ['$160'], sum: true, tone: 'bad' }] }],
+    body: [{ k: 'face', p: 1 }, { k: 'rows', rows: [{ l: ['Base rent'], v: ['$160'] }, { l: ['Total due'], v: ['$160'], sum: true, tone: 'bad' }] }],
   },
   news: { cat: 'Money', title: 'Lost Wallet', text: 'You found an unclaimed wallet on the street.', amt: 100 },
   deed: { k: 'deed', tile: 1, mode: 'buy', price: 1600 },

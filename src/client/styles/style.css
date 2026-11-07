@@ -22,7 +22,7 @@ b { font-weight: normal; color: #fff; } /* one pixel weight only: emphasis = bri
 #codes { pointer-events: none; } /* the far level's card codes, over the 3D canvas */
 #gl.hot { cursor: var(--cur-hand); }
 button, input { font-family: inherit; }
-button, [data-tile], [data-land], .pcard, .item, .toggle, #minimap canvas { cursor: var(--cur-hand); }
+button, [data-tile], .pcard, .item, #minimap canvas { cursor: var(--cur-hand); }
 ::-webkit-scrollbar { width: 12px; }
 ::-webkit-scrollbar-track { background: var(--ink); }
 ::-webkit-scrollbar-thumb { background: var(--peri); border: 2px solid var(--ink); box-shadow: inset 2px 2px 0 var(--sky), inset -2px -2px 0 var(--blue); }
@@ -79,8 +79,6 @@ button, [data-tile], [data-land], .pcard, .item, .toggle, #minimap canvas { curs
 #phases li.on { color: #5a2e08; background: linear-gradient(var(--gold-hi) 0 2px, var(--gold) 2px 50%, var(--gold-lo) 50%) padding-box; border-image-source: var(--fr-btn-gold); animation: blink 1s steps(2) infinite; }
 @keyframes blink { 50% { opacity: 0.6; } }
 .tools { display: flex; }
-#demo-menu { position: absolute; top: 100%; right: 0; margin-top: 14px; display: flex; flex-direction: column; padding: 4px; min-width: 250px; }
-#demo-menu .btn { text-align: left; }
 
 #players { position: fixed; left: 14px; top: var(--pt); width: 300px; display: flex; flex-direction: column; gap: 10px; z-index: 11; }
 .pcard { display: grid; grid-template-columns: 44px 1fr; gap: 0 10px; align-content: start; padding: 4px 4px 2px; transition: translate 0.1s steps(2); }

@@ -46,8 +46,7 @@
 .item .grow { flex: 1; }
 .item.sel { outline: 2px solid var(--gold); outline-offset: -2px; background: #2a2f70; }
 .check { width: 36px; height: 36px; flex: none; background: var(--navy) padding-box; border: 6px solid transparent; border-image: var(--fr-well) 3 / 6px; }
-.item.sel .check, .toggle.on .check { background: var(--spr-check) center / 24px 18px no-repeat, var(--gold); background-clip: padding-box; }
-.toggle.on .check { background-color: var(--green); }
+.item.sel .check { background: var(--spr-check) center / 24px 18px no-repeat, var(--gold); background-clip: padding-box; }
 .grp { display: flex; align-items: center; gap: 8px; color: var(--dim); margin: 8px 0 2px; }
 .grp::after { content: ''; flex: 1; height: 2px; background: var(--indigo); }
 /* Second type tier, Jersey 15 at 27px (one font step = 1px): group titles, the current rent row, money subtotals */
@@ -89,7 +88,6 @@
 .pl-row { display: flex; align-items: center; gap: 10px; }
 .pl-row input, #dev select, #dev textarea { flex: 1; min-width: 0; font: var(--fs) / 20px var(--font); color: var(--txt); background: var(--navy) padding-box; border: 6px solid transparent; border-image: var(--fr-well) 3 / 6px; padding: 4px 8px 2px; outline: 0; user-select: text; cursor: text; caret-color: var(--gold); }
 .pl-row input:focus, #dev select:focus, #dev textarea:focus { border-image-source: var(--fr-gold); }
-.toggle { display: flex; align-items: center; gap: 10px; }
 .order-row { display: flex; align-items: center; gap: 12px; padding: 4px 8px; background: var(--navy); box-shadow: inset 0 -2px var(--ink); }
 .order-row .nm { flex: 1; font: 34px / 36px var(--font-hd); }
 .order-row .die { width: 32px; height: 32px; margin: 0 2px; }

@@ -65,7 +65,7 @@ export function RulesCard({ close }: { close(v: string): void }) {
   return (
     <Card title="HOW TO PLAY" sub="AroundWorld rules" cls="wide rules" dismiss="ok" foot={<Btn id="ok" cls="primary" onClick={() => close('ok')}>GOT IT</Btn>}>
       <nav className="seg">{Object.keys(RULES).map((x) => <button key={x} className={x === k ? 'on' : ''} onClick={() => setK(x)}>{x}</button>)}</nav>
-      <div id="rules-body">{RULES[k]}</div>
+      <div>{RULES[k]}</div>
     </Card>
   );
 }
@@ -283,7 +283,7 @@ export function CasinoCard({ ctl, close }: { ctl: Ctl; close(): void }) {
           : <>Total {last[0] + last[1]}: <span className="good">+{money(last[2])}</span></>}
       </div>
       {!lucky && (sent || shown > 0 || v.stage !== 'bet') && (
-        <div className="rows tally">{tally.map(([k, n]) => <div className={`row${k === 'Net' ? ' sum' : ''}`} key={k}><span>{k}</span><b className={n > 0 ? 'good' : n < 0 ? 'bad' : ''}>{sgn(n)}</b></div>)}</div>
+        <div className="rows">{tally.map(([k, n]) => <div className={`row${k === 'Net' ? ' sum' : ''}`} key={k}><span>{k}</span><b className={n > 0 ? 'good' : n < 0 ? 'bad' : ''}>{sgn(n)}</b></div>)}</div>
       )}
     </Card>
   );

@@ -34,8 +34,7 @@ export interface Row { l: Msg; v: Msg; sum?: boolean; tone?: Tone }
 export type Block =
   | { k: 'note'; m: Msg }
   | { k: 'rows'; rows: Row[] }
-  | { k: 'face'; p: number } // a player's face, centred
-  | { k: 'owner'; p: number; text: string }; // a player's face and name, then a dim word
+  | { k: 'face'; p: number }; // a player's face, centred
 // A card with nothing to decide: closes itself after a moment (twice as long when `long`).
 export interface Notice { title: string; sub: Msg; tone: number; label: string; danger?: boolean; long?: boolean; body: Block[] }
 export interface NewsCard { cat: string; title: string; text: string; amt?: number }

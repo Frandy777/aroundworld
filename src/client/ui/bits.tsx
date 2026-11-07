@@ -66,7 +66,6 @@ export function Blocks({ blocks }: { blocks: Block[] }) {
       case 'note': return <div className="note" key={k}><Rich m={b.m} /></div>;
       case 'rows': return <Rows key={k} a={b.rows.map((r: Row): [ReactNode, ReactNode, string] => [<Rich m={r.l} />, r.tone ? <b className={r.tone}><Rich m={r.v} /></b> : <Rich m={r.v} />, r.sum ? 'sum' : ''])} />;
       case 'face': return <div key={k} style={{ display: 'flex', justifyContent: 'center' }}><Face color={S.players[b.p].color} /></div>;
-      case 'owner': { const p = S.players[b.p]; return <div className="owner" key={k}><Face color={p.color} /><b style={{ color: hex(p.color) }}>{p.name}</b><span className="dim">{b.text}</span></div>; }
     }
   })}</>;
 }
