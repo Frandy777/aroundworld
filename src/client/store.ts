@@ -1,0 +1,66 @@
+import { useSyncExternalStore, type ReactNode } from 'react';
+import type { RoomInfo } from '../shared/protocol';
+import type { GameState, Msg, Tone } from '../shared/types';
+
+// ---- Cells: one observable value, read in components with useCell ----
+export interface Cell<T> { get(): T; set(v: T): void; sub(f: () => void): () => void }
+export function cell<T>(v: T): Cell<T> {
+  const subs = new Set<() => void>();
+  return { get: () => v, set(n) { if (n !== v) { v = n; subs.forEach((f) => f()); } }, sub: (f) => (subs.add(f), () => void subs.delete(f)) };
+}
+export const useCell = <T,>(c: Cell<T>) => useSyncExternalStore(c.sub, c.get);
+
+// ---- Session: where this client is ----
+export type View = 'title' | 'lobby' | 'game';
+export const session = cell<{ view: View; room: RoomInfo | null }>({ view: 'title', room: null });
+
+// ---- Game: what is on screen. The director plays the server's events into `S`, so it trails the real game by whatever is still animating.
+// It is mutated in place; `bump` tells the components. ----
+export type Tab = 'tile' | 'assets' | 'log';
+export interface Button { label: string; click(): void; kbd?: boolean }
+export const G = {
+  S: null as GameState | null,
+  me: -1, // my player index
+  live: false, // the HUD is up (the turn order is settled)
+  sel: -1, view: -1, tab: 'tile' as Tab, // the tile in the side panel, whose assets it shows, which pane
+  chip: null as [number, number] | null, // the last roll, in the action bar
+  btn: null as Button | null, // the one button in the action bar
+  waiting: -1, // the player the game is waiting for
+};
+const version = cell(0);
+export const bump = () => version.set(version.get() + 1);
+export const useGame = () => { useCell(version); return G; };
+export const state = () => G.S as GameState;
+
+// ---- Toasts and floating numbers: they remove themselves ----
+export interface Toast { id: number; m: Msg; tone: Tone }
+export interface Float { id: number; x: number; y: number; text: string; cls: string }
+export const toasts = cell<Toast[]>([]);
+export const floats = cell<Float[]>([]);
+let seq = 1;
+const expire = <T extends { id: number }>(c: Cell<T[]>, item: T, ms: number) => {
+  c.set([...c.get(), item]);
+  setTimeout(() => c.set(c.get().filter((x) => x.id !== item.id)), ms);
+};
+export const toast = (m: Msg | string, tone: Tone = '') => expire(toasts, { id: seq++, m: typeof m === 'string' ? [m] : m, tone }, 2800);
+export const floatText = (x: number, y: number, text: string, cls = '') => expire(floats, { id: seq++, x: Math.round(x), y: Math.round(y), text, cls }, 1500);
+
+// ---- Cards: modal dialogs. `done` settles when the card is closed with a value ----
+export interface Open<T> { key: number; done: Promise<T>; close(v: T): void }
+export const cards = cell<{ key: number; node: ReactNode }[]>([]);
+export function openCard<T = void>(render: (close: (v: T) => void) => ReactNode): Open<T> {
+  const key = seq++;
+  let settle!: (v: T) => void;
+  const done = new Promise<T>((r) => (settle = r));
+  const close = (v: T) => {
+    if (!cards.get().some((c) => c.key === key)) return;
+    cards.set(cards.get().filter((c) => c.key !== key));
+    settle(v);
+  };
+  cards.set([...cards.get(), { key, node: render(close) }]);
+  return { key, done, close };
+}
+export const clearCards = () => cards.set([]);
+
+// The tile under the pointer
+export const tip = cell<{ i: number; x: number; y: number } | null>(null);

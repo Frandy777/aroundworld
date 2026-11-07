@@ -1,0 +1,104 @@
+/* Modal cards */
+.modal { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; background: rgba(8, 10, 28, 0.55); animation: fade 0.2s steps(3); }
+.modal::before { content: ''; position: absolute; inset: 0; pointer-events: none; background: repeating-conic-gradient(rgba(0, 0, 0, 0.22) 0 25%, transparent 0 50%) 0 0 / 4px 4px; }
+@keyframes fade { from { opacity: 0; } }
+.card { width: min(480px, 92vw); max-height: 88vh; display: flex; flex-direction: column; animation: pop 0.3s steps(5); }
+.card.wide { width: min(640px, 94vw); }
+@keyframes pop { 0% { transform: scale(0.5); opacity: 0; } 70% { transform: scale(1.04); opacity: 1; } 100% { transform: none; } }
+/* header band: tone colour in three bands (highlight / body / shade) like a 16-bit title bar */
+.hd { --t: var(--tone, #3a4a9c); display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 4px 12px 2px; font: 34px / 36px var(--font-hd); color: #fff;
+  background: linear-gradient(color-mix(in srgb, var(--t) 60%, #fff) 0 2px, var(--t) 2px 55%, color-mix(in srgb, var(--t) 82%, #000) 55%); box-shadow: inset 0 -2px rgba(0, 0, 0, 0.35); }
+.hd small { font: var(--fs) / 20px var(--font); opacity: 0.9; text-align: right; }
+/* a tile header carries its country flag left of the name; when the row is too crowded, the region drops to a second row */
+.hd:has(.flag) { flex-wrap: wrap; row-gap: 0; }
+.hd:has(.flag) > span { display: flex; align-items: center; gap: 8px; }
+.hd:has(.flag) small { margin-left: auto; }
+.flag { flex: none; }
+.logline .flag, .toast .flag, small .flag { vertical-align: -10px; margin-right: 6px; } /* in running text (log, toasts, a card's subtitle): on the line of text, a gap before the name */
+.bd { padding: 12px 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.ft { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px; padding: 0 10px 8px; }
+.ft:empty { display: none; }
+
+/* Deed / tile info */
+.rows { display: flex; flex-direction: column; gap: 4px; }
+.row { display: flex; justify-content: space-between; gap: 10px; }
+.row > :first-child { color: var(--dim); }
+.tbl { width: 100%; border-collapse: collapse; }
+.tbl th { color: var(--dim); font-weight: normal; padding: 2px 6px; text-align: right; border-bottom: 2px solid var(--indigo); }
+.tbl td { padding: 2px 6px; text-align: right; }
+.tbl th:first-child, .tbl td:first-child { text-align: left; }
+.tbl tr.cur td { background: rgba(255, 210, 63, 0.2); color: var(--gold); }
+.note, .owner, .bar { background: var(--navy) padding-box; border: 6px solid transparent; border-image: var(--fr-well) 3 / 6px; }
+.note { padding: 2px 8px; color: #c9d3f5; line-height: 24px; } /* multi-line text: 24px lines (12 art pixels), single-line labels stay at 20px */
+.owner { display: flex; align-items: center; gap: 8px; padding: 2px 6px; }
+.owner .face { width: 32px; height: 32px; grid-row: auto; border: 0; border-image: none; }
+.pill { display: inline-block; font: var(--fs) / 20px var(--font); padding: 0 6px; background: var(--blue); color: var(--txt); box-shadow: 0 0 0 2px var(--ink), inset 0 2px rgba(255, 255, 255, 0.25), inset 0 -2px rgba(0, 0, 0, 0.3); }
+.pill.gold { background: var(--gold); color: #5a2e08; } .pill.red { background: var(--red); color: #fff; }
+.lv { display: inline-flex; gap: 4px; } .lv i { width: 10px; height: 10px; background: var(--ink); box-shadow: inset 0 0 0 2px var(--indigo); } .lv i.on { background: var(--gold); box-shadow: 0 0 0 2px var(--ink), inset 2px 2px var(--gold-hi), inset -2px -2px var(--gold-lo); }
+.bar { height: 20px; } .bar > i { display: block; height: 100%; background: linear-gradient(var(--green-hi) 0 2px, var(--green) 2px 50%, var(--green-lo) 50%); }
+.sw { display: inline-block; width: 14px; height: 14px; flex: none; box-shadow: 0 0 0 2px var(--ink), inset 2px 2px rgba(255, 255, 255, 0.4), inset -2px -2px rgba(0, 0, 0, 0.3); }
+.empty { color: var(--dim); text-align: center; padding: 18px 0; }
+
+/* Lists (assets, bank, redeem) */
+.list { display: flex; flex-direction: column; gap: 4px; max-height: 300px; overflow-y: auto; }
+.item { display: flex; align-items: center; gap: 10px; padding: 4px 8px 2px; background: var(--navy); box-shadow: inset 0 -2px var(--ink); }
+.item:hover { background: var(--indigo); }
+.item .grow { flex: 1; }
+.item.sel { outline: 2px solid var(--gold); outline-offset: -2px; background: #2a2f70; }
+.check { width: 36px; height: 36px; flex: none; background: var(--navy) padding-box; border: 6px solid transparent; border-image: var(--fr-well) 3 / 6px; }
+.item.sel .check, .toggle.on .check { background: var(--spr-check) center / 24px 18px no-repeat, var(--gold); background-clip: padding-box; }
+.toggle.on .check { background-color: var(--green); }
+.grp { display: flex; align-items: center; gap: 8px; color: var(--dim); margin: 8px 0 2px; }
+.grp::after { content: ''; flex: 1; height: 2px; background: var(--indigo); }
+/* Second type tier, Jersey 15 at 27px (one font step = 1px): group titles, the current rent row, money subtotals */
+.grp, .tbl tr.cur td, .row.sum > b { font: var(--fs-md) / 28px var(--font-md); }
+.row.sum { align-items: baseline; }
+
+/* News: newsprint paper, no tilt (rotation would smear the pixels) */
+.news { --f: var(--fr-paper); background-image: repeating-conic-gradient(rgba(110, 58, 18, 0.06) 0 25%, transparent 0 50%); background-color: #f1e8cf; color: #1a1c2c; animation: spin 0.6s steps(10); }
+@keyframes spin { from { transform: rotate(-540deg) scale(0.1); opacity: 0; } }
+.news .hd { background: none; box-shadow: none; color: #1a1c2c; justify-content: center; border-bottom: 6px double #1a1c2c; margin: 0 12px; padding: 6px 0 2px; }
+.news b, .news h3 { color: inherit; }
+.news h3 { margin: 0; font: 34px / 36px var(--font-hd); }
+.news p { margin: 0; }
+.news .amt { font: 34px / 36px var(--font-hd); text-align: center; padding: 4px 0; }
+.news .good { color: #1f8d45; } .news .bad { color: #c2332f; }
+.news .pill { background: #1a1c2c; color: var(--paper); box-shadow: none; }
+
+/* Casino / dice */
+.casino { --f: var(--fr-neon); background-image: var(--dither), linear-gradient(#2a1650, #150b2a); animation: pop 0.3s steps(5), neon 1s steps(1) infinite; }
+@keyframes neon { 50% { border-image-source: var(--fr-cyan); } }
+.casino .hd { background: linear-gradient(#e070c0 0 2px, #b02a8b 2px 55%, #7a2a9b 55%); }
+.casino .note { background: #2b1a47; }
+.dice-row { display: flex; justify-content: center; gap: 22px; padding: 6px; }
+.die { width: 64px; height: 64px; margin: 4px; flex: none; }
+.die svg { display: block; width: 100%; height: 100%; image-rendering: pixelated; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.4)); }
+.die.roll { animation: shake 0.3s steps(3) infinite; }
+@keyframes shake { 33% { transform: translate(-4px, 2px) rotate(-6deg); } 66% { transform: translate(4px, -2px) rotate(6deg); } }
+.big-msg { text-align: center; font: 34px / 36px var(--font-hd); min-height: 44px; }
+.stepper { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.stepper b { min-width: 120px; text-align: center; font: 34px / 36px var(--font-hd); color: var(--gold); text-shadow: 2px 2px 0 var(--brown); }
+
+/* Setup / order / rules / results */
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field > label { color: var(--dim); }
+.seg { display: flex; gap: 2px; }
+.seg button { flex: 1; font: var(--fs) / 20px var(--font); padding: 6px 6px 4px; border: 0; background: var(--navy); color: var(--dim); box-shadow: inset 0 0 0 2px var(--ink), inset 2px 2px #2a3678, inset -2px -2px #0f1438; }
+.seg button:hover { color: #fff; }
+.seg button.on { background: var(--gold); color: #5a2e08; box-shadow: inset 0 0 0 2px var(--ink), inset 4px 4px var(--gold-hi), inset -4px -4px var(--gold-lo); }
+.pl-row { display: flex; align-items: center; gap: 10px; }
+.pl-row input { flex: 1; min-width: 0; font: var(--fs) / 20px var(--font); color: var(--txt); background: var(--navy) padding-box; border: 6px solid transparent; border-image: var(--fr-well) 3 / 6px; padding: 4px 8px 2px; outline: 0; user-select: text; cursor: text; caret-color: var(--gold); }
+.pl-row input:focus { border-image-source: var(--fr-gold); }
+.toggle { display: flex; align-items: center; gap: 10px; }
+.order-row { display: flex; align-items: center; gap: 12px; padding: 4px 8px; background: var(--navy); box-shadow: inset 0 -2px var(--ink); }
+.order-row .nm { flex: 1; font: 34px / 36px var(--font-hd); }
+.order-row .die { width: 32px; height: 32px; margin: 0 2px; }
+.order-row b { font: 34px / 36px var(--font-hd); min-width: 36px; text-align: center; }
+.order-row.tie { outline: 2px solid var(--red); outline-offset: -2px; }
+.rules h4 { margin: 0 0 4px; font: 34px / 36px var(--font-hd); color: var(--gold); }
+.rules p, .rules ul { margin: 0 0 10px; color: var(--mist); line-height: 24px; }
+.rules ul { padding-left: 20px; }
+.podium { display: flex; align-items: flex-end; justify-content: center; gap: 12px; height: 250px; flex: none; }
+.pod { width: 96px; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+.pod b { font: 34px / 36px var(--font-hd); }
+.pod .blk { width: 100%; background: var(--c); display: flex; align-items: flex-start; justify-content: center; padding-top: 6px; font: 34px / 36px var(--font-hd); color: rgba(0, 0, 0, 0.55); box-shadow: 0 0 0 2px var(--ink), inset 0 4px rgba(255, 255, 255, 0.4), inset 0 -4px rgba(0, 0, 0, 0.25); }
