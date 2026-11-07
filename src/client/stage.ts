@@ -7,7 +7,7 @@ import { BOARD_K, camera, controls, finishTweens, focus, overview, pick, render,
 import { FLOAT, updateWorld } from './render/world';
 import { SEED, SEED_AT } from './seed';
 import { G, bump, tip } from './store';
-import { drawMinimap } from './ui/minimap';
+import { drawMinimap, invalidateMinimap } from './ui/minimap';
 
 // The 3D side: the board, the tokens and the camera. The frame loop runs for the whole life of the page.
 let board: ReturnType<typeof createBoard>;
@@ -16,7 +16,10 @@ export const setMinimap = (c: HTMLCanvasElement | null) => (minimap = c);
 export const cam = { follow: -1 }; // the player the camera tracks (-1: free)
 
 // ---- The board and its tokens ----
-export const setOwner = (i: number, o: Owned | null, S: GameState) => board.setOwner(i, o && { color: S.players[o.p].color, lv: o.lv, m: o.m });
+export const setOwner = (i: number, o: Owned | null, S: GameState) => {
+  board.setOwner(i, o && { color: S.players[o.p].color, lv: o.lv, m: o.m });
+  invalidateMinimap(); // the minimap's chips show the owners
+};
 const eachLot = (f: (i: number) => void) => TILES.forEach((t) => t.type !== 'public' && f(t.i));
 
 /** The board and tokens as the state has them (a new game, or a snapshot). */
@@ -113,7 +116,7 @@ export function initStage() {
     updateCamera(dt);
     if (G.live && G.S && minimap) {
       const el = Math.PI / 2 - controls.getPolarAngle();
-      drawMinimap(minimap, G.S, POS, tokens, { x: controls.target.x, z: controls.target.z, w: (camera.right - camera.left) / camera.zoom, h: (camera.top - camera.bottom) / camera.zoom / Math.sin(el) });
+      drawMinimap(minimap, G.S, tokens, { x: controls.target.x, z: controls.target.z, w: (camera.right - camera.left) / camera.zoom, h: (camera.top - camera.bottom) / camera.zoom / Math.sin(el) });
     }
     board.labels(G.live);
     render();
