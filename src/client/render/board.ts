@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { scene, renderer, camera, controls, lod, toon, lodMap, pixelTexture, texels, toScreen, DENSITY, BOARD_K } from './scene';
 import { TILES, type Tile } from '../../shared/data';
 import { canvas, paint, shade, ink, inkWidth, inkHeight } from './art';
@@ -133,12 +134,20 @@ const startTex = memo((color: number, L: number) => pixelTexture(canvas(texels(W
 // the plot, in whole texels of each level: top face carries the carpet, the walls are a darker tone of the same colour
 const padMats = memo((color: number) => {
   const side = toon(shade(color, 0.6)), top = lodMap(toon(0xffffff), (L) => pixelTexture(canvas(texels(PAD.w, L), texels(PAD.d, L), (g, w, h) => drawPad(g, color, w, h, L))));
-  return [side, side, top, side, side, side];
+  return [side, top];
 });
 
 // ---- Voxel helpers ----
 const GOLD = 0xffd23f, IRON = 0x555a6e, INK = 0x23263a;
 const geo = memo((w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d));
+// The tile's slab and the plot are boxes of two materials, the walls with the bottom and the top: their faces are put in that order and cut into two groups, so each costs two draws, not six.
+const twoGroups = (g: THREE.BoxGeometry) => {
+  const i = g.index!.array;
+  g.setIndex([0, 1, 3, 4, 5, 2].flatMap((f) => [...i.slice(6 * f, 6 * f + 6)])); // the faces are +x -x +y -y +z -z, six indices each: the top (+y) goes last
+  g.clearGroups(); g.addGroup(0, 30, 0); g.addGroup(30, 6, 1);
+  return g;
+};
+const slabGeo = memo((w: number, h: number, d: number) => twoGroups(new THREE.BoxGeometry(w, h, d)));
 const cylGeo = memo((r: number, h: number) => new THREE.CylinderGeometry(r, r, h, 10));
 // hip roof: the 4-sided cone (shaded from its corners), each face laid flat in UV space so a roof texel is a world texel
 const roofGeo = memo((w: number, d: number, h: number) => {
@@ -224,6 +233,29 @@ const decal = (g: THREE.Group, rows: string[], x: number, y: number, z: number) 
   m.castShadow = false;
   return m;
 };
+// A built model is baked into a few meshes: everything under `root` is brought into root's own space (each mesh by its own matrix and its parents', not root's: the model is still moved as one) and what shares a
+// material and a shadow setting is merged, so a hundred boxes cost a handful of draw calls, in the shadow pass as in the main one. A mesh of several materials (a storey, a sign) is cut along its groups first.
+// The geometries from memo are shared, so they are copied, never changed; the merged ones belong to root alone (see setOwner, which frees them).
+function bake(root: THREE.Group) {
+  const bins = new Map<string, { src: THREE.Mesh; material: THREE.Material; geometries: THREE.BufferGeometry[] }>();
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    const to = new THREE.Matrix4(), mats = [m.material].flat(), g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry;
+    for (let p: THREE.Object3D = m; p !== root; p = p.parent!) { p.updateMatrix(); to.premultiply(p.matrix); }
+    for (const { start, count, materialIndex = 0 } of Array.isArray(m.material) ? g.groups : [{ start: 0, count: g.attributes.position.count, materialIndex: 0 }]) {
+      const material = mats[materialIndex], k = [material.uuid, m.castShadow, m.receiveShadow].join(), cut = new THREE.BufferGeometry();
+      for (const [name, a] of Object.entries(g.attributes)) cut.setAttribute(name, new THREE.BufferAttribute(a.array.slice(start * a.itemSize, (start + count) * a.itemSize), a.itemSize));
+      (bins.get(k) ?? bins.set(k, { src: m, material, geometries: [] }).get(k)!).geometries.push(cut.applyMatrix4(to));
+    }
+  });
+  root.clear();
+  for (const { src, material, geometries } of bins.values()) {
+    const m = new THREE.Mesh(mergeGeometries(geometries), material);
+    m.castShadow = src.castShadow; m.receiveShadow = src.receiveShadow;
+    root.add(m);
+  }
+}
 
 // Buildings on the plot, built from whole storey modules (so a taller house has more windows, never bigger texels): walls in the region's tint, the roof in the owner's colour
 // (hip roof, parapet, tower cap), the trim in gold; all of it grey when mortgaged. Each level has a silhouette and a storey count of its own (1, 3, 5), so they read apart at
@@ -1019,7 +1051,7 @@ const PROPS: Record<string, Prop[]> = {
 const CARD_GEO = new THREE.PlaneGeometry(CARD.w, CARD.d).rotateX(-Math.PI / 2);
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 // START's slab, two cells wide: its long walls (the +z and -z faces, vertices 16-23) repeat their courses of stone over the extra length, so no stone is stretched
-const START_GEO = new THREE.BoxGeometry(WIDE, SLAB, SZ), START_UV = START_GEO.attributes.uv;
+const START_GEO = twoGroups(new THREE.BoxGeometry(WIDE, SLAB, SZ)), START_UV = START_GEO.attributes.uv;
 for (let i = 16; i < 24; i++) START_UV.setX(i, (START_UV.getX(i) * WIDE) / SZ);
 // The tile cursor (hover, selection) is a bracket at each corner of the cell: an L of voxels, its corner at the origin and its two arms (30 texels long, 6 across and tall) along +x and +z.
 // A line one pixel wide breaks into dashes and stairs on the half-size buffer and is cut by whatever stands before it; blocks are drawn like everything else, and the ink pass gives them their edges.
@@ -1044,13 +1076,13 @@ export function createBoard() {
     g.userData = { lift: 0 };
     const side = lodMap(toon(t.color), sideTex);
     const ground = lodMap(toon(0xffffff), (L) => (wide ? startTex(t.color, L) : groundTex(t.type, t.kind, t.color, L))); // lit: buildings and tokens cast their shadows on it
-    const slab = new THREE.Mesh(wide ? START_GEO : geo(SZ, SLAB, SZ), [side, side, ground, side, side, side]);
+    const slab = new THREE.Mesh(wide ? START_GEO : slabGeo(SZ, SLAB, SZ), [side, ground]);
     slab.position.y = (TOP - 0.8) / 2;
     slab.receiveShadow = slab.castShadow = true;
     const card = new THREE.Mesh(CARD_GEO, lodMap(new THREE.MeshBasicMaterial(), (L) => cardTex(t, L))); // unlit: exact colours, no shadow smudges
     card.position.set(CARD.x, TOP + 0.03, CARD.z);
     if (wide) { slab.position.add(MID); card.position.add(home(0)).sub(POS[0]); } // START: the slab spans its own cell and the wing, the card stands in the wing and the props in its own cell
-    const pad = t.type === 'public' ? null : new THREE.Mesh(geo(PAD.w, PAD.h, PAD.d), padMats(VACANT)); // the plot: city tiles only
+    const pad = t.type === 'public' ? null : new THREE.Mesh(slabGeo(PAD.w, PAD.h, PAD.d), padMats(VACANT)); // the plot: city tiles only
     if (pad) { pad.position.set(PAD.x, TOP + PAD.h / 2, PAD.z); pad.castShadow = pad.receiveShadow = true; }
     const props = new THREE.Group(), bld = new THREE.Group();
     props.position.set(LOT.x, TOP + (pad ? PAD.h : 0), LOT.z); bld.position.copy(props.position);
@@ -1058,10 +1090,11 @@ export function createBoard() {
     K = FIT[key] ?? PK;
     for (const r of PROPS[key] ?? []) typeof r === 'function' ? r(props) : box(props, r[1], r[2], r[3], r[0], r[4], r[5], r[6]);
     K = 1;
+    bake(props);
     g.add(slab, card, props, bld);
     if (pad) g.add(pad);
     root.add(g);
-    if (pad) sign(bld);
+    if (pad) { sign(bld); bake(bld); }
     return { g, slab, card, props, side, tint: [ground, card.material], pad, bld, key: '', pop: 1 };
   });
   type Plot = (typeof tiles)[number];
@@ -1129,15 +1162,15 @@ export function createBoard() {
     const key = st ? `${st.color}|${st.lv}` : ''; // mortgaging or redeeming changes neither
     if (st && key !== o.key) { o.pop = 0; squash(o); }
     o.key = key;
+    o.bld.children.forEach((m) => (m as THREE.Mesh).geometry.dispose()); // the baked meshes own their geometry: free it
     o.bld.clear();
     o.tint.forEach((m) => m.color.set(st?.m ? 0x808080 : 0xffffff));
     const col = st?.m ? 0x555555 : st?.color ?? VACANT;
     o.pad!.material = padMats(col);
-    if (!st) return sign(o.bld);
-    if (t.type === 'invest') return; // its props stand on the owner's plot: the colour says it all, a flag would only hide them
-    if (t.type === 'special') return level(o.bld, st.lv, st.m); // likewise the landmark: only the level is added
-    if (!st.lv) flag(o.bld, st.m ? 0x666666 : st.color);
-    else building(o.bld, st.lv, st.m ? 0x8c8c8c : new THREE.Color(t.color).lerp(new THREE.Color(0xffffff), 0.6).getHex(), col, st.m);
+    if (!st) sign(o.bld);
+    else if (t.type === 'special') level(o.bld, st.lv, st.m); // the landmark stands on its plot at every level: only the level is added
+    else if (t.type === 'city') st.lv ? building(o.bld, st.lv, st.m ? 0x8c8c8c : new THREE.Color(t.color).lerp(new THREE.Color(0xffffff), 0.6).getHex(), col, st.m) : flag(o.bld, st.m ? 0x666666 : st.color); // an investment adds nothing: its props stand on the owner's plot, the colour says it all, a flag would only hide them
+    bake(o.bld);
   }
 
   const place = (r: THREE.Group, i: number, hop: number) => { // the cursor on tile i, hop above its resting height: START's spans both its cells
