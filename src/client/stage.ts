@@ -87,22 +87,29 @@ export function tokenSpot(pi: number): [number, number] | null {
 }
 
 // ---- The page ----
+/** Binds the pointer; returns the per-frame step that finds the tile under it. */
 function bindCanvas() {
   const cv = renderer.domElement;
-  let down: [number, number] | null = null;
-  const hover = (i: number, e?: PointerEvent) => { board.hover(i); cv.classList.toggle('hot', i >= 0); tip.set(i >= 0 && e ? { i, x: e.clientX, y: e.clientY } : null); };
+  let down: [number, number] | null = null, moved: [number, number] | null = null; // moved: where the pointer went since the last frame, picked then (once, however many moves came)
+  const hover = (i: number, x = 0, y = 0) => { board.hover(i); cv.classList.toggle('hot', i >= 0); tip.set(i >= 0 ? { i, x, y } : null); };
   cv.addEventListener('pointerdown', (e) => (down = [e.clientX, e.clientY]));
   cv.addEventListener('pointerup', (e) => {
-    if (G.live && down && e.button === 0 && Math.hypot(e.clientX - down[0], e.clientY - down[1]) < 5) selectTile(pick(e.clientX, e.clientY, board.groups));
+    if (G.live && down && e.button === 0 && Math.hypot(e.clientX - down[0], e.clientY - down[1]) < 5) selectTile(pick(e.clientX, e.clientY, board.slabs));
     down = null;
   });
-  cv.addEventListener('pointermove', (e) => (G.live && !e.buttons ? hover(pick(e.clientX, e.clientY, board.groups), e) : hover(-1)));
-  cv.addEventListener('pointerleave', () => hover(-1));
+  cv.addEventListener('pointermove', (e) => { if (G.live && !e.buttons) moved = [e.clientX, e.clientY]; else { moved = null; hover(-1); } });
+  cv.addEventListener('pointerleave', () => { moved = null; hover(-1); });
+  return () => {
+    if (!moved) return;
+    const [x, y] = moved;
+    moved = null;
+    hover(pick(x, y, board.slabs), x, y);
+  };
 }
 
 export function initStage() {
   board = createBoard();
-  bindCanvas();
+  const hoverStep = bindCanvas();
   enterDemo();
   controls.addEventListener('start', () => (cam.follow = -1));
   document.addEventListener('visibilitychange', () => document.hidden && finishTweens()); // a hidden tab draws no frames: its animations end at once
@@ -111,6 +118,7 @@ export function initStage() {
   renderer.setAnimationLoop((now) => {
     timer.update(now);
     const dt = Math.min(timer.getDelta(), 0.1), t = timer.getElapsed();
+    hoverStep(); // against the frame just drawn, before the board reacts to it
     updateTweens(dt); updateWorld(t, dt); updateActors(t, dt); board.update(t, dt);
     if (cam.follow >= 0 && tokens[cam.follow]) { const p = tokens[cam.follow].g.position; focus(p.x, p.z); }
     updateCamera(dt);

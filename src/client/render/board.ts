@@ -1041,7 +1041,7 @@ export function createBoard() {
   const tiles = TILES.map((t) => {
     const g = new THREE.Group(), wide = !t.i;
     g.position.set(POS[t.i].x, 0, POS[t.i].z);
-    g.userData = { i: t.i, lift: 0 };
+    g.userData = { lift: 0 };
     const side = lodMap(toon(t.color), sideTex);
     const ground = lodMap(toon(0xffffff), (L) => (wide ? startTex(t.color, L) : groundTex(t.type, t.kind, t.color, L))); // lit: buildings and tokens cast their shadows on it
     const slab = new THREE.Mesh(wide ? START_GEO : geo(SZ, SLAB, SZ), [side, side, ground, side, side, side]);
@@ -1150,7 +1150,7 @@ export function createBoard() {
   const walls = (i: number, lit: boolean) => tiles[i].side.color.set(TILES[i].color).multiplyScalar(lit ? 1.3 : 1); // the selected tile's walls are one band up the shading ramp (its bands are about 1.3x apart)
   let hov = -1, sel = -1;
   return {
-    groups: tiles.map((o) => o.g), setOwner,
+    slabs: tiles.map((o) => o.slab), setOwner, // what the pointer picks: each tile's base, a plain box (START's spans both its cells)
     // The lettering of every card, once the camera has moved and before render(). `on`: in a game. It is there only while the camera is square to the tiles (its azimuth a whole
     // number of quarter turns): turned from them, lettering that stays upright would not sit on its card, and lettering that turns with them cannot be pixel exact.
     labels(on: boolean) {

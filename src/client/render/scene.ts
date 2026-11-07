@@ -212,12 +212,12 @@ export function finishTweens() {
 
 // ---- Picking & projection ----
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+// The index of the nearest of `objects` under the screen point, or -1. Only they are tested, not their children: pass plain shapes (the tiles' slabs), not the models standing on them.
 export function pick(x: number, y: number, objects: THREE.Object3D[]) {
   ndc.set((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
-  let o: THREE.Object3D | null | undefined = ray.intersectObjects(objects, true)[0]?.object;
-  while (o && o.userData.i === undefined) o = o.parent;
-  return o ? o.userData.i : -1;
+  const hit = ray.intersectObjects(objects, false)[0]?.object;
+  return hit ? objects.indexOf(hit) : -1;
 }
 export function toScreen(v: THREE.Vector3): [number, number] {
   const p = v.clone().project(camera);
