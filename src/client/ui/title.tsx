@@ -78,6 +78,19 @@ export function Title() {
 }
 
 // ---- The lobby: who is here, and (for the host) the rules of the game ----
+const NAME_DELAY_MS = 300; // quiet after the last key before a name goes out
+
+/** The name of your own seat. Each name sent is broadcast to the whole room: it goes out once typing pauses, or at once when the field is left (so that START right after typing cannot beat it). */
+function NameInput({ name }: { name: string }) {
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const put = (v: string) => { clearTimeout(timer.current); timer.current = undefined; send({ t: 'name', name: v }); };
+  return (
+    <input maxLength={NAME_MAX} defaultValue={name}
+      onChange={(e) => { const v = e.target.value; clearTimeout(timer.current); timer.current = setTimeout(() => put(v), NAME_DELAY_MS); }}
+      onBlur={(e) => { if (timer.current) put(e.target.value); }} />
+  );
+}
+
 function Seat({ i, s, me }: { i: number; s?: SeatInfo; me: boolean }) {
   const def = PLAYER_DEFS[i];
   if (!s) return <div className="pl-row"><Face color={def.color} /><span className="nm dim">Waiting for a player...</span></div>;
@@ -85,7 +98,7 @@ function Seat({ i, s, me }: { i: number; s?: SeatInfo; me: boolean }) {
     <div className="pl-row">
       <Face color={def.color} />
       {me
-        ? <input maxLength={NAME_MAX} defaultValue={s.name} onChange={(e) => send({ t: 'name', name: e.target.value })} />
+        ? <NameInput name={s.name} />
         : <span className="nm" style={{ color: hex(def.color) }}>{s.name}</span>}
       {me && <span className="badge gold">YOU</span>}
       {s.host && <span className="badge blue">HOST</span>}

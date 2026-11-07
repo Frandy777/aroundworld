@@ -8,6 +8,7 @@ export interface Env { ROOM: DurableObjectNamespace<Room> }
 
 const SEAT_GRACE_MS = 30_000; // in the lobby, a seat whose player vanished is kept this long (a page reload must not cost it)
 const IDLE_MS = 5 * 60_000; // nobody connected for this long: the room is dissolved
+const RATE_MS = 500, BURST_MS = 10_000; // a seat's `name` and `settings` (each one is broadcast to the room): one is let through per RATE_MS, with up to BURST_MS worth of them at once; the rest are dropped
 
 interface Seat {
   pid: string; seat: number; name: string; pi: number; // pi: player index in the game, -1 before it starts
@@ -29,6 +30,7 @@ export class Room extends DurableObject<Env> implements Host {
   private game: Game | null = null;
   private idle = 0; // when a room nobody is connected to is dissolved (epoch ms; 0: somebody is)
   private batch: string[] = []; // events of this tick, already serialised: they go out together
+  private next = new WeakMap<Seat, number>(); // per seat, when its next `name` or `settings` is due at the pace of RATE_MS (see `limited`; kept in memory only)
   private stored = ''; // what storage holds of the room
   private alarmAt = NaN; // what the alarm is set to (NaN: unknown)
 
@@ -211,10 +213,19 @@ export class Room extends DurableObject<Env> implements Host {
   }
 
   // ---- Messages ----
+  /** Is this seat sending `name` or `settings` faster than the pace allows? Each message makes the whole room a broadcast. A seat may run BURST_MS ahead of its pace; a message dropped for being over is not charged. */
+  private limited(s: Seat) {
+    const now = Date.now(), due = Math.max(this.next.get(s) ?? 0, now);
+    if (due - now > BURST_MS) return true;
+    this.next.set(s, due + RATE_MS);
+    return false;
+  }
+
   private onMessage(s: Seat, raw: unknown) {
     let msg: C2S;
     try { msg = JSON.parse(String(raw)); } catch { return; }
     if (!msg || typeof msg !== 'object') return;
+    if ((msg.t === 'name' || msg.t === 'settings') && this.limited(s)) return;
     const host = s.pid === this.host;
     switch (msg.t) {
       case 'name':
