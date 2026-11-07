@@ -55,6 +55,10 @@ const kept = import.meta.hot?.data ?? {};
 export const renderer: THREE.WebGLRenderer = (kept.renderer ??= new THREE.WebGLRenderer({ canvas: document.getElementById('gl') as HTMLCanvasElement, antialias: false }));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.BasicShadowMap; // hard, stair-stepped shadows
+// The 4096 x 4096 shadow map is drawn by the next render() after a dirtyShadow(), not every frame: the sun's frame moved (fitShadow), a tween, a tile or a landing token is still
+// moving, a plot's building changed. The endless loops (the globe's float, the tokens' bob) are no reason: their shadows catch up whenever the map is next drawn.
+renderer.shadowMap.autoUpdate = false;
+export const dirtyShadow = () => (renderer.shadowMap.needsUpdate = true);
 
 export const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x14213d);
@@ -204,12 +208,14 @@ interface Tween { t: number; dur: number; fn: (k: number) => void; ease: (t: num
 const tweens = new Set<Tween>();
 export const pace = { speed: 1 }; // how many times faster than designed the tweens run (and the cards' timers, see dialogs): the director raises it when the screen is far behind the game
 export const tween = (dur: number, fn: (k: number) => void, ease = (t: number) => t) =>
-  document.hidden ? (fn(ease(1)), Promise.resolve()) : new Promise<void>((res) => tweens.add({ t: 0, dur, fn, ease, res }));
-export const wait = (s: number) => tween(s, () => {});
+  document.hidden ? (fn(ease(1)), dirtyShadow(), Promise.resolve()) : new Promise<void>((res) => tweens.add({ t: 0, dur, fn, ease, res }));
+const still = () => {};
+export const wait = (s: number) => tween(s, still); // moves nothing, so it is no reason to draw the shadows again
 export function updateTweens(dt: number) {
   for (const tw of tweens) {
     tw.t = Math.min(1, tw.t + (dt * pace.speed) / tw.dur);
     tw.fn(tw.ease(tw.t));
+    if (tw.fn !== still) dirtyShadow();
     if (tw.t >= 1) { tweens.delete(tw); tw.res(); }
   }
 }
@@ -218,6 +224,7 @@ export function updateTweens(dt: number) {
 export function finishTweens() {
   for (const tw of tweens) { tw.fn(tw.ease(1)); tw.res(); }
   tweens.clear();
+  dirtyShadow();
 }
 
 // ---- Picking & projection ----
@@ -252,17 +259,20 @@ sun.shadow.normalBias = 0.04; // walls facing the camera lie along the light's r
 // texels, so shadows never crawl) and only doubles when the visible ground would spill over its edge (far zoomed out, where a shadow texel is a
 // fraction of a screen pixel anyway).
 const SUN_X = new THREE.Vector3(SUN.z, 0, -SUN.x).normalize(), SUN_Y = SUN.clone().normalize().cross(SUN_X); // the sun's light-space axes
-let shadowScale = 0;
+let shadowScale = 0, shadowX = 0, shadowY = 0; // the frustum's size and its texel on the lattice, as the shadow map was last drawn for them
 function fitShadow() {
   const t = controls.target, off = camera.position.clone().sub(t), half = 2048 / DENSITY;
   const reach = Math.hypot(camera.right - camera.left, ((camera.top - camera.bottom) * off.length()) / off.y) / (2 * camera.zoom); // radius of the visible ground
-  const s = reach > half ? 2 : 1, tx = s / DENSITY, ty = tx * SUN_SIN, x = t.dot(SUN_X), y = t.dot(SUN_Y);
-  if (s !== shadowScale) {
-    Object.assign(sun.shadow.camera, { left: -half * s, right: half * s, top: half * s * SUN_SIN, bottom: -half * s * SUN_SIN });
-    sun.shadow.camera.updateProjectionMatrix();
-    shadowScale = s;
+  const s = reach > half ? 2 : 1, tx = s / DENSITY, ty = tx * SUN_SIN, x = t.dot(SUN_X), y = t.dot(SUN_Y), i = Math.round(x / tx), j = Math.round(y / ty);
+  if (s !== shadowScale || i !== shadowX || j !== shadowY) { // resized, or on another texel: the map is drawn again (within a texel, or along the light, it would come out the same)
+    if (s !== shadowScale) {
+      Object.assign(sun.shadow.camera, { left: -half * s, right: half * s, top: half * s * SUN_SIN, bottom: -half * s * SUN_SIN });
+      sun.shadow.camera.updateProjectionMatrix();
+    }
+    [shadowScale, shadowX, shadowY] = [s, i, j];
+    dirtyShadow();
   }
-  sun.target.position.copy(t).addScaledVector(SUN_X, Math.round(x / tx) * tx - x).addScaledVector(SUN_Y, Math.round(y / ty) * ty - y);
+  sun.target.position.copy(t).addScaledVector(SUN_X, i * tx - x).addScaledVector(SUN_Y, j * ty - y);
   sun.position.copy(sun.target.position).add(SUN);
 }
 

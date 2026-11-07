@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { scene, renderer, camera, controls, lod, toon, lodMap, pixelTexture, texels, toScreen, DENSITY } from './scene';
+import { scene, renderer, camera, controls, lod, toon, lodMap, pixelTexture, texels, toScreen, dirtyShadow, DENSITY } from './scene';
 import { TILES, type Tile } from '../../shared/data';
 import { canvas, shade } from './art';
 import { CARD_SIZE, cardText, drawCard, drawCode, drawGround, drawPad } from './labels';
@@ -150,6 +150,7 @@ export function createBoard() {
     else if (t.type === 'special') level(o.bld, st.lv, st.m); // the landmark stands on its plot at every level: only the level is added
     else if (t.type === 'city') st.lv ? building(o.bld, st.lv, st.m ? 0x8c8c8c : new THREE.Color(t.color).lerp(new THREE.Color(0xffffff), 0.6).getHex(), col, st.m) : flag(o.bld, st.m ? 0x666666 : st.color); // an investment adds nothing: its props stand on the owner's plot, the colour says it all, a flag would only hide them
     bake(o.bld);
+    dirtyShadow();
   }
 
   const place = (r: THREE.Group, i: number, hop: number) => { // the cursor on tile i, hop above its resting height: START's spans both its cells
@@ -179,8 +180,10 @@ export function createBoard() {
     },
     update(t: number, dt: number) {
       tiles.forEach((o) => { // each tile lifts as one piece (slab, card, props, building)
-        o.g.position.y += (o.g.userData.lift - o.g.position.y) * Math.min(1, dt * 14);
-        if (o.pop < 1) { o.pop = Math.min(1, o.pop + dt / 0.45); squash(o); }
+        const rise = o.g.userData.lift - o.g.position.y, popping = o.pop < 1;
+        o.g.position.y += rise * Math.min(1, dt * 14);
+        if (popping) { o.pop = Math.min(1, o.pop + dt / 0.45); squash(o); }
+        if (popping || Math.abs(rise) > 1e-3) dirtyShadow(); // until it has settled (an exponential never quite arrives: 1e-3 is a fiftieth of a shadow texel)
       });
       // The cursors breathe: 0, 1, 2, 1 buffer pixels up the screen, a step every third of a second (px: one pixel up the screen, as a height)
       const px = (camera.top - camera.bottom) / (camera.zoom * renderer.domElement.height * Math.sin(controls.getPolarAngle()));

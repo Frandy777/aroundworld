@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { scene, toon, lodMap, pixelTexture, texels, tween, easeInOut, DENSITY } from './scene';
+import { scene, toon, lodMap, pixelTexture, texels, tween, easeInOut, dirtyShadow, DENSITY } from './scene';
 import { home, LOT } from './layout';
 import { PAL, dieRows, paint, canvas, facePal, FACE, TORSO } from './art';
 import { TILES } from '../../shared/data';
@@ -31,7 +31,7 @@ const spot = (tok: Token, i: number) => {
   const [x, z] = (tok.jailed && i === JAIL ? CAGE : SLOT)[tok.slot];
   return new THREE.Vector3(x, 0, z).add(home(i));
 };
-const place = (tok: Token, i: number) => { tok.tile = i; tok.slot = slot(tok, i); tok.g.position.copy(spot(tok, i)); };
+const place = (tok: Token, i: number) => { tok.tile = i; tok.slot = slot(tok, i); tok.g.position.copy(spot(tok, i)); dirtyShadow(); }; // a token that appears, or is moved with no tween (out of the cage)
 
 // A part is [w, h, d, x, y, z, colour] in texels: x and z its centre, y its bottom, up from the soles; one with x != 0 comes as a mirrored pair. The colour is a palette
 // key (A-D the player's ramp, h the hair) or F / T for the face and hoodie sprites. Two heads tall: the head is as tall as everything under it.
@@ -156,5 +156,6 @@ export function updateActors(t: number, dt: number) {
     tok.squash *= Math.exp(-dt * 10);
     tok.g.scale.set(1 + 0.18 * tok.squash, 1 - 0.28 * tok.squash, 1 + 0.18 * tok.squash);
     tok.marker.position.y = act ? MARK_Y + Math.sin(t * 5) * 0.15 : PIN_Y;
+    if (tok.squash > 0.01 || Math.abs(tok.ry) > 0.01) dirtyShadow(); // still landing (the bob is not a reason, see dirtyShadow)
   }
 }
