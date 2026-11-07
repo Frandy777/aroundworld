@@ -3,7 +3,7 @@ import type { Ev, GameState, Prompt } from '../shared/types';
 import { close, forget, hold, reply, wasClosed } from './asks';
 import { send } from './net';
 import { clearDice, hideDice, hop, jump, placeAt, removeToken, rollDice, setActive, tokens } from './render/actors';
-import { home } from './render/board';
+import { home } from './render/layout';
 import { finishTweens, pace, wait } from './render/scene';
 import { enterGame, focusTok, selectTile, setOwner, showState, tokenSpot } from './stage';
 import { G, actionBtn, activeTab, bump, bumpAssets, clearCards, floatText, floats, hudLive, lastRoll, selectedTile, session, tip, toast, toasts, viewedPlayer, waitingFor, type Button, type Open } from './store';

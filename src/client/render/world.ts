@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { scene, toon, lodMap, pixelTexture, texels, onLod, DENSITY, BOARD_K } from './scene';
 import { canvas } from './art';
 import { EARTH } from './earth';
-import { FOOT, TOP, SLAB, SZ, sideTex } from './board';
+import { FOOT, TOP, SLAB, SZ } from './layout';
+import { sideTex } from './builder';
 
 const rng = (s: number) => () => (s = (s * 16807) % 2147483647) / 2147483647;
 const smooth = (t: number) => t * t * (3 - 2 * t);

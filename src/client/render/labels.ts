@@ -114,7 +114,7 @@ export function drawCard(g: Ctx, t: Tile, L: number) {
 // A card lies flat on the ground, tilted away from the camera, so a texel of it reaches the screen as about 2 x 1.6 pixels, and as something else at every other zoom and
 // window size: letters drawn into it come out with strokes of 1 or 2 pixels and fall apart. So the letters are stamped over the card instead, one font pixel on one screen
 // pixel (the far level's overlay canvas has the same pixels as the 3D one; the others are laid on the scene by board.js). That holds only while the camera is square to the
-// tiles, so that is the only time there is lettering at all. (The few letters of a sign on a building are part of its texture instead, see plate in board.js.)
+// tiles, so that is the only time there is lettering at all. (The few letters of a sign on a building are part of its texture instead, see plate in builder.ts.)
 
 // The name's blocks for a card with maxw pixels across and room pixels down to put them in
 const blocks = (t: Tile, maxw: number, room: number) => {

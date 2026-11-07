@@ -1,7 +1,7 @@
 import { TILES } from '../../shared/data';
 import type { GameState } from '../../shared/types';
 import { PAL, shade } from '../render/art';
-import { POS } from '../render/board';
+import { POS } from '../render/layout';
 import type { Token } from '../render/actors';
 
 // Shaded tile chips, outlined tokens and the view frame (the dithered sea is the canvas' CSS background). One canvas pixel = one art pixel = 2px.

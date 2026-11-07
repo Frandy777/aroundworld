@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { scene, toon, lodMap, pixelTexture, texels, tween, easeInOut, DENSITY } from './scene';
-import { home, LOT } from './board';
+import { home, LOT } from './layout';
 import { PAL, dieRows, paint, canvas, facePal, FACE, TORSO } from './art';
 import { TILES } from '../../shared/data';
 
