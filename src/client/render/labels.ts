@@ -116,11 +116,10 @@ export function drawCard(g: Ctx, t: Tile, L: number) {
 // pixel (the far level's overlay canvas has the same pixels as the 3D one; the others are laid on the scene by board.js). That holds only while the camera is square to the
 // tiles, so that is the only time there is lettering at all. (The few letters of a sign on a building are part of its texture instead, see plate in board.js.)
 
-// Mid and near levels: the blocks of lettering of a card that is pw x ph pixels on the screen, each { key, w, h, draw, y }: y is its centre as a fraction of the card's
-// height. Just the name, in the biggest font that fits the card.
-export function cardText(t: Tile, pw: number, ph: number) {
+// The name's blocks for a card with maxw pixels across and room pixels down to put them in
+const blocks = (t: Tile, maxw: number, room: number) => {
   const [col, light] = tone(t);
-  const [n, lines] = nameLines(t, 0.88 * pw, ph - 6), cap = 5 * n, lw = lines.map((l: string) => inkWidth(l, n)), mw = Math.max(...lw), pad = 3; // pad: room for an accent
+  const [n, lines] = nameLines(t, maxw, room), cap = 5 * n, lw = lines.map((l: string) => inkWidth(l, n)), mw = Math.max(...lw), pad = 3; // pad: room for an accent
   const [fg, sh] = light ? ['#0b0e24', 'rgba(255,255,255,.45)'] : ['#fff', shade(col, 0.3)];
   return [{
     key: [n, fg, sh, ...lines].join('|'), w: mw + 2, h: cap + (lines.length - 1) * lead(n) + 2 * pad, y: 0.5,
@@ -130,6 +129,18 @@ export function cardText(t: Tile, pw: number, ph: number) {
       g.fillStyle = fg; ink(g, l, n, x, y);
     }),
   }];
+};
+
+// Mid and near levels: the blocks of lettering of a card that is pw x ph pixels on the screen, each { key, w, h, draw, y }: y is its centre as a fraction of the card's
+// height. Just the name, in the biggest font that fits the card.
+// The fit only compares whole-pixel widths, so the card's size in whole pixels is all the blocks depend on, and every card is seen at the same size: each tile's blocks are made
+// when first asked for at a size and kept while the camera rests there, instead of wrapping and measuring every name on every frame.
+let size = [-1, -1]; // the (maxw, room) that `made` is for
+const made = new Map<Tile, ReturnType<typeof blocks>>();
+export function cardText(t: Tile, pw: number, ph: number) {
+  const maxw = Math.floor(0.88 * pw), room = Math.floor(ph - 6);
+  if (maxw !== size[0] || room !== size[1]) { size = [maxw, room]; made.clear(); }
+  return made.get(t) ?? made.set(t, blocks(t, maxw, room)).get(t)!;
 }
 
 // ---- Far level: the code, drawn over its card on the overlay ----
