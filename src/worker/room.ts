@@ -8,14 +8,15 @@ export interface Env { ROOM: DurableObjectNamespace<Room> }
 
 const SEAT_GRACE_MS = 30_000; // in the lobby, a seat whose player vanished is kept this long (a page reload must not cost it)
 const IDLE_MS = 5 * 60_000; // nobody connected for this long: the room is dissolved
-const RATE_MS = 500, BURST_MS = 10_000; // a seat's `name` and `settings` (each one is broadcast to the room): one is let through per RATE_MS, with up to BURST_MS worth of them at once; the rest are dropped
+const RATE_MS = 500, BURST_MS = 10_000; // a seat's `name`, `settings` and `bot` (each one is broadcast to the room): one is let through per RATE_MS, with up to BURST_MS worth of them at once; the rest are dropped
 
 interface Seat {
   pid: string; seat: number; name: string; pi: number; // pi: player index in the game, -1 before it starts
   left: boolean; drop: number; // drop: when the seat of a player who vanished is let go (epoch ms; 0: it is held)
+  bot?: true; // a bot (dev rooms): no connection, always there, and it answers by itself (see `Host.bot`)
 }
 // What is written to storage of a room (see `save`). The connections are not: the runtime keeps them.
-interface Stored { code: string; host: string; settings: Settings; idle: number; seats: Seat[]; game?: Saved }
+interface Stored { code: string; host: string; dev: boolean; settings: Settings; idle: number; seats: Seat[]; game?: Saved }
 
 const cleanName = (raw: string, seat: number) => Array.from(raw.replace(/[\u0000-\u001f\u007f]/g, '').trim()).slice(0, NAME_MAX).join('').trim() || PLAYER_DEFS[seat].name;
 
@@ -26,6 +27,7 @@ export class Room extends DurableObject<Env> implements Host {
   private code = ''; // '' while there is no room
   private seats: Seat[] = [];
   private host = ''; // pid of the host
+  private dev = false; // a dev room (made with ?dev=1): its host may seat bots
   private settings: Settings = { ...DEFAULT_SETTINGS };
   private game: Game | null = null;
   private idle = 0; // when a room nobody is connected to is dissolved (epoch ms; 0: somebody is)
@@ -64,8 +66,8 @@ export class Room extends DurableObject<Env> implements Host {
   /** Write the room down, and set the alarm for the first deadline there is. Called wherever something may have changed. */
   save() {
     if (!this.code) return; // dissolved: nothing is kept
-    const { code, host, settings, idle, seats } = this;
-    const json = JSON.stringify({ code, host, settings, idle, seats, game: this.game?.saved } satisfies Stored);
+    const { code, host, dev, settings, idle, seats } = this;
+    const json = JSON.stringify({ code, host, dev, settings, idle, seats, game: this.game?.saved } satisfies Stored);
     if (json !== this.stored) this.ctx.storage.kv.put('room', (this.stored = json));
     const at = Math.min(...[idle, this.game?.due ?? 0, ...seats.map((s) => s.drop)].filter(Boolean)); // Infinity: nothing to wait for
     if (at === this.alarmAt) return;
@@ -74,9 +76,10 @@ export class Room extends DurableObject<Env> implements Host {
   }
 
   /** Claim a code for a new room: false when it is taken. */
-  create(code: string) {
+  create(code: string, dev: boolean) {
     if (this.code) return false;
     this.code = code;
+    this.dev = dev;
     this.idle = Date.now() + IDLE_MS; // nobody is connected yet: if nobody comes, the room must not stay for ever
     this.save();
     return true;
@@ -119,11 +122,12 @@ export class Room extends DurableObject<Env> implements Host {
     this.batch.push(JSON.stringify(ev));
   }
   online(pi: number) { return this.seats.some((s) => s.pi === pi && this.up(s)); }
-  anyOnline() { return this.seats.some((s) => this.up(s)); }
+  bot(pi: number) { return this.seats.some((s) => s.pi === pi && s.bot); }
+  anyOnline() { return this.seats.some((s) => !s.bot && this.up(s)); } // people only: bots watch nothing, and keep no room alive
 
   // ---- Wire ----
   private conns(pid?: string) { return this.ctx.getWebSockets(pid).filter((w) => w.readyState === WebSocket.OPEN); } // a closing one may still be listed
-  private up(s: Seat) { return this.conns(s.pid).length > 0; }
+  private up(s: Seat) { return !!s.bot || this.conns(s.pid).length > 0; }
   private seatOf(ws: WebSocket) { const [pid] = this.ctx.getTags(ws); return this.seats.find((s) => s.pid === pid); }
   private send(s: Seat, msg: S2C | string) {
     const raw = typeof msg === 'string' ? msg : JSON.stringify(msg);
@@ -139,8 +143,8 @@ export class Room extends DurableObject<Env> implements Host {
   }
   private info(s: Seat): RoomInfo {
     return {
-      code: this.code, settings: this.settings, started: !!this.game, me: s.seat,
-      seats: [...this.seats].sort((a, b) => a.seat - b.seat).map((x) => ({ seat: x.seat, name: x.name, online: this.up(x), host: x.pid === this.host, pi: x.pi })),
+      code: this.code, settings: this.settings, started: !!this.game, me: s.seat, dev: this.dev,
+      seats: [...this.seats].sort((a, b) => a.seat - b.seat).map((x) => ({ seat: x.seat, name: x.name, online: this.up(x), host: x.pid === this.host, bot: !!x.bot, pi: x.pi })),
     };
   }
   private broadcastRoom() { this.seats.forEach((s) => this.send(s, { t: 'room', room: this.info(s) })); }
@@ -179,8 +183,8 @@ export class Room extends DurableObject<Env> implements Host {
   private leave(s: Seat) {
     s.drop = 0;
     if (this.game) { s.left = true; this.game.forfeit(s.pi); } else this.seats = this.seats.filter((x) => x !== s);
-    if (this.host === s.pid) this.host = this.seats.find((x) => !x.left)?.pid ?? '';
-    if (this.seats.every((x) => x.left)) return this.dissolve();
+    if (this.host === s.pid) this.host = this.seats.find((x) => !x.left && !x.bot)?.pid ?? '';
+    if (this.seats.every((x) => x.left || x.bot)) return this.dissolve(); // only bots are left: nobody to play for
     this.presence();
   }
 
@@ -204,6 +208,7 @@ export class Room extends DurableObject<Env> implements Host {
     this.game = null;
     this.batch = [];
     this.host = '';
+    this.dev = false;
     this.settings = { ...DEFAULT_SETTINGS };
     this.code = '';
     this.idle = 0;
@@ -213,7 +218,7 @@ export class Room extends DurableObject<Env> implements Host {
   }
 
   // ---- Messages ----
-  /** Is this seat sending `name` or `settings` faster than the pace allows? Each message makes the whole room a broadcast. A seat may run BURST_MS ahead of its pace; a message dropped for being over is not charged. */
+  /** Is this seat sending `name`, `settings` or `bot` faster than the pace allows? Each message makes the whole room a broadcast. A seat may run BURST_MS ahead of its pace; a message dropped for being over is not charged. */
   private limited(s: Seat) {
     const now = Date.now(), due = Math.max(this.next.get(s) ?? 0, now);
     if (due - now > BURST_MS) return true;
@@ -225,7 +230,7 @@ export class Room extends DurableObject<Env> implements Host {
     let msg: C2S;
     try { msg = JSON.parse(String(raw)); } catch { return; }
     if (!msg || typeof msg !== 'object') return;
-    if ((msg.t === 'name' || msg.t === 'settings') && this.limited(s)) return;
+    if ((msg.t === 'name' || msg.t === 'settings' || msg.t === 'bot') && this.limited(s)) return;
     const host = s.pid === this.host;
     switch (msg.t) {
       case 'name':
@@ -237,6 +242,14 @@ export class Room extends DurableObject<Env> implements Host {
         const { mode, rounds } = msg.s ?? {};
         if (this.game || !host || (mode !== 'limited' && mode !== 'endless') || !Number.isInteger(rounds) || rounds < ROUNDS_MIN || rounds > ROUNDS_MAX) return;
         this.settings = { mode, rounds };
+        this.broadcastRoom();
+        break;
+      }
+      case 'bot': {
+        const { seat } = msg, at = this.seats.find((x) => x.seat === seat); // at: who sits there
+        if (!this.dev || this.game || !host || !Number.isInteger(seat) || seat < 0 || seat >= MAX_PLAYERS || (at && !at.bot)) return;
+        if (at) this.seats = this.seats.filter((x) => x !== at);
+        else this.seats.push({ pid: crypto.randomUUID(), seat, name: `Bot ${PLAYER_DEFS[seat].name}`, pi: -1, left: false, drop: 0, bot: true }); // the id is nobody's to guess: no connection can take the seat over
         this.broadcastRoom();
         break;
       }
@@ -261,8 +274,8 @@ export class Room extends DurableObject<Env> implements Host {
     this.batch = [];
     this.seats = this.seats.filter((s) => !s.left && this.up(s));
     this.seats.forEach((s) => (s.pi = -1));
-    if (!this.seats.some((s) => s.pid === this.host)) this.host = this.seats[0]?.pid ?? '';
-    if (!this.seats.length) return this.dissolve();
+    if (!this.seats.some((s) => s.pid === this.host)) this.host = this.seats.find((s) => !s.bot)?.pid ?? '';
+    if (!this.host) return this.dissolve(); // nobody but bots
     this.broadcastRoom();
   }
 }

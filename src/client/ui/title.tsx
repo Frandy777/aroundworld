@@ -91,9 +91,9 @@ function NameInput({ name }: { name: string }) {
   );
 }
 
-function Seat({ i, s, me }: { i: number; s?: SeatInfo; me: boolean }) {
-  const def = PLAYER_DEFS[i];
-  if (!s) return <div className="pl-row"><Face color={def.color} /><span className="nm dim">Waiting for a player...</span></div>;
+function Seat({ i, s, me, bots }: { i: number; s?: SeatInfo; me: boolean; bots: boolean }) { // bots: the host may seat them
+  const def = PLAYER_DEFS[i], toggle = (label: string) => <button className="btn sm" onClick={() => send({ t: 'bot', seat: i })}>{label}</button>;
+  if (!s) return <div className="pl-row"><Face color={def.color} /><span className="nm dim">Waiting for a player...</span>{bots && toggle('+ BOT')}</div>;
   return (
     <div className="pl-row">
       <Face color={def.color} />
@@ -103,6 +103,7 @@ function Seat({ i, s, me }: { i: number; s?: SeatInfo; me: boolean }) {
       {me && <span className="badge gold">YOU</span>}
       {s.host && <span className="badge blue">HOST</span>}
       {!s.online && <span className="badge dim">OFFLINE</span>}
+      {bots && s.bot && toggle('REMOVE')}
     </div>
   );
 }
@@ -124,7 +125,7 @@ export function Lobby() {
     </>}>
       <div className="note">Friends join with the room number <b className="gold">{room.code}</b>.</div>
       <div className="field"><label>PLAYERS {seats.length} / {MAX_PLAYERS}</label>
-        {PLAYER_DEFS.map((_, i) => <Seat key={i} i={i} s={seats.find((s) => s.seat === i)} me={i === room.me} />)}
+        {PLAYER_DEFS.map((_, i) => <Seat key={i} i={i} s={seats.find((s) => s.seat === i)} me={i === room.me} bots={host && room.dev} />)}
       </div>
       {host ? (
         <>

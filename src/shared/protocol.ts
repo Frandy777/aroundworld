@@ -7,14 +7,15 @@ export const ROUNDS_MAX = 100;
 export const DEFAULT_SETTINGS: Settings = { mode: 'limited', rounds: 30 };
 export const READ = 2000; // ms a card with nothing to decide stays up before it closes itself
 
-export interface SeatInfo { seat: number; name: string; online: boolean; host: boolean; pi: number } // seat picks the colour; pi is the player index once the game runs, else -1
-export interface RoomInfo { code: string; seats: SeatInfo[]; settings: Settings; started: boolean; me: number } // me: the receiver's seat
+export interface SeatInfo { seat: number; name: string; online: boolean; host: boolean; bot: boolean; pi: number } // seat picks the colour; pi is the player index once the game runs, else -1
+export interface RoomInfo { code: string; seats: SeatInfo[]; settings: Settings; started: boolean; me: number; dev: boolean } // me: the receiver's seat; dev: the host may seat bots
 export type Fail = 'no-room' | 'full' | 'started' | 'busy';
 
 export type C2S =
   | { t: 'name'; name: string }
   | { t: 'settings'; s: Settings }
   | { t: 'start' }
+  | { t: 'bot'; seat: number } // dev room, host: put a bot on an empty seat, or send away the one on it
   | { t: 'answer'; id: number; v: unknown }
   | { t: 'again' } // after the game: back to the lobby
   | { t: 'ping' };

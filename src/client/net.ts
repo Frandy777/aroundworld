@@ -4,6 +4,8 @@ import type { Ev } from '../shared/types';
 // Who this tab is: kept for the life of the tab, so a reload returns to the same seat.
 const pid = sessionStorage.getItem('pid') ?? (sessionStorage.setItem('pid', crypto.randomUUID()), sessionStorage.getItem('pid')!);
 
+const dev = new URLSearchParams(location.search).get('dev') === '1'; // a room made from a page opened with ?dev=1 is a dev room: its host may seat bots
+
 const FAIL: Record<Fail, string> = { 'no-room': 'Room not found', full: 'Room is full', started: 'The game has already started', busy: 'No room available' };
 
 export interface Handlers {
@@ -54,6 +56,7 @@ function end(why: string) {
 function connect() {
   const w = want!, q = new URLSearchParams({ pid, name: w.name });
   if (w.code) q.set('code', w.code);
+  if (dev) q.set('dev', '1');
   const sock = (ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws?${q}`));
   sock.onopen = () => {
     clearInterval(beat);

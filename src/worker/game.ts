@@ -9,10 +9,12 @@ const JAIL = kindAt('jail');
 const JERU = tileAt('Jerusalem');
 const ASK_MS = 60_000; // how long a player has to decide before the default answer is taken
 const OFFLINE_MS = 8_000; // ... when they are not connected (long enough to reload the page)
+const BOT_MS = 300; // ... when it is a bot: a beat for the screen to follow, then the default answer
 
 export interface Host {
   emit(ev: Ev): void; // tell every client
   online(pi: number): boolean;
+  bot(pi: number): boolean; // a bot is not waited for: it takes the default answer after BOT_MS
   anyOnline(): boolean;
   save(): void; // the game waits: write down where it stands
 }
@@ -165,7 +167,7 @@ export class Game {
     pend.resolve(v);
   }
   private arm(pend: Pending) {
-    pend.due = this.host.anyOnline() ? Date.now() + (this.host.online(pend.to) ? ASK_MS : OFFLINE_MS) : 0; // nobody is watching: the game waits
+    pend.due = this.host.anyOnline() ? Date.now() + (this.host.bot(pend.to) ? BOT_MS : this.host.online(pend.to) ? ASK_MS : OFFLINE_MS) : 0; // nobody is watching: the game waits
   }
   answer(pi: number, id: number, v: unknown) {
     const pend = this.pending;

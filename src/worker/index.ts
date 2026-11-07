@@ -16,7 +16,7 @@ export default {
     if (code) return CODE_RE.test(code) ? env.ROOM.getByName(code).fetch(req) : new Response('Bad room code', { status: 400 });
     for (let k = 0; k < 8; k++) {
       const fresh = randomCode(), room = env.ROOM.getByName(fresh);
-      if (await room.create(fresh)) return room.fetch(req);
+      if (await room.create(fresh, url.searchParams.get('dev') === '1')) return room.fetch(req);
     }
     return new Response('No room available', { status: 503 });
   },
