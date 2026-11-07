@@ -1,4 +1,4 @@
-import { INVEST, LEVEL_NAMES, PUBLIC, REGIONS, SPECIAL, TILES, cityRent, maxLevel, type InvestKind, type PublicKind, type Tile } from '../../shared/data';
+import { INVEST, LEVEL_NAMES, PUBLIC, SPECIAL, TILES, cityRent, maxLevel, type InvestKind, type PublicKind, type Tile } from '../../shared/data';
 import { useGame } from '../store';
 import { Face, Pips, Rows, hex, money } from './bits';
 
@@ -10,6 +10,7 @@ const fxText = (t: Tile) => (t.type === 'special' ? SPECIAL[t.name] : t.type ===
 
 export function TileBody({ t, bare = false }: { t: Tile; bare?: boolean }) {
   const S = useGame(), o = S.own[t.i], p = o && S.players[o.p];
+  const mono = o && TILES.filter((x) => x.region === t.region && x.type === 'city').every((x) => S.own[x.i]?.p === o.p && !S.own[x.i].m); // as `Game.rent` counts it: one owner, none mortgaged
   return (
     <>
       {t.type === 'city' && (
@@ -19,7 +20,7 @@ export function TileBody({ t, bare = false }: { t: Tile; bare?: boolean }) {
             <tr><th>LEVEL</th><th>RENT</th></tr>
             {cityRent(t).map((v, i) => <tr key={i} className={o?.lv === i ? 'cur' : ''}><td>{LEVEL_NAMES[i]}</td><td>{money(v)}</td></tr>)}
           </tbody></table>
-          {!bare && <div className="note">Own every city in {REGIONS[t.region!][0]} for a <b className="gold">+50% rent</b> region monopoly.</div>}
+          {mono && <div className="note">Region monopoly achieved: <b className="gold">+50% rent</b>.</div>}
         </>
       )}
       {t.type === 'special' && (
