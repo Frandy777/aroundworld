@@ -1,7 +1,7 @@
 import { START_CASH, TILES, TILE_COUNT, cityRent, kindAt, maxLevel, tileAt, type Tile } from '../shared/data';
 import { B, P, T, m, money } from '../shared/msg';
 import { apply, maxRounds, ranking, stats } from '../shared/state';
-import type { Answer, Block, CasinoRoll, Cmd, Ev, GameState, Msg, Notice, OrderPass, Owned, PickItem, Prompt, Row, Settings, Tone } from '../shared/types';
+import type { Answer, Block, CasinoRoll, Cmd, Ev, GameState, Msg, Notice, OrderPass, Owned, PickItem, Prompt, Settings, Tone } from '../shared/types';
 import { NEWS } from './news';
 
 const N = TILE_COUNT;
@@ -450,12 +450,10 @@ export class Game {
     const owner = S.players[o.p];
     if (o.m) return this.toast(m`${T(i)} is mortgaged: no fee`);
     if (!this.collects(o.p)) return this.toast(`${owner.name} is in jail: no fee`);
-    const r = this.rent(pi, t, o);
-    if (!r.fee) return this.toast(m`${owner.name} owns ${T(i)} (passive effect, no toll)`);
-    this.notice({ title: 'PAY RENT', sub: [T(i)], tone: 0xb13e53, label: `PAY ${money(r.fee)}`, danger: true,
-      body: [{ k: 'owner', p: o.p, text: 'collects' }, { k: 'rows', rows: [...r.rows, { l: ['Total due'], v: [money(r.fee)], sum: true, tone: 'bad' }] }] });
-    this.log(m`${P(pi)} paid ${money(r.fee)} rent to ${P(o.p)}`);
-    await this.pay(pi, r.fee, o.p);
+    const fee = this.rent(pi, t, o);
+    if (!fee) return this.toast(m`${owner.name} owns ${T(i)} (passive effect, no toll)`);
+    this.log(m`${P(pi)} paid ${money(fee)} rent to ${P(o.p)}`);
+    await this.pay(pi, fee, o.p);
   }
 
   // The owner of a working Military Base may pay $500 to bring any built city (anybody's) down one level.
@@ -478,21 +476,18 @@ export class Game {
     return false;
   }
 
-  private rent(pi: number, t: Tile, o: Owned): { fee: number; rows: Row[] } {
-    const S = this.S, row = (l: string, v: string): Row => ({ l: [l], v: [v] });
+  private rent(pi: number, t: Tile, o: Owned): number {
+    const S = this.S;
     if (t.type === 'city') {
       const base = cityRent(t)[o.lv];
       const mono = TILES.filter((x) => x.region === t.region && x.type === 'city').every((x) => S.own[x.i]?.p === o.p && !S.own[x.i].m);
       const sg = this.spOf(o.p, 'Singapore'), py = this.spOf(pi, 'Pyongyang'); // the owner's bonus adds to the monopoly's; the payer's discount takes off the sum
       const up = (mono ? 0.5 : 0) + (sg ? [0.1, 0.2, 0.3][sg.lv] : 0), down = py ? [0.1, 0.2, 0.3][py.lv] : 0;
-      return { fee: Math.round(base * (1 + up) * (1 - down)), rows: [row('Base rent', money(base)),
-        ...(mono ? [row('Region monopoly', '+50%')] : []),
-        ...(sg ? [row('Singapore bonus', `+${[10, 20, 30][sg.lv]}%`)] : []),
-        ...(py ? [row('Pyongyang discount', `-${[10, 20, 30][py.lv]}%`)] : [])] };
+      return Math.round(base * (1 + up) * (1 - down));
     }
-    if (t.name === 'Las Vegas') { const tot = this.roll[0] + this.roll[1], k = [300, 500, 1000][o.lv]; return { fee: tot * k, rows: [row('Your dice total', String(tot)), row('Rate', money(k) + ' per pip')] }; }
-    if (t.kind === 'transport') { const n = this.count(o.p, 'transport'); return { fee: [500, 1000, 2000][n - 1], rows: [row('Owner holds', `${n} transport co.`)] }; }
-    return { fee: 0, rows: [] };
+    if (t.name === 'Las Vegas') return (this.roll[0] + this.roll[1]) * [300, 500, 1000][o.lv];
+    if (t.kind === 'transport') return [500, 1000, 2000][this.count(o.p, 'transport') - 1];
+    return 0;
   }
 
   async sendToJail(pi: number) {
