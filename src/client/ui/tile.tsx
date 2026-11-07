@@ -1,5 +1,5 @@
 import { INVEST, LEVEL_NAMES, PUBLIC, REGIONS, SPECIAL, TILES, cityRent, maxLevel, type InvestKind, type PublicKind, type Tile } from '../../shared/data';
-import { state } from '../store';
+import { useGame } from '../store';
 import { Face, Icon, Named, Pips, Rows, hex, inkOn, money } from './bits';
 
 const CASINO = {
@@ -14,7 +14,7 @@ export const tileHead = (t: Tile) => ({
 });
 
 export function TileBody({ t }: { t: Tile }) {
-  const S = state(), o = S.own[t.i], p = o && S.players[o.p];
+  const S = useGame(), o = S.own[t.i], p = o && S.players[o.p];
   return (
     <>
       {t.type === 'city' && (

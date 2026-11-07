@@ -6,7 +6,7 @@ import { POS, createBoard } from './render/board';
 import { BOARD_K, camera, controls, finishTweens, focus, overview, pick, render, renderer, resetView, rotateView, toScreen, updateCamera, updateTweens } from './render/scene';
 import { FLOAT, updateWorld } from './render/world';
 import { SEED, SEED_AT } from './seed';
-import { G, bump, tip } from './store';
+import { G, activeTab, hudLive, selectedTile, tip } from './store';
 import { drawMinimap, invalidateMinimap } from './ui/minimap';
 
 // The 3D side: the board, the tokens and the camera. The frame loop runs for the whole life of the page.
@@ -74,10 +74,9 @@ export const lookAtTile = (i: number) => { selectTile(i); lookAt(POS[i].x, POS[i
 export const lookAtMap = (x: number, z: number) => lookAt(x, z, Math.max(camera.zoom, 2));
 
 export function selectTile(i: number) {
-  G.sel = i;
-  G.tab = 'tile';
+  selectedTile.set(i);
+  activeTab.set('tile');
   board.select(i);
-  bump();
 }
 
 /** Where a token's floating numbers start, on screen. */
@@ -94,10 +93,10 @@ function bindCanvas() {
   const hover = (i: number, x = 0, y = 0) => { board.hover(i); cv.classList.toggle('hot', i >= 0); tip.set(i >= 0 ? { i, x, y } : null); };
   cv.addEventListener('pointerdown', (e) => (down = [e.clientX, e.clientY]));
   cv.addEventListener('pointerup', (e) => {
-    if (G.live && down && e.button === 0 && Math.hypot(e.clientX - down[0], e.clientY - down[1]) < 5) selectTile(pick(e.clientX, e.clientY, board.slabs));
+    if (hudLive.get() && down && e.button === 0 && Math.hypot(e.clientX - down[0], e.clientY - down[1]) < 5) selectTile(pick(e.clientX, e.clientY, board.slabs));
     down = null;
   });
-  cv.addEventListener('pointermove', (e) => { if (G.live && !e.buttons) moved = [e.clientX, e.clientY]; else { moved = null; hover(-1); } });
+  cv.addEventListener('pointermove', (e) => { if (hudLive.get() && !e.buttons) moved = [e.clientX, e.clientY]; else { moved = null; hover(-1); } });
   cv.addEventListener('pointerleave', () => { moved = null; hover(-1); });
   return () => {
     if (!moved) return;
@@ -122,11 +121,11 @@ export function initStage() {
     updateTweens(dt); updateWorld(t, dt); updateActors(t, dt); board.update(t, dt);
     if (cam.follow >= 0 && tokens[cam.follow]) { const p = tokens[cam.follow].g.position; focus(p.x, p.z); }
     updateCamera(dt);
-    if (G.live && G.S && minimap) {
+    if (hudLive.get() && G.S && minimap) {
       const el = Math.PI / 2 - controls.getPolarAngle();
       drawMinimap(minimap, G.S, tokens, { x: controls.target.x, z: controls.target.z, w: (camera.right - camera.left) / camera.zoom, h: (camera.top - camera.bottom) / camera.zoom / Math.sin(el) });
     }
-    board.labels(G.live);
+    board.labels(hudLive.get());
     render();
   });
 }

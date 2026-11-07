@@ -1,5 +1,6 @@
 import { useSyncExternalStore, type ReactNode } from 'react';
 import type { RoomInfo } from '../shared/protocol';
+import { stats } from '../shared/state';
 import type { GameState, Msg, Tone } from '../shared/types';
 
 // ---- Cells: one observable value, read in components with useCell ----
@@ -15,22 +16,32 @@ export type View = 'title' | 'lobby' | 'game';
 export const session = cell<{ view: View; room: RoomInfo | null }>({ view: 'title', room: null });
 
 // ---- Game: what is on screen. The director plays the server's events into `S`, so it trails the real game by whatever is still animating.
-// It is mutated in place; `bump` tells the components. ----
-export type Tab = 'tile' | 'assets' | 'log';
-export interface Button { label: string; click(): void; kbd?: boolean }
+// It is mutated in place; `bump` tells the components that show it. A component that shows the game reads it with `useGame`: `state()` does not
+// subscribe, so what reads it only changes when something else happens to render it. ----
 export const G = {
   S: null as GameState | null,
   me: -1, // my player index
-  live: false, // the HUD is up (the turn order is settled)
-  sel: -1, view: -1, tab: 'tile' as Tab, // the tile in the side panel, whose assets it shows, which pane
-  chip: null as [number, number] | null, // the last roll, in the action bar
-  btn: null as Button | null, // the one button in the action bar
-  waiting: -1, // the player the game is waiting for
 };
 const version = cell(0);
 export const bump = () => version.set(version.get() + 1);
-export const useGame = () => { useCell(version); return G; };
+export const useGame = () => { useCell(version); return G.S as GameState; };
 export const state = () => G.S as GameState;
+
+// A player's `stats`, kept until ownership or cash changes (`bumpAssets`): a card draws again every frame while its cash rolls
+let tallies: ReturnType<typeof stats>[] = [];
+export const statsOf = (i: number) => (tallies[i] ??= stats(state(), i));
+export const bumpAssets = () => { tallies = []; bump(); };
+
+// ---- The rest of the screen: a cell each, so a change wakes only the parts that show it, not everything that shows the game ----
+export type Tab = 'tile' | 'assets' | 'log';
+export interface Button { label: string; click(): void; kbd?: boolean }
+export const hudLive = cell(false); // the HUD is up (the turn order is settled)
+export const selectedTile = cell(-1); // the tile in the side panel
+export const viewedPlayer = cell(-1); // whose assets the side panel shows
+export const activeTab = cell<Tab>('tile'); // which pane
+export const lastRoll = cell<[number, number] | null>(null); // the last roll, in the action bar
+export const actionBtn = cell<Button | null>(null); // the one button in the action bar
+export const waitingFor = cell(-1); // the player the game is waiting for
 
 // ---- Toasts and floating numbers: they remove themselves ----
 export interface Toast { id: number; m: Msg; tone: Tone }

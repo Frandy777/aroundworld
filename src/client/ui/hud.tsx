@@ -1,10 +1,10 @@
 import { Fragment, useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
 import { LEVEL_NAMES, REGIONS, TILES, maxLevel } from '../../shared/data';
-import { maxRounds, stats } from '../../shared/state';
+import { maxRounds } from '../../shared/state';
 import type { Step } from '../../shared/types';
 import { leaveRoom } from '../controller';
 import { CAM, focusTok, lookAtMap, lookAtTile, setMinimap } from '../stage';
-import { G, bump, cards, floats, session, state, tip, toasts, useCell, useGame, type Tab } from '../store';
+import { G, actionBtn, activeTab, cards, floats, hudLive, lastRoll, selectedTile, session, state, statsOf, tip, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
 import { Die, Face, Flag, Icon, Named, Pips, Rich, hex, money } from './bits';
 import { openMenu, openRules } from './dialogs';
 import { minimapToWorld } from './minimap';
@@ -14,7 +14,7 @@ import { TileBody, tileHead } from './tile';
 const PH: Step[] = ['redeem', 'roll', 'move', 'resolve'];
 
 function Topbar() {
-  const S = state(), room = useCell(session).room, at = S.step ? PH.indexOf(S.step) : -1, last = maxRounds(S);
+  const S = useGame(), room = useCell(session).room, at = S.step ? PH.indexOf(S.step) : -1, last = maxRounds(S);
   return (
     <header id="topbar" className="box">
       <div id="round">ROUND <b>{S.round}</b> {last === Infinity ? <>&middot; ENDLESS</> : `/ ${last}`}</div>
@@ -47,11 +47,11 @@ function useRoll(cash: number) {
 }
 
 function PCard({ i, on, viewing }: { i: number; on: boolean; viewing: boolean }) {
-  const S = state(), p = S.players[i], s = stats(S, i), v = useRoll(p.cash), room = useCell(session).room;
+  const S = useGame(), p = S.players[i], s = statsOf(i), v = useRoll(p.cash), room = useCell(session).room;
   const offline = room?.seats.find((x) => x.pi === i)?.online === false;
   return (
     <div className={`pcard box ${on ? 'on' : ''} ${viewing ? 'viewing' : ''} ${p.out ? 'out' : ''} ${v < p.cash ? 'gain' : v > p.cash ? 'loss' : ''}`} data-i={i}
-      onClick={() => { G.view = i; G.tab = 'assets'; bump(); focusTok(i, 2.5); }}>
+      onClick={() => { viewedPlayer.set(i); activeTab.set('assets'); focusTok(i, 2.5); }}>
       <Face color={p.color} />
       <div className="nm">
         <span style={{ color: hex(p.color) }}>{p.name}</span>
@@ -74,13 +74,13 @@ function PCard({ i, on, viewing }: { i: number; on: boolean; viewing: boolean })
 }
 
 function Players() {
-  const g = useGame(), S = state(), act = S.order[S.turn];
-  return <aside id="players">{S.order.map((i) => <PCard key={i} i={i} on={i === act} viewing={g.tab === 'assets' && g.view === i} />)}</aside>;
+  const S = useGame(), act = S.order[S.turn], tab = useCell(activeTab), view = useCell(viewedPlayer);
+  return <aside id="players">{S.order.map((i) => <PCard key={i} i={i} on={i === act} viewing={tab === 'assets' && view === i} />)}</aside>;
 }
 
 // ---- Side panel ----
 function TilePane() {
-  const sel = G.sel;
+  const sel = useCell(selectedTile);
   if (sel < 0) return <div className="empty">Click any tile to inspect it.<br />Hover for a quick look.</div>;
   const t = TILES[sel], hd = tileHead(t);
   return (
@@ -92,7 +92,7 @@ function TilePane() {
 }
 
 function Assets() {
-  const S = state(), pi = G.view, p = S.players[pi], st = stats(S, pi);
+  const S = useGame(), pi = useCell(viewedPlayer), p = S.players[pi], st = statsOf(pi);
   const mine = Object.entries(S.own).filter(([, o]) => o.p === pi).map(([k, o]) => [TILES[+k], o] as const);
   const keys = [...new Set(mine.map(([t]) => t.region || 'inv'))];
   return (
@@ -116,26 +116,26 @@ function Assets() {
   );
 }
 
-const Log = () => <>{state().log.map((l, k) => <div className="logline" key={k}><i>R{l.r}</i><Rich m={l.m} /></div>)}</>;
+const Log = () => <>{useGame().log.map((l, k) => <div className="logline" key={k}><i>R{l.r}</i><Rich m={l.m} /></div>)}</>;
 
 const TABS: [Tab, () => JSX.Element][] = [['tile', TilePane], ['assets', Assets], ['log', Log]];
 function Side() {
-  const g = useGame();
+  const tab = useCell(activeTab);
   return (
     <aside id="side" className="box">
-      <nav className="tabs">{TABS.map(([t]) => <button key={t} data-tab={t} className={g.tab === t ? 'on' : ''} onClick={() => { g.tab = t; bump(); }}>{t.toUpperCase()}</button>)}</nav>
-      {TABS.map(([t, Pane]) => <div key={t} id={`pane-${t}`} className="pane" hidden={g.tab !== t}>{g.tab === t && <Pane />}</div>)}
+      <nav className="tabs">{TABS.map(([t]) => <button key={t} data-tab={t} className={tab === t ? 'on' : ''} onClick={() => activeTab.set(t)}>{t.toUpperCase()}</button>)}</nav>
+      {TABS.map(([t, Pane]) => <div key={t} id={`pane-${t}`} className="pane" hidden={tab !== t}>{tab === t && <Pane />}</div>)}
     </aside>
   );
 }
 
 // ---- Action bar: the last roll, the one button there is to press, or who the game is waiting for ----
 function Actions() {
-  const g = useGame(), S = state(), who = g.waiting >= 0 ? S.players[g.waiting] : null;
+  const chip = useCell(lastRoll), btn = useCell(actionBtn), waiting = useCell(waitingFor), who = waiting >= 0 ? state().players[waiting] : null;
   return (
     <footer id="actions">
-      {g.chip && <div className="dice-chip box"><Die v={g.chip[0]} /><Die v={g.chip[1]} /><span>= {g.chip[0] + g.chip[1]}</span></div>}
-      {g.btn && <button className="btn big primary" onClick={g.btn.click}>{g.btn.label}{g.btn.kbd && <> <kbd>SPACE</kbd></>}</button>}
+      {chip && <div className="dice-chip box"><Die v={chip[0]} /><Die v={chip[1]} /><span>= {chip[0] + chip[1]}</span></div>}
+      {btn && <button className="btn big primary" onClick={btn.click}>{btn.label}{btn.kbd && <> <kbd>SPACE</kbd></>}</button>}
       {who && <div className="dice-chip box">WAITING FOR <b style={{ color: hex(who.color) }}>{who.name}</b></div>}
     </footer>
   );
@@ -145,8 +145,7 @@ function Actions() {
 const CAMS = [['rotl', 'left', 'Rotate view left'], ['rotr', 'right', 'Rotate view right'], ['in', 'plus', 'Zoom in'], ['out', 'minus', 'Zoom out'], ['follow', 'focus', 'Focus on current player'], ['map', 'globe', 'Whole board']] as const;
 
 export function Hud() {
-  const g = useGame();
-  if (!g.live || !g.S) return null;
+  if (!useCell(hudLive)) return null; // only whether it is up: each part below subscribes to what it shows
   return (
     <div id="hud">
       <Topbar />

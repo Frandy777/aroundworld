@@ -6,7 +6,7 @@ import { clearDice, hideDice, hop, jump, placeAt, removeToken, rollDice, setActi
 import { home } from './render/board';
 import { finishTweens, wait } from './render/scene';
 import { enterGame, focusTok, selectTile, setOwner, showState, tokenSpot } from './stage';
-import { G, bump, clearCards, floatText, floats, session, tip, toast, toasts, type Button, type Open } from './store';
+import { G, actionBtn, activeTab, bump, bumpAssets, clearCards, floatText, floats, hudLive, lastRoll, selectedTile, session, tip, toast, toasts, viewedPlayer, waitingFor, type Button, type Open } from './store';
 import { dropCasinoAsk, forgetCasino, openAsk, openNews, openNewsFor, openNotice, openOrder, openResults, showCasino, closeCasino } from './ui/dialogs';
 import { money } from './ui/bits';
 
@@ -34,8 +34,7 @@ export function reset() {
   toasts.set([]); floats.set([]); tip.set(null);
   finishTweens();
   clearDice();
-  Object.assign(G, { btn: null, waiting: -1, chip: null });
-  bump();
+  actionBtn.set(null); waitingFor.set(-1); lastRoll.set(null);
 }
 
 export function push(evs: Ev[]) {
@@ -56,14 +55,15 @@ async function pump() {
 /** The screen as a snapshot says the game is now (joining a running game, or coming back to it). */
 export function restore(m: { me: number; state: GameState; ask: Ev | null }) {
   reset();
-  Object.assign(G, { S: m.state, me: m.me, view: m.me, sel: -1, tab: 'tile', live: true });
+  Object.assign(G, { S: m.state, me: m.me });
+  viewedPlayer.set(m.me); selectedTile.set(-1); activeTab.set('tile'); hudLive.set(true);
   session.set({ ...session.get(), view: 'game' });
   showState(m.state);
   enterGame();
   focusTok(m.state.order[m.state.turn]);
   if (m.ask) queue.push(m.ask);
   if (m.state.over) queue.push({ t: 'over', rank: ranking(m.state) });
-  bump();
+  bumpAssets();
   void pump();
 }
 
@@ -83,11 +83,10 @@ async function beat(who: number) {
   if (who !== G.me) return pause(1.5);
   const e = epoch;
   await new Promise<void>((res) => {
-    const end = () => { clearTimeout(timer); if (e === epoch && G.btn === btn) { G.btn = null; bump(); } res(); };
+    const end = () => { clearTimeout(timer); if (e === epoch && actionBtn.get() === btn) actionBtn.set(null); res(); };
     const btn: Button = { label: 'END TURN', kbd: true, click: end };
     const timer = setTimeout(end, 1500);
-    G.btn = btn;
-    bump();
+    actionBtn.set(btn);
   });
 }
 
@@ -95,12 +94,12 @@ const mine = () => { const r = session.get().room; return r?.seats.find((s) => s
 
 async function play(ev: Ev) {
   if (ev.t === 'start') {
-    Object.assign(G, { S: ev.state, me: mine(), live: false, sel: -1, tab: 'tile', chip: null });
-    G.view = G.me;
+    Object.assign(G, { S: ev.state, me: mine() });
+    viewedPlayer.set(G.me); selectedTile.set(-1); activeTab.set('tile'); lastRoll.set(null); hudLive.set(false);
     session.set({ ...session.get(), view: 'game' });
     showState(ev.state);
     enterGame();
-    bump();
+    bumpAssets();
     return;
   }
   const S = G.S;
@@ -110,13 +109,13 @@ async function play(ev: Ev) {
     case 'order':
       if (!quiet()) await live(openOrder(S.players, ev.passes, ev.order));
       apply(S, ev);
-      G.live = true;
+      hudLive.set(true);
       bump();
       return;
     case 'turn': {
       if (S.step === 'resolve' && !S.over && !S.players[cur].out) await beat(cur); // a turn that was played to its end
       apply(S, ev);
-      Object.assign(G, { chip: null, btn: null, waiting: -1 });
+      lastRoll.set(null); actionBtn.set(null); waitingFor.set(-1);
       setActive(S.order[S.turn]);
       focusTok(S.order[S.turn]);
       bump();
@@ -127,8 +126,7 @@ async function play(ev: Ev) {
     case 'dice': {
       const tok = tokens[cur];
       if (tok) await live(rollDice(home(tok.tile), [ev.a, ev.b]));
-      G.chip = [ev.a, ev.b];
-      bump();
+      lastRoll.set([ev.a, ev.b]);
       await pause(0.7);
       await live(hideDice());
       return;
@@ -148,10 +146,10 @@ async function play(ev: Ev) {
         if (at) floatText(at[0], at[1], text, tone);
         floatCard(ev.pi, text, tone);
       }
-      bump();
+      bumpAssets();
       return;
     }
-    case 'own': apply(S, ev); setOwner(ev.i, ev.o, S); bump(); return;
+    case 'own': apply(S, ev); setOwner(ev.i, ev.o, S); bumpAssets(); return;
     case 'flag': {
       apply(S, ev);
       const tok = tokens[ev.pi];
@@ -162,7 +160,7 @@ async function play(ev: Ev) {
     case 'out': {
       apply(S, ev);
       if (tokens[ev.pi]) void removeToken(tokens[ev.pi]);
-      bump();
+      bumpAssets();
       return;
     }
     case 'toast': if (!quiet()) toast(ev.m, ev.tone); return;
@@ -189,14 +187,12 @@ async function ask(id: number, to: number, p: Prompt) {
   const over = new Promise<void>((res) => hold(id, res));
   let card: Open<void> | null = null, btn: Button | null = null;
   if (p.k === 'casino') void showCasino(p.view, { id, mine: me });
-  else if (p.k === 'roll') { if (me) G.btn = btn = { label: 'ROLL DICE', kbd: true, click: () => reply(id, true) }; }
+  else if (p.k === 'roll') { if (me) actionBtn.set((btn = { label: 'ROLL DICE', kbd: true, click: () => reply(id, true) })); }
   else card = me ? openAsk(id, p) : p.k === 'news' ? openNewsFor(p.card) : null;
-  G.waiting = me ? -1 : to;
-  bump();
+  waitingFor.set(me ? -1 : to);
   await live(over);
   card?.close();
   if (p.k === 'casino') dropCasinoAsk(id);
-  if (btn && G.btn === btn) G.btn = null;
-  G.waiting = -1;
-  bump();
+  if (btn && actionBtn.get() === btn) actionBtn.set(null);
+  waitingFor.set(-1);
 }

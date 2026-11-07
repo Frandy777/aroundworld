@@ -1,7 +1,7 @@
 import * as director from './director';
 import * as net from './net';
 import { enterDemo } from './stage';
-import { G, bump, clearCards, session } from './store';
+import { G, clearCards, hudLive, selectedTile, session } from './store';
 import { openAlert } from './ui/dialogs';
 
 // Where this tab is: the title, a room's lobby, or a game. The room it is in survives a reload (the same seat comes back).
@@ -10,11 +10,12 @@ const KEY = 'room';
 /** Back to the title's board. */
 function toTitle() {
   director.reset();
-  Object.assign(G, { S: null, live: false, sel: -1 });
+  G.S = null;
+  hudLive.set(false);
+  selectedTile.set(-1);
   clearCards();
   enterDemo();
   session.set({ view: 'title', room: null });
-  bump();
 }
 
 /** Create a room (no code) or join one. Resolves null once in, else why not. */
@@ -33,7 +34,7 @@ export function boot() {
       sessionStorage.setItem(KEY, r.code);
       const { view } = session.get();
       if (r.started) return session.set({ view, room: r }); // the game's own messages move the view on
-      if (view === 'game') { director.reset(); Object.assign(G, { S: null, live: false }); clearCards(); enterDemo(); bump(); } // the game is over: everyone back to the lobby
+      if (view === 'game') { director.reset(); G.S = null; hudLive.set(false); clearCards(); enterDemo(); } // the game is over: everyone back to the lobby
       session.set({ view: 'lobby', room: r });
     },
     game: director.restore,
