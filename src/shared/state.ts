@@ -14,7 +14,7 @@ export function apply(s: GameState, e: Ev) {
     case 'own': if (e.o) s.own[e.i] = e.o; else delete s.own[e.i]; break;
     case 'flag': s.players[e.pi][e.k] = e.v; break;
     case 'out': { const p = s.players[e.pi]; p.out = s.round; p.cash = 0; s.bankrupt.push(e.pi); break; }
-    case 'log': s.log.unshift({ r: s.round, m: e.m }); if (s.log.length > LOG_MAX) s.log.length = LOG_MAX; break;
+    case 'log': s.log.unshift({ id: (s.log[0]?.id ?? 0) + 1, r: s.round, m: e.m }); if (s.log.length > LOG_MAX) s.log.length = LOG_MAX; break; // trimming drops the oldest, so the head always holds the highest id
     case 'over': s.over = true; break;
   }
 }

@@ -14,7 +14,7 @@ export type Flag = 'jail' | 'party' | 'stay'; // each makes the player skip thei
 
 export interface Player { name: string; color: number; cash: number; tile: number; jail: boolean; party: boolean; stay: boolean; out: number } // out: the round of bankruptcy, 0 while playing
 export interface Owned { p: number; lv: number; m: boolean } // owner, building level, mortgaged
-export interface LogLine { r: number; m: Msg }
+export interface LogLine { id: number; r: number; m: Msg } // id: counts up from 1, so a line keeps its React key as newer ones are added above it
 export interface GameState {
   settings: Settings;
   players: Player[];

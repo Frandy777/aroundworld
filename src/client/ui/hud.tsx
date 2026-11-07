@@ -116,7 +116,7 @@ function Assets() {
   );
 }
 
-const Log = () => <>{useGame().log.map((l, k) => <div className="logline" key={k}><i>R{l.r}</i><Rich m={l.m} /></div>)}</>;
+const Log = () => <>{useGame().log.map((l) => <div className="logline" key={l.id}><i>R{l.r}</i><Rich m={l.m} /></div>)}</>;
 
 const TABS: [Tab, () => JSX.Element][] = [['tile', TilePane], ['assets', Assets], ['log', Log]];
 function Side() {
