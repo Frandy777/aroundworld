@@ -52,8 +52,13 @@ export class Room extends DurableObject<Env> implements Host {
       this.stored = json;
       Object.assign(this, room);
       if (game) {
-        const g = (this.game = new Game(this, game.ckpt));
-        await g.resume(game);
+        let g = (this.game = new Game(this, game.ckpt));
+        try { await g.resume(game); } catch (err) { // the code plays the turn differently than it was played (game.ts was edited under it): the room is not lost for that, the turn starts over from its checkpoint
+          console.warn('replay failed, the turn starts over', err);
+          g = this.game = new Game(this, game.ckpt);
+          this.seats.forEach((s) => this.snapshot(s)); // whoever is still connected saw the turn go on: back to where it began (the events of the new run follow)
+          g.run(true).catch((e) => console.error('game crashed', e));
+        }
         for (const s of this.seats) if (s.left) g.forfeit(s.pi);
       }
       if (!this.anyOnline()) this.presence(); // the connections are gone (a restart cuts them): nobody can be waited for
@@ -148,6 +153,8 @@ export class Room extends DurableObject<Env> implements Host {
     };
   }
   private broadcastRoom() { this.seats.forEach((s) => this.send(s, { t: 'room', room: this.info(s) })); }
+  /** Where the game stands, for a client with nothing to go by: one that joined or came back, or one whose turn has just started over (see `restore`). */
+  private snapshot(s: Seat) { if (this.game) this.send(s, { t: 'game', me: s.pi, state: this.game.S, ask: this.game.pendingEv }); }
   private fail(ws: WebSocket, why: Fail) {
     ws.send(JSON.stringify({ t: 'fail', why } satisfies S2C));
     ws.close(1000, why);
@@ -168,7 +175,7 @@ export class Room extends DurableObject<Env> implements Host {
     }
     this.flush(); // what the others have been told is what the snapshot below contains
     this.presence();
-    if (this.game) this.send(s, { t: 'game', me: s.pi, state: this.game.S, ask: this.game.pendingEv });
+    this.snapshot(s);
   }
 
   private onClose(ws: WebSocket, code: number) {
