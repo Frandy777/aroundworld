@@ -230,7 +230,8 @@ const HATS = [
   ['....oo....oo....', '...oNNo..oNNo...', '...oNNNooNNmo...', '....oNNmmNmo....', '..ooommmmmmooo..', '.ohjjhhhhhhhhho.', '.ohhhhhhhhhhhho.'], // sprout
   ['.......oo.......', '..oo..oYYo..oo..', '..oYo.oYYo.oYo..', '..oYYooYYooYYo..', '..oyYYYYYYYYgo..', '.oggggRRggggggo.', '.oGGGGGGGGGGGGo.'], // crown
 ];
-const hex = (n: number) => '#' + n.toString(16).padStart(6, '0');
+export const hex = (n: number) => '#' + n.toString(16).padStart(6, '0');
+export const lum = (c: number) => (((c >> 16) & 255) * 0.299 + ((c >> 8) & 255) * 0.587 + (c & 255) * 0.114) / 255;
 export const shade = (c: number, k: number, t = 0) => hex([16, 8, 0].reduce((a, s) => a | (Math.min(255, Math.round(((c >> s) & 255) * k + t)) << s), 0));
 export const faceRows = (idx: number) => [...HATS[idx], ...BUST];
 const HAIR = [0x3a2e48, 0xe8c066, 0x7a4a2a, 0xb4502a]; // black, blond, brown, auburn

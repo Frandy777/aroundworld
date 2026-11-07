@@ -1,4 +1,4 @@
-import { PAL, shade, ink, inkWidth } from './art';
+import { PAL, hex, ink, inkWidth, lum, shade } from './art';
 import type { Tile } from '../../shared/data';
 
 type Ctx = CanvasRenderingContext2D;
@@ -40,9 +40,7 @@ const CODE: Record<string, string> = {
 };
 const ACCENT: Record<string, number> = { transport: 0x4da3ff, build: 0xf0a020, military: 0x6a8a4a, choke: 0xe0524e, oil: 0x4a4f6e, bbc: 0xd9423e, devil: 0x2fa84f }; // investment band colour per kind
 const GOLD = ['#fff6b0', '#ffd23f', '#b36a14'];
-const lum = (c: number) => (((c >> 16) & 255) * 0.299 + ((c >> 8) & 255) * 0.587 + (c & 255) * 0.114) / 255;
 const tone = (t: Tile): [number, boolean] => { const col = t.type === 'invest' ? ACCENT[t.kind] : t.color; return [col, t.type !== 'public' && lum(col) > 0.55]; }; // a card's band colour, and whether it takes dark ink (light bands) or white (dark ones)
-const hexOf = (c: number) => '#' + c.toString(16).padStart(6, '0');
 const filler = (g: Ctx) => (c: string, x: number, y: number, w: number, h: number) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
 const edge = (fill: Fill, w: number, h: number, bevel = true, ring = PAL.o) => { // bevel + ink edge
   if (bevel) {
@@ -91,7 +89,7 @@ function nameLines(t: Tile, maxw: number, room: number): [number, string[]] {
 export function drawCard(g: Ctx, t: Tile, L: number) {
   const [W, H] = CARD_SIZE[L], fill = filler(g);
   const pub = t.type === 'public', sp = t.type === 'special', col = tone(t)[0];
-  const [hi, base, lo] = [shade(col, 1.3, 14), hexOf(col), shade(col, 0.62)];
+  const [hi, base, lo] = [shade(col, 1.3, 14), hex(col), shade(col, 0.62)];
 
   // name band over the whole card (near: 3-tone banding + dither, like a 16-bit title bar)
   fill(pub ? shade(col, 0.72) : base, 0, 0, W, H);
@@ -171,7 +169,7 @@ export function drawCode(g: Ctx, t: Tile, x: number, y: number, ph: number, pw: 
 export function drawPad(g: Ctx, color: number, w: number, h: number, L: number) {
   const fill = filler(g), lit = shade(color, 1.35, 30), m = Math.max(1, Math.round(3 / 2 ** (2 - L)));
   fill(shade(color, 0.7), 0, 0, w, h);
-  fill(hexOf(color), m, m, w - 2 * m, h - 2 * m);
+  fill(hex(color), m, m, w - 2 * m, h - 2 * m);
   fill(lit, m, m, w - 2 * m, 1); fill(lit, m, m, 1, h - 2 * m);
   if (L === 2) for (let y = 5; y < h - 5; y++) for (let x = 5 + (y & 1); x < w - 5; x += 2) fill('rgba(255,255,255,.08)', x, y, 1, 1);
   edge(fill, w, h, L > 0);
@@ -183,7 +181,7 @@ export function drawPad(g: Ctx, color: number, w: number, h: number, L: number) 
 // W x H is the canvas (a tile's ground is square; START's is two cells wide).
 export function drawGround(g: Ctx, type: string, kind: string, color: number, L: number, W = 32 << L, H = W) {
   const G = 32 << L, fill = filler(g), s = (n: number, min = 1) => Math.max(min, Math.round((n * G) / 128));
-  if (type === 'public') { const m = s(4); fill(hexOf(color), 0, 0, W, H); FLOOR[kind]?.(fill, color, m, m, W - 2 * m, H - 2 * m, s); }
+  if (type === 'public') { const m = s(4); fill(hex(color), 0, 0, W, H); FLOOR[kind]?.(fill, color, m, m, W - 2 * m, H - 2 * m, s); }
   else if (type === 'invest') { fill('#c3cbe0', 0, 0, G, G); for (let i = -G; i < G; i += s(12, 3)) for (let j = 0; j < G; j++) fill('#b3bdd6', i + j, j, s(4), 1); }
   else {
     const tint = (t: number) => shade(color, 0.38, t), S = G / 4, joint = tint(112);

@@ -1,6 +1,6 @@
 import { START_CASH, TILES, TILE_COUNT, cityRent, kindAt, maxLevel, tileAt, type Tile } from '../shared/data';
 import { B, P, T, m, money } from '../shared/msg';
-import { apply, maxRounds, ranking, stats } from '../shared/state';
+import { apply, canPick, hasMonopoly, maxRounds, ranking, stats } from '../shared/state';
 import type { Answer, Block, CasinoRoll, Cmd, Ev, GameState, Msg, Notice, OrderPass, Owned, PickItem, Prompt, Settings, Tone } from '../shared/types';
 import { NEWS } from './news';
 
@@ -70,8 +70,7 @@ function check(p: Prompt, v: unknown): Answer | undefined {
       const by = new Map(p.items.map((x) => [x.i, x.amt ?? 0]));
       if (!v.every((i) => by.has(i))) return undefined;
       const sum = v.reduce((s: number, i: number) => s + (by.get(i) ?? 0), 0), r = p.rule;
-      const ok = r.k === 'one' ? v.length === 1 : r.k === 'any' ? v.length > 0 : r.k === 'redeem' ? v.length > 0 && sum <= r.cash : r.cash + sum >= r.need;
-      return ok ? (v as number[]) : undefined;
+      return canPick(r, v.length, sum) ? (v as number[]) : undefined;
     }
     case 'casino': {
       const a = v as { act?: unknown; bet?: unknown } | null;
@@ -480,7 +479,7 @@ export class Game {
     const S = this.S;
     if (t.type === 'city') {
       const base = cityRent(t)[o.lv];
-      const mono = TILES.filter((x) => x.region === t.region && x.type === 'city').every((x) => S.own[x.i]?.p === o.p && !S.own[x.i].m);
+      const mono = hasMonopoly(S, t);
       const sg = this.spOf(o.p, 'Singapore'), py = this.spOf(pi, 'Pyongyang'); // the owner's bonus adds to the monopoly's; the payer's discount takes off the sum
       const up = (mono ? 0.5 : 0) + (sg ? [0.1, 0.2, 0.3][sg.lv] : 0), down = py ? [0.1, 0.2, 0.3][py.lv] : 0;
       return Math.round(base * (1 + up) * (1 - down));

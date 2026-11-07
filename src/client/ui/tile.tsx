@@ -1,4 +1,5 @@
 import { INVEST, LEVEL_NAMES, PUBLIC, SPECIAL, TILES, cityRent, maxLevel, type InvestKind, type PublicKind, type Tile } from '../../shared/data';
+import { hasMonopoly } from '../../shared/state';
 import { useGame } from '../store';
 import { Face, Pips, Rows, hex, money } from './bits';
 
@@ -10,7 +11,7 @@ const fxText = (t: Tile) => (t.type === 'special' ? SPECIAL[t.name] : t.type ===
 
 export function TileBody({ t, bare = false }: { t: Tile; bare?: boolean }) {
   const S = useGame(), o = S.own[t.i], p = o && S.players[o.p];
-  const mono = o && TILES.filter((x) => x.region === t.region && x.type === 'city').every((x) => S.own[x.i]?.p === o.p && !S.own[x.i].m); // as `Game.rent` counts it: one owner, none mortgaged
+  const mono = hasMonopoly(S, t);
   return (
     <>
       {t.type === 'city' && (

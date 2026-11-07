@@ -1,5 +1,5 @@
-import { TILES } from './data';
-import type { Ev, GameState, RankRow } from './types';
+import { TILES, type Tile } from './data';
+import type { Ev, GameState, PickRule, RankRow } from './types';
 
 const LOG_MAX = 80;
 
@@ -38,3 +38,14 @@ export function ranking(S: GameState): RankRow[] {
 }
 
 export const maxRounds = (S: GameState) => (S.settings.mode === 'limited' ? S.settings.rounds : Infinity);
+
+export function canPick(rule: PickRule, count: number, sum: number): boolean {
+  return rule.k === 'one' ? count === 1 : rule.k === 'any' ? count > 0 : rule.k === 'redeem' ? count > 0 && sum <= rule.cash : rule.cash + sum >= rule.need;
+}
+
+// As `Game.rent` counts it: every city tile of the region in one player's hands and none mortgaged. False for an unowned tile.
+export function hasMonopoly(S: GameState, tile: Tile): boolean {
+  const o = S.own[tile.i];
+  if (!o) return false;
+  return TILES.filter((x) => x.region === tile.region && x.type === 'city').every((x) => S.own[x.i]?.p === o.p && !S.own[x.i].m);
+}

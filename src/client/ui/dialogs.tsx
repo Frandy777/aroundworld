@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { START_CASH, TILES, type Tile } from '../../shared/data';
 import { READ } from '../../shared/protocol';
+import { canPick } from '../../shared/state';
 import type { CasinoView, NewsCard as News, Notice, OrderPass, Player, Prompt, RankRow } from '../../shared/types';
 import { reply } from '../asks';
 import { pace } from '../render/scene';
@@ -112,7 +113,7 @@ export function PickCard({ id, p }: { id: number; p: Of<'pick'> }) {
   const S = state(), r = p.rule;
   const [sel, setSel] = useState<number[]>([]);
   const sum = sel.reduce((s, i) => s + (p.items.find((x) => x.i === i)?.amt ?? 0), 0);
-  const ok = r.k === 'one' ? sel.length === 1 : r.k === 'any' ? sel.length > 0 : r.k === 'redeem' ? sel.length > 0 && sum <= r.cash : r.cash + sum >= r.need;
+  const ok = canPick(r, sel.length, sum);
   const msg = r.k === 'one' ? r.msg : r.k === 'any' ? 'You receive' : r.k === 'redeem' ? `Cash ${money(r.cash)}. Cost` : `Cash ${money(r.cash)}. Need ${money(r.need)}`;
   const toggle = (i: number) => setSel(sel.includes(i) ? sel.filter((x) => x !== i) : r.k === 'one' ? [i] : [...sel, i]);
   const priced = p.items.some((x) => x.amt !== undefined);

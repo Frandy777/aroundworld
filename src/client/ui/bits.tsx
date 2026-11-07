@@ -2,13 +2,12 @@ import { Fragment, useMemo, type ReactNode } from 'react';
 import { COUNTRY, INVEST, PLAYER_DEFS, REGIONS, TILES, type InvestKind, type Tile } from '../../shared/data';
 import { money } from '../../shared/msg';
 import type { Block, Msg, Row } from '../../shared/types';
-import { ICONS, PAL, dieRows, faceRows, facePal, svgParts, type Pal } from '../render/art';
+import { ICONS, PAL, dieRows, faceRows, facePal, hex, lum, svgParts, type Pal } from '../render/art';
 import { FLAG_PAL, flagRows } from '../render/flags';
 import { state } from '../store';
 
 export { money };
-export const hex = (n: number) => '#' + n.toString(16).padStart(6, '0');
-const lum = (c: number) => (((c >> 16) & 255) * 0.299 + ((c >> 8) & 255) * 0.587 + (c & 255) * 0.114) / 255;
+export { hex };
 export const inkOn = (c: number) => (lum(c) > 0.5 ? '#1a1c2c' : '#fff');
 
 // ---- 16x16 sprites (see art.ts) ----

@@ -1,12 +1,11 @@
 import { TILES } from '../../shared/data';
 import type { GameState } from '../../shared/types';
-import { PAL, shade } from '../render/art';
+import { PAL, hex, shade } from '../render/art';
 import { POS } from '../render/layout';
 import type { Token } from '../render/actors';
 
 // Shaded tile chips, outlined tokens and the view frame (the dithered sea is the canvas' CSS background). One canvas pixel = one art pixel = 2px.
 // The chips change only with an owner: they are drawn once on `base` (again after `invalidateMinimap`), and a frame copies it and puts the tokens and the view frame on top.
-const hex = (n: number) => '#' + n.toString(16).padStart(6, '0');
 const px = (g: CanvasRenderingContext2D, c: string, x: number, y: number, w: number, h: number) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
 const chip = (g: CanvasRenderingContext2D, x: number, y: number, c: number, w = 3) => { px(g, shade(c, 0.55), x, y, w, 3); px(g, hex(c), x, y, w - 1, 2); }; // w x 3: body lit from the top-left, shade on the far edges
 
