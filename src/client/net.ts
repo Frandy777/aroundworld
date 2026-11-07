@@ -15,10 +15,11 @@ export interface Handlers {
 let on: Handlers;
 export const listen = (h: Handlers) => (on = h);
 
-const TRIES = 6;
+const TRIES = 6, PING = 20_000, PONG = 10_000; // a ping goes out every PING ms; if nothing at all comes back within PONG ms of it, the link is dead
 let ws: WebSocket | null = null;
 let want: { code: string; name: string } | null = null; // the room to be in; null once left
 let joined = false, tries = 0, retry: ReturnType<typeof setTimeout> | undefined, beat: ReturnType<typeof setInterval> | undefined;
+let dead: ReturnType<typeof setTimeout> | undefined; // armed by every ping, disarmed by whatever the server says
 let first: ((err: string | null) => void) | null = null;
 
 export function send(msg: C2S) { if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); }
@@ -35,6 +36,7 @@ export function leave() {
   want = null;
   clearTimeout(retry);
   clearInterval(beat);
+  clearTimeout(dead);
   settle('Cancelled');
   const w = ws;
   ws = null;
@@ -53,24 +55,37 @@ function connect() {
   const w = want!, q = new URLSearchParams({ pid, name: w.name });
   if (w.code) q.set('code', w.code);
   const sock = (ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws?${q}`));
-  sock.onopen = () => { clearInterval(beat); beat = setInterval(() => send({ t: 'ping' }), 20_000); };
+  sock.onopen = () => {
+    clearInterval(beat);
+    beat = setInterval(() => {
+      send({ t: 'ping' });
+      clearTimeout(dead);
+      dead = setTimeout(() => lost(sock, 1006), PONG);
+    }, PING);
+  };
   sock.onmessage = (e) => {
     if (ws !== sock) return;
+    clearTimeout(dead); // anything the server says shows the link is alive (a ping is answered with an empty batch of events)
     const m = JSON.parse(e.data) as S2C;
     if (m.t === 'room') { w.code = m.room.code; joined = true; tries = 0; settle(null); on.room(m.room); }
     else if (m.t === 'game') on.game(m);
     else if (m.t === 'ev') on.ev(m.ev);
     else { want = null; settle(FAIL[m.why]); } // 'fail': the server closes the socket after it
   };
-  sock.onclose = (e) => {
-    if (ws !== sock) return; // we left, or a newer socket took over
-    ws = null;
-    clearInterval(beat);
-    if (!want) return;
-    if (e.code === REPLACED) return end('You joined this room from another tab');
-    if (e.code === 1000) return end('The room was closed');
-    if (!joined) return end('Cannot reach the server');
-    if (tries >= TRIES) return end('Connection lost');
-    retry = setTimeout(connect, 500 * 2 ** tries++); // the same seat comes back with the same id
-  };
+  sock.onclose = (e) => lost(sock, e.code);
+}
+
+/** The socket is over: it closed, or it went silent. A dead link may not be reported for minutes, and closing it takes tens of seconds to complete (the other end never answers): so it is let go here, not in `onclose`. */
+function lost(sock: WebSocket, code: number) {
+  if (ws !== sock) return; // we left, or a newer socket took over
+  ws = null;
+  sock.close(); // does nothing if it is closed already
+  clearInterval(beat);
+  clearTimeout(dead);
+  if (!want) return;
+  if (code === REPLACED) return end('You joined this room from another tab');
+  if (code === 1000) return end('The room was closed');
+  if (!joined) return end('Cannot reach the server');
+  if (tries >= TRIES) return end('Connection lost');
+  retry = setTimeout(connect, 500 * 2 ** tries++); // the same seat comes back with the same id
 }
