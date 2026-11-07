@@ -1,7 +1,7 @@
 import { START_CASH, TILES, TILE_COUNT, cityRent, kindAt, maxLevel, tileAt, type Tile } from '../shared/data';
 import { B, P, T, m, money } from '../shared/msg';
 import { apply, maxRounds, ranking, stats } from '../shared/state';
-import type { Answer, Block, CasinoRoll, Ev, GameState, Msg, Notice, OrderPass, Owned, PickItem, Prompt, Row, Settings, Tone } from '../shared/types';
+import type { Answer, Block, CasinoRoll, Cmd, Ev, GameState, Msg, Notice, OrderPass, Owned, PickItem, Prompt, Row, Settings, Tone } from '../shared/types';
 import { NEWS } from './news';
 
 const N = TILE_COUNT;
@@ -17,6 +17,7 @@ export interface Host {
   bot(pi: number): boolean; // a bot is not waited for: it takes the default answer after BOT_MS
   anyOnline(): boolean;
   save(): void; // the game waits: write down where it stands
+  readonly dev: boolean; // a dev room: its roll question also takes the commands of the dev panel
 }
 interface Pending { id: number; to: number; p: Prompt; ev: Ev; resolve(a: Answer): void; due: number } // due: when it answers itself (epoch ms; 0: it waits)
 // What the next move of a player is bent by (news events). They never show: the news card said it.
@@ -25,7 +26,7 @@ const noMods = (): Mods => ({ fuel: false, half: false, back: false, magnet: fal
 
 // What a restart keeps of a game: how a turn began (a checkpoint), and what that turn has taken from outside since (the tape: its dice, and the answers it was given; `k` is 'rnd' or the kind of prompt answered).
 interface Entry { k: string; v: unknown }
-export interface Ckpt { S: GameState; mods: Mods[]; nextId: number; gone: number[]; turn: number; round: number }
+export interface Ckpt { S: GameState; mods: Mods[]; nextId: number; gone: number[]; turn: number; round: number; rig: number[] }
 export interface Saved { ckpt: Ckpt; tape: Entry[]; due: number }
 
 /** The game before its first turn. */
@@ -34,7 +35,7 @@ export const fresh = (players: { name: string; color: number }[], settings: Sett
     settings, own: {}, order: players.map((_, i) => i), turn: 0, round: 1, step: null, bankrupt: [], over: false, log: [],
     players: players.map((p) => ({ ...p, cash: START_CASH, tile: 0, jail: false, party: false, stay: false, out: 0 })),
   },
-  mods: players.map(noMods), nextId: 1, gone: [], turn: 0, round: 1,
+  mods: players.map(noMods), nextId: 1, gone: [], turn: 0, round: 1, rig: [],
 });
 
 const rows = (...r: [l: string, v: string, sum?: boolean, tone?: Tone][]): Block => ({ k: 'rows', rows: r.map(([l, v, sum, tone]) => ({ l: [l], v: [v], sum, tone })) });
@@ -82,12 +83,32 @@ function check(p: Prompt, v: unknown): Answer | undefined {
   }
 }
 
+// A command of the dev panel, if it fits this game (who it names is in, its numbers are whole): a clean copy, so nothing else of what a client sent is kept.
+function command(S: GameState, v: unknown): Cmd | undefined {
+  const r = v as { c?: unknown; pi?: unknown; v?: unknown; i?: unknown; land?: unknown; o?: { p?: unknown; lv?: unknown; m?: unknown } | null } | null;
+  if (!r || typeof r !== 'object') return undefined;
+  const int = (x: unknown, lo: number, hi = Infinity): x is number => Number.isInteger(x) && (x as number) >= lo && (x as number) <= hi;
+  const who = (x: unknown): x is number => int(x, 0, S.players.length - 1) && !S.players[x].out;
+  switch (r.c) {
+    case 'draw': return Array.isArray(r.v) && r.v.length <= 20 && r.v.every((x) => int(x, 1)) ? { c: 'draw', v: r.v } : undefined;
+    case 'cash': return who(r.pi) && int(r.v, 0) ? { c: 'cash', pi: r.pi, v: r.v } : undefined;
+    case 'goto': return who(r.pi) && int(r.i, 0, N - 1) ? { c: 'goto', pi: r.pi, i: r.i, land: !!r.land } : undefined;
+    case 'own': {
+      if (!int(r.i, 0, N - 1) || TILES[r.i].type === 'public') return undefined;
+      const o = r.o;
+      if (!o) return { c: 'own', i: r.i, o: null };
+      return who(o.p) && int(o.lv, 0) ? { c: 'own', i: r.i, o: { p: o.p, lv: Math.min(o.lv, maxLevel(TILES[r.i])), m: !!o.m } } : undefined;
+    }
+  }
+}
+
 export class Game {
   readonly S: GameState;
   mods: Mods[];
   again = false; // Buy One, Get One: the player goes once more
   passed = new Set<number>(); // players walked past this turn
   private roll: [number, number] = [1, 1];
+  private rig: number[] = []; // what the dev panel wants the next random draws to be (see `rnd`)
   private nextId: number;
   private pending: Pending | null = null;
   private gone: Set<number>; // players who left: their asks answer themselves, and they drop out on their next turn
@@ -102,6 +123,7 @@ export class Game {
     this.mods = structuredClone(ckpt.mods);
     this.nextId = ckpt.nextId;
     this.gone = new Set(ckpt.gone);
+    this.rig = [...(ckpt.rig ?? [])]; // a game saved before the dev panel has none
   }
 
   /** The ask a reconnecting client still has to see. */
@@ -125,9 +147,9 @@ export class Game {
   }
   /** 1..n */
   rnd(n: number): number {
-    const e = this.next('rnd');
+    const e = this.next('rnd'), rigged = this.rig.shift(); // a draw of the replay takes its turn in the queue too, so the queue stands where it stood
     if (e) return e.v as number;
-    const v = 1 + Math.floor(Math.random() * n);
+    const v = Math.min(n, rigged ?? 1 + Math.floor(Math.random() * n));
     this.tape.push({ k: 'rnd', v });
     return v;
   }
@@ -172,7 +194,8 @@ export class Game {
   answer(pi: number, id: number, v: unknown) {
     const pend = this.pending;
     if (!pend || pend.id !== id || pend.to !== pi) return;
-    const a = check(pend.p, v);
+    // A dev room's roll question also takes the panel's commands. One that makes no sense is an answer of nothing (false): the question is asked again, and the panel never ends up without it.
+    const a = this.host.dev && pend.p.k === 'roll' && v !== true ? command(this.S, v) ?? false : check(pend.p, v);
     if (a !== undefined) this.settle(pend, a);
   }
   /** Somebody connected or left: the clock on the open question runs differently now. */
@@ -265,7 +288,7 @@ export class Game {
   // ---- The game ----
   /** A turn begins: this is where a restart comes back to. */
   private mark(turn: number, round: number) {
-    this.ckpt = structuredClone({ S: this.S, mods: this.mods, nextId: this.nextId, gone: [...this.gone], turn, round });
+    this.ckpt = structuredClone({ S: this.S, mods: this.mods, nextId: this.nextId, gone: [...this.gone], turn, round, rig: this.rig });
     this.tape = [];
   }
 
@@ -334,9 +357,9 @@ export class Game {
         hint: 'Pay the mortgage value to bring a property back to life. Skipping is fine.', items: mort.map((i) => ({ i, amt: TILES[i].mort })), rule: { k: 'redeem', cash: p.cash }, label: 'REDEEM', skip: 'SKIP' })) as number[] | null;
       if (sel?.length) { for (const i of sel) this.own(i, { ...S.own[i], m: false }); this.cash(pi, -sel.reduce((s, i) => s + TILES[i].mort, 0)); }
     }
-    // 2. Roll
+    // 2. Roll (in a dev room the question may be answered with a command of the panel instead: it runs, and the question is asked again)
     this.emit({ t: 'step', s: 'roll' });
-    await this.ask(pi, { k: 'roll' });
+    for (let go = await this.ask(pi, { k: 'roll' }); go !== true; go = await this.ask(pi, { k: 'roll' })) if (go && (await this.debug(go as Cmd))) return;
     const a = this.d6(), b = this.d6();
     this.roll = [a, b];
     this.emit({ t: 'dice', a, b });
@@ -347,6 +370,21 @@ export class Game {
     if (p.out || this.over()) return;
     this.emit({ t: 'step', s: 'resolve' });
     await this.landOn(pi, p.tile);
+  }
+
+  /** A command of the dev panel, which came as the answer to the roll question. It is an input like the dice and the answers: it is on the tape and plays again after a restart, and the clients hear it in order, so neither needs anything of its own. True when it played the turn out, in the roll's place. */
+  private async debug(c: Cmd): Promise<boolean> {
+    switch (c.c) {
+      case 'draw': this.rig = [...c.v]; this.toast(`DEV: next draws ${c.v.join(', ') || 'by chance'}`); break; // a copy: the tape keeps the command as it came
+      case 'cash': this.cash(c.pi, c.v - this.S.players[c.pi].cash); break;
+      case 'own': this.own(c.i, c.o); break;
+      case 'goto':
+        if (c.land) this.emit({ t: 'step', s: 'resolve' });
+        this.move(c.pi, c.i, 'jump');
+        if (c.land) await this.landOn(c.pi, c.i);
+        return c.land;
+    }
+    return false;
   }
 
   // A normal move passes every tile on the way. Weather halves it, fuel adds 3, a World Tour turns it around (and passes nothing).

@@ -195,7 +195,7 @@ async function ask(id: number, to: number, p: Prompt) {
   const over = new Promise<void>((res) => hold(id, res));
   let card: Open<void> | null = null, btn: Button | null = null;
   if (p.k === 'casino') void showCasino(p.view, { id, mine: me });
-  else if (p.k === 'roll') { if (me) actionBtn.set((btn = { label: 'ROLL DICE', kbd: true, click: () => reply(id, true) })); }
+  else if (p.k === 'roll') { if (me) actionBtn.set((btn = { label: 'ROLL DICE', kbd: true, click: () => reply(id, true), reply: (v) => reply(id, v) })); }
   else card = me ? openAsk(id, p) : p.k === 'news' ? openNews(p.card) : null;
   waitingFor.set(me ? -1 : to);
   await live(over);

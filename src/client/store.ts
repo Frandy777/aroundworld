@@ -1,7 +1,7 @@
 import { useSyncExternalStore, type ReactNode } from 'react';
 import type { RoomInfo } from '../shared/protocol';
 import { stats } from '../shared/state';
-import type { GameState, Msg, Tone } from '../shared/types';
+import type { Answer, GameState, Msg, Tone } from '../shared/types';
 
 // ---- Cells: one observable value, read in components with useCell ----
 export interface Cell<T> { get(): T; set(v: T): void; sub(f: () => void): () => void }
@@ -34,7 +34,7 @@ export const bumpAssets = () => { tallies = []; bump(); };
 
 // ---- The rest of the screen: a cell each, so a change wakes only the parts that show it, not everything that shows the game ----
 export type Tab = 'tile' | 'assets' | 'log';
-export interface Button { label: string; click(): void; kbd?: boolean }
+export interface Button { label: string; click(): void; kbd?: boolean; reply?(v: Answer): void } // reply: the question behind the button takes other answers too (the roll question: the dev panel's commands)
 export const hudLive = cell(false); // the HUD is up (the turn order is settled)
 export const selectedTile = cell(-1); // the tile in the side panel
 export const viewedPlayer = cell(-1); // whose assets the side panel shows

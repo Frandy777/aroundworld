@@ -65,7 +65,13 @@ export type Prompt =
   | { k: 'confirm'; title: string; sub: Msg; tone: number; body: Block[]; yes: string; no: string }
   | { k: 'news'; card: NewsCard } // the Media owner may keep the story or draw again
   | { k: 'casino'; view: CasinoView };
-export type Answer = boolean | number[] | null | { act: 'roll'; bet: number } | { act: 'cash' };
+// What the roll question of a dev room takes besides the roll (see `Game.debug`).
+export type Cmd =
+  | { c: 'draw'; v: number[] } // the next random draws (dice, news card, coin flip) come out as these, in order; none: back to chance
+  | { c: 'cash'; pi: number; v: number } // set a player's cash
+  | { c: 'own'; i: number; o: Owned | null } // give a tile to a player (null: back to the bank)
+  | { c: 'goto'; pi: number; i: number; land: boolean }; // jump to a tile; `land`: and stop there, which is the turn (it takes the roll's place)
+export type Answer = boolean | number[] | null | { act: 'roll'; bet: number } | { act: 'cash' } | Cmd;
 
 // ---- Events: the one stream the game is told in ----
 export type Ev =

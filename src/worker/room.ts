@@ -27,7 +27,7 @@ export class Room extends DurableObject<Env> implements Host {
   private code = ''; // '' while there is no room
   private seats: Seat[] = [];
   private host = ''; // pid of the host
-  private dev = false; // a dev room (made with ?dev=1): its host may seat bots
+  dev = false; // a dev room (made with ?dev=1): its host may seat bots, and its roll question takes the commands of the dev panel (see `Host`)
   private settings: Settings = { ...DEFAULT_SETTINGS };
   private game: Game | null = null;
   private idle = 0; // when a room nobody is connected to is dissolved (epoch ms; 0: somebody is)
