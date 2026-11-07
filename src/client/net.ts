@@ -34,7 +34,8 @@ export function open(code: string, name: string): Promise<string | null> {
   return new Promise((res) => { first = res; connect(); });
 }
 
-export function leave() {
+/** Let go of the room. With another `code` than LEAVE (1000, or 3000-4999: a browser allows no others) the seat is kept, and a running game goes on without us, as when a page is closed. */
+export function leave(code = LEAVE) {
   want = null;
   clearTimeout(retry);
   clearInterval(beat);
@@ -42,7 +43,7 @@ export function leave() {
   settle('Cancelled');
   const w = ws;
   ws = null;
-  w?.close(LEAVE, 'leave');
+  w?.close(code, 'leave');
 }
 
 function settle(err: string | null) { first?.(err); first = null; }

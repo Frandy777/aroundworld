@@ -187,5 +187,6 @@ export function createBoard() {
       const hop = [0, 1, 2, 1][Math.floor(t * 3) % 4] * px;
       place(hoverCursor, hov === sel ? -1 : hov, hop); place(selCursor, sel, hop);
     },
+    dispose() { over.remove(); for (const t of [BLANK, ...texts.values()]) t.dispose(); }, // the codes' canvas and the lettering the quads are not showing now; the rest goes with the scene
   };
 }

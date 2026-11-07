@@ -7,7 +7,8 @@ import { send } from '../net';
 import { PAL, logo } from '../render/art';
 import { session, useCell } from '../store';
 import { Face, Icon, hex, money } from './bits';
-import { Btn, Card, openRules } from './dialogs';
+import { Btn, Card } from './dialogs';
+import { openRules } from './open';
 
 // ---- The title: a pixel logo over the live board, and the way into a room ----
 const P = PAL;

@@ -122,9 +122,10 @@ const DIE = 1.2, DIE_N = [7, 12, texels(DIE)];
 const pipMat = (v: number) => lodMap(toon(0xffffff), (L: number) => pixelTexture(canvas(DIE_N[L], DIE_N[L], (g, n) => { g.fillStyle = PAL.o; g.fillRect(0, 0, n, n); paint(g, dieRows(v, n), 0, 0); })));
 const dice = [0, 1].map(() => {
   const d = new THREE.Mesh(new THREE.BoxGeometry(DIE, DIE, DIE), FACES.map(pipMat));
-  d.castShadow = true; d.visible = false; scene.add(d);
+  d.castShadow = true; d.visible = false;
   return d;
 });
+export const initActors = () => scene.add(...dice);
 
 export function rollDice(at: THREE.Vector3, values: number[]) {
   return Promise.all(dice.map((d, k) => {

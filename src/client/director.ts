@@ -7,7 +7,7 @@ import { home } from './render/layout';
 import { finishTweens, pace, wait } from './render/scene';
 import { enterGame, focusTok, selectTile, setOwner, showState, tokenSpot } from './stage';
 import { G, actionBtn, activeTab, bump, bumpAssets, clearCards, floatText, floats, hudLive, lastRoll, selectedTile, session, tip, toast, toasts, viewedPlayer, waitingFor, type Button, type Open } from './store';
-import { dropCasinoAsk, forgetCasino, openAsk, openNews, openNotice, openOrder, openResults, showCasino, closeCasino } from './ui/dialogs';
+import { dropCasinoAsk, forgetCasino, openAsk, openNews, openNotice, openOrder, openResults, showCasino, closeCasino } from './ui/open';
 import { money } from './ui/bits';
 
 // The director plays the server's events on this client's screen, one at a time. The server runs ahead (it only waits for decisions): `G.S` is the game
@@ -28,7 +28,13 @@ const quiet = () => document.hidden; // nobody sees it: no cards, toasts or numb
 let shown: Open<void> | null = null; // the card being waited on that has nothing to decide
 /** Wait for a card with nothing to decide. A hidden tab throttles the timer that closes it, and nobody sees it there: it comes down as the tab goes hidden. */
 const show = (card: Open<void>) => live((shown = card).done);
-document.addEventListener('visibilitychange', () => document.hidden && shown?.close());
+
+/** Starts listening to the page; returns what stops it, and ends what is being played. */
+export function start() {
+  const off = new AbortController();
+  document.addEventListener('visibilitychange', () => document.hidden && shown?.close(), { signal: off.signal });
+  return () => { off.abort(); reset(); };
+}
 
 export function reset() {
   epoch++;

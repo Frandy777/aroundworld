@@ -1,5 +1,5 @@
 import { Fragment, useMemo, type ReactNode } from 'react';
-import { COUNTRY, PLAYER_DEFS, TILES } from '../../shared/data';
+import { COUNTRY, INVEST, PLAYER_DEFS, REGIONS, TILES, type InvestKind, type Tile } from '../../shared/data';
 import { money } from '../../shared/msg';
 import type { Block, Msg, Row } from '../../shared/types';
 import { ICONS, PAL, dieRows, faceRows, facePal, svgParts, type Pal } from '../render/art';
@@ -33,6 +33,11 @@ export function Flag({ name }: { name: string }) { // the flag of a city's count
   return <Sprite rows={FLAGS.get(code)!} cls="flag" pal={FLAG_PAL} z={2} />;
 }
 export const Named = ({ name }: { name: string }) => <><Flag name={name} />{name}</>; // a city's name with its flag on the left
+// A tile's card header. Not in tile.tsx (components only, so it hot-refreshes in place) nor a file of its own: hud and dialogs would then refresh together, and Vite would re-run controller and director as stray copies.
+export const tileHead = (t: Tile) => ({
+  title: <Named name={t.name} />, tone: t.color, ink: inkOn(t.color),
+  sub: t.type === 'city' ? REGIONS[t.region!][0] : t.type === 'special' ? <><Icon n="star" /> SPECIAL {'\u00B7'} {REGIONS[t.region!][0]}</> : t.type === 'invest' ? INVEST[t.kind as InvestKind].label : 'Public tile',
+});
 export function Die({ v, cls = '', n = 16 }: { v: number; cls?: string; n?: number }) { // n x n art pixels: 16 for the HUD, 32 for the big casino dice
   const rows = useMemo(() => dieRows(v, n), [v, n]);
   return <div className={`die ${cls}`}><Sprite rows={rows} /></div>;

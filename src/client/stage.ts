@@ -1,16 +1,16 @@
 import * as THREE from 'three';
 import { PLAYER_DEFS, TILES, maxLevel } from '../shared/data';
 import type { GameState, Owned } from '../shared/types';
-import { addToken, clearTokens, placeAt, setActive, tokens, updateActors } from './render/actors';
+import { addToken, clearTokens, initActors, placeAt, setActive, tokens, updateActors } from './render/actors';
 import { createBoard } from './render/board';
 import { POS } from './render/layout';
-import { BOARD_K, camera, controls, finishTweens, focus, overview, pick, render, renderer, resetView, rotateView, toScreen, updateCamera, updateTweens } from './render/scene';
-import { FLOAT, updateWorld } from './render/world';
+import { BOARD_K, camera, controls, finishTweens, focus, initScene, overview, pick, render, renderer, resetView, rotateView, toScreen, updateCamera, updateTweens } from './render/scene';
+import { FLOAT, initWorld, updateWorld } from './render/world';
 import { SEED, SEED_AT } from './seed';
 import { G, activeTab, hudLive, selectedTile, tip } from './store';
 import { drawMinimap, invalidateMinimap } from './ui/minimap';
 
-// The 3D side: the board, the tokens and the camera. The frame loop runs for the whole life of the page.
+// The 3D side: the board, the tokens and the camera. The frame loop runs for the whole life of the page (or until a hot update, see initStage).
 let board: ReturnType<typeof createBoard>;
 let minimap: HTMLCanvasElement | null = null;
 export const setMinimap = (c: HTMLCanvasElement | null) => (minimap = c);
@@ -87,18 +87,18 @@ export function tokenSpot(pi: number): [number, number] | null {
 }
 
 // ---- The page ----
-/** Binds the pointer; returns the per-frame step that finds the tile under it. */
-function bindCanvas() {
+/** Binds the pointer until `signal` aborts; returns the per-frame step that finds the tile under it. */
+function bindCanvas(signal: AbortSignal) {
   const cv = renderer.domElement;
   let down: [number, number] | null = null, moved: [number, number] | null = null; // moved: where the pointer went since the last frame, picked then (once, however many moves came)
   const hover = (i: number, x = 0, y = 0) => { board.hover(i); cv.classList.toggle('hot', i >= 0); tip.set(i >= 0 ? { i, x, y } : null); };
-  cv.addEventListener('pointerdown', (e) => (down = [e.clientX, e.clientY]));
+  cv.addEventListener('pointerdown', (e) => (down = [e.clientX, e.clientY]), { signal });
   cv.addEventListener('pointerup', (e) => {
     if (hudLive.get() && down && e.button === 0 && Math.hypot(e.clientX - down[0], e.clientY - down[1]) < 5) selectTile(pick(e.clientX, e.clientY, board.slabs));
     down = null;
-  });
-  cv.addEventListener('pointermove', (e) => { if (hudLive.get() && !e.buttons) moved = [e.clientX, e.clientY]; else { moved = null; hover(-1); } });
-  cv.addEventListener('pointerleave', () => { moved = null; hover(-1); });
+  }, { signal });
+  cv.addEventListener('pointermove', (e) => { if (hudLive.get() && !e.buttons) moved = [e.clientX, e.clientY]; else { moved = null; hover(-1); } }, { signal });
+  cv.addEventListener('pointerleave', () => { moved = null; hover(-1); }, { signal });
   return () => {
     if (!moved) return;
     const [x, y] = moved;
@@ -107,26 +107,42 @@ function bindCanvas() {
   };
 }
 
+/**
+ * Puts the stage on the page: the 3D world, the pointer and the frame loop. Returns what takes it all down again, whole or as far as it got, so that a
+ * hot update can put a new stage in its place. A game under way is shown again as the screen had it (the server's snapshot, which follows, brings it up to date).
+ */
 export function initStage() {
-  board = createBoard();
-  const hoverStep = bindCanvas();
-  enterDemo();
-  controls.addEventListener('start', () => (cam.follow = -1));
-  document.addEventListener('visibilitychange', () => document.hidden && finishTweens()); // a hidden tab draws no frames: its animations end at once
-  const timer = new THREE.Timer();
-  timer.connect(document); // a hidden tab comes back with a zero step, not one huge one
-  renderer.setAnimationLoop((now) => {
-    timer.update(now);
-    const dt = Math.min(timer.getDelta(), 0.1), t = timer.getElapsed();
-    hoverStep(); // against the frame just drawn, before the board reacts to it
-    updateTweens(dt); updateWorld(t, dt); updateActors(t, dt); board.update(t, dt);
-    if (cam.follow >= 0 && tokens[cam.follow]) { const p = tokens[cam.follow].g.position; focus(p.x, p.z); }
-    updateCamera(dt);
-    if (hudLive.get() && G.S && minimap) {
-      const el = Math.PI / 2 - controls.getPolarAngle();
-      drawMinimap(minimap, G.S, tokens, { x: controls.target.x, z: controls.target.z, w: (camera.right - camera.left) / camera.zoom, h: (camera.top - camera.bottom) / camera.zoom / Math.sin(el) });
-    }
-    board.labels(hudLive.get());
-    render();
-  });
+  const undo: (() => void)[] = [], dispose = () => undo.splice(0).reverse().forEach((f) => f()); // last made, first undone, once
+  try {
+    undo.push(initScene());
+    initWorld(); initActors();
+    board = createBoard();
+    undo.push(() => board.dispose());
+    if (G.S) { showState(G.S); enterGame(); } else enterDemo();
+    const off = new AbortController(), unfollow = () => (cam.follow = -1), hoverStep = bindCanvas(off.signal);
+    controls.addEventListener('start', unfollow);
+    document.addEventListener('visibilitychange', () => document.hidden && finishTweens(), { signal: off.signal }); // a hidden tab draws no frames: its animations end at once
+    const timer = new THREE.Timer();
+    timer.connect(document); // a hidden tab comes back with a zero step, not one huge one
+    undo.push(() => { off.abort(); controls.removeEventListener('start', unfollow); timer.dispose(); });
+    renderer.setAnimationLoop((now) => {
+      timer.update(now);
+      const dt = Math.min(timer.getDelta(), 0.1), t = timer.getElapsed();
+      hoverStep(); // against the frame just drawn, before the board reacts to it
+      updateTweens(dt); updateWorld(t, dt); updateActors(t, dt); board.update(t, dt);
+      if (cam.follow >= 0 && tokens[cam.follow]) { const p = tokens[cam.follow].g.position; focus(p.x, p.z); }
+      updateCamera(dt);
+      if (hudLive.get() && G.S && minimap) {
+        const el = Math.PI / 2 - controls.getPolarAngle();
+        drawMinimap(minimap, G.S, tokens, { x: controls.target.x, z: controls.target.z, w: (camera.right - camera.left) / camera.zoom, h: (camera.top - camera.bottom) / camera.zoom / Math.sin(el) });
+      }
+      board.labels(hudLive.get());
+      render();
+    });
+    undo.push(() => renderer.setAnimationLoop(null));
+    return dispose;
+  } catch (e) {
+    dispose();
+    throw e;
+  }
 }

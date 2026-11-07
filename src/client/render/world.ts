@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { scene, toon, lodMap, pixelTexture, texels, onLod, DENSITY, BOARD_K } from './scene';
+import { scene, toon, lodMap, pixelTexture, texels, lod, DENSITY, BOARD_K } from './scene';
 import { canvas } from './art';
 import { EARTH } from './earth';
 import { FOOT, TOP, SLAB, SZ } from './layout';
@@ -60,14 +60,12 @@ mat.onBeforeCompile = (sh) => {
 const sea = new THREE.Mesh(new THREE.PlaneGeometry(SEA, SEA), mat);
 sea.rotation.x = -Math.PI / 2;
 sea.position.y = -0.8;
-scene.add(sea);
+mat.onBeforeRender = () => (U.uTexel.value = 2 ** (2 - lod.n) / DENSITY); // a water pixel is a texel of the level in view
 // A shadow on water is one tone darker, not black: the sea itself is lit flat, and a see-through plane just above it takes the shadow map alone
 const dim = new THREE.Mesh(sea.geometry, new THREE.ShadowMaterial({ color: 0x0a1a5c, opacity: 0.34 }));
 dim.rotation.x = sea.rotation.x;
 dim.position.y = sea.position.y + 0.01;
 dim.receiveShadow = true;
-scene.add(dim);
-onLod((L) => (U.uTexel.value = 2 ** (2 - L) / DENSITY));
 
 // ---- Centre: a round stone drum standing in the sea like the slabs (same height, same courses), a compass dial inlaid in its top, a plinth, and the globe
 // floating over it: the Earth in pixel art (real continents, see earth.js) on a banded-lit sphere, one texel per world pixel at the equator. Decoration must never
@@ -165,8 +163,9 @@ const globe = new THREE.Group(), ball = new THREE.Mesh(new THREE.SphereGeometry(
   ball.castShadow = plinth.castShadow = true;
   dais.receiveShadow = plinth.receiveShadow = true;
   globe.add(dais, plinth, ball);
-  scene.add(globe);
 }
+
+export const initWorld = () => scene.add(sea, dim, globe);
 
 export function updateWorld(t: number, dt: number) {
   U.uTime.value = Math.floor(t * 4) / 4; // the sea moves in quarter-second steps

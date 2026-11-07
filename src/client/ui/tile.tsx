@@ -1,17 +1,12 @@
 import { INVEST, LEVEL_NAMES, PUBLIC, REGIONS, SPECIAL, TILES, cityRent, maxLevel, type InvestKind, type PublicKind, type Tile } from '../../shared/data';
 import { useGame } from '../store';
-import { Face, Icon, Named, Pips, Rows, hex, inkOn, money } from './bits';
+import { Face, Pips, Rows, hex, money } from './bits';
 
 const CASINO = {
   lucky: 'Roll two dice. Doubles send you to jail; otherwise win dice total \u00D7 $1,000.',
   stakes: 'Bet any amount (multiples of $100), then roll: win (total - 2) \u00F7 5 \u00D7 (bet - 100). Play up to 2 rolls. If both rolls show the same pair with a total above 7, you go to jail.',
 };
 const fxText = (t: Tile) => (t.type === 'special' ? SPECIAL[t.name] : t.type === 'invest' ? INVEST[t.kind as InvestKind].fx : t.kind === 'casino' ? CASINO[t.variant!] : PUBLIC[t.kind as PublicKind].fx);
-
-export const tileHead = (t: Tile) => ({
-  title: <Named name={t.name} />, tone: t.color, ink: inkOn(t.color),
-  sub: t.type === 'city' ? REGIONS[t.region!][0] : t.type === 'special' ? <><Icon n="star" /> SPECIAL {'\u00B7'} {REGIONS[t.region!][0]}</> : t.type === 'invest' ? INVEST[t.kind as InvestKind].label : 'Public tile',
-});
 
 export function TileBody({ t }: { t: Tile }) {
   const S = useGame(), o = S.own[t.i], p = o && S.players[o.p];

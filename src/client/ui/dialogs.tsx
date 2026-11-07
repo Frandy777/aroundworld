@@ -4,9 +4,9 @@ import { READ } from '../../shared/protocol';
 import type { CasinoView, NewsCard as News, Notice, OrderPass, Player, Prompt, RankRow } from '../../shared/types';
 import { reply } from '../asks';
 import { pace } from '../render/scene';
-import { cell, openCard, state, useCell, G, type Cell, type Open } from '../store';
-import { Blocks, Die, Face, Flag, Icon, Rich, hex, money } from './bits';
-import { TileBody, tileHead } from './tile';
+import { state, useCell, G, type Cell, type Open } from '../store';
+import { Blocks, Die, Face, Flag, Icon, Rich, hex, money, tileHead } from './bits';
+import { TileBody } from './tile';
 
 const d6 = () => 1 + Math.floor(Math.random() * 6);
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms / pace.speed));
@@ -60,7 +60,7 @@ const RULES: Record<string, ReactNode> = {
     <h4>PUBLIC TILES</h4><ul><li><b>START:</b> collect $3,000 passing or stopping.</li><li><b>Exchanges:</b> investments owned {'\u00D7'} $500.</li><li><b>Tax Bureau:</b> cities {'\u00D7'} $300 + investments {'\u00D7'} $500.</li><li><b>Casino:</b> gamble, but doubles may send you to jail.</li><li><b>Nightclub:</b> pay $100, stay one turn.</li><li><b>Bank:</b> mortgage cities.</li><li><b>News Agency:</b> draw a random news event.</li></ul>
   </>,
 };
-function RulesCard({ close }: { close(v: string): void }) {
+export function RulesCard({ close }: { close(v: string): void }) {
   const [k, setK] = useState('GOAL');
   return (
     <Card title="HOW TO PLAY" sub="AroundWorld rules" cls="wide rules" dismiss="ok" foot={<Btn id="ok" cls="primary" onClick={() => close('ok')}>GOT IT</Btn>}>
@@ -69,22 +69,15 @@ function RulesCard({ close }: { close(v: string): void }) {
     </Card>
   );
 }
-export const openRules = () => openCard<string>((close) => <RulesCard close={close} />).done;
-
-// ---- Something to tell, or a refusal ----
-export const openAlert = (title: string, text: string) => openCard((close) => (
-  <Card title={title} tone={0xb13e53} dismiss="ok" foot={<Btn id="ok" cls="primary" onClick={() => close()}>OK</Btn>}><div className="note">{text}</div></Card>
-)).done;
 
 // A card with nothing to decide (tax, exchange, rent, ...): its button is the default action (Space); it closes itself after a moment.
-function NoticeCard({ n, close }: { n: Notice; close(): void }) {
+export function NoticeCard({ n, close }: { n: Notice; close(): void }) {
   useAuto(n.long ? 2 * READ : READ, close);
   return <Card title={n.title} sub={<Rich m={n.sub} />} tone={n.tone} foot={<Btn id="ok" cls={`primary ${n.danger ? 'danger' : ''}`} onClick={close}>{n.label}</Btn>}><Blocks blocks={n.body} /></Card>;
 }
-export const openNotice = (n: Notice) => openCard((close) => <NoticeCard n={n} close={() => close()} />);
 
 // ---- News ----
-function NewsCard({ c, close, redraw }: { c: News; close(): void; redraw?: (again: boolean) => void }) {
+export function NewsCard({ c, close, redraw }: { c: News; close(): void; redraw?: (again: boolean) => void }) {
   useAuto(redraw ? 0 : 2 * READ, close);
   const foot = redraw
     ? <><Btn id="again" onClick={() => redraw(true)}>DRAW AGAIN</Btn><Btn id="keep" cls="primary" onClick={() => redraw(false)}>KEEP</Btn></>
@@ -99,13 +92,11 @@ function NewsCard({ c, close, redraw }: { c: News; close(): void; redraw?: (agai
     </Card>
   );
 }
-/** A story to read: for everybody on a news tile, and for the players who are not asked when the Media owner may keep it. */
-export const openNews = (c: News) => openCard((close) => <NewsCard c={c} close={() => close()} />);
 
 // ---- Questions to one player: each card answers through `reply` and closes itself; the director takes it down if the answer came from elsewhere (a timeout) ----
 type Of<K extends Prompt['k']> = Extract<Prompt, { k: K }>;
 
-function DeedCard({ id, p }: { id: number; p: Of<'deed'> }) {
+export function DeedCard({ id, p }: { id: number; p: Of<'deed'> }) {
   const t = TILES[p.tile], hd = tileHead(t), cash = state().players[G.me].cash;
   return (
     <Card {...hd} foot={<>
@@ -118,7 +109,7 @@ function DeedCard({ id, p }: { id: number; p: Of<'deed'> }) {
   );
 }
 
-function PickCard({ id, p }: { id: number; p: Of<'pick'> }) {
+export function PickCard({ id, p }: { id: number; p: Of<'pick'> }) {
   const S = state(), r = p.rule;
   const [sel, setSel] = useState<number[]>([]);
   const sum = sel.reduce((s, i) => s + (p.items.find((x) => x.i === i)?.amt ?? 0), 0);
@@ -148,7 +139,7 @@ function PickCard({ id, p }: { id: number; p: Of<'pick'> }) {
   );
 }
 
-function ConfirmCard({ id, p }: { id: number; p: Of<'confirm'> }) {
+export function ConfirmCard({ id, p }: { id: number; p: Of<'confirm'> }) {
   return (
     <Card title={p.title} sub={<Rich m={p.sub} />} tone={p.tone} foot={<>
       <Btn id="no" onClick={() => reply(id, false)}>{p.no}</Btn>
@@ -157,19 +148,8 @@ function ConfirmCard({ id, p }: { id: number; p: Of<'confirm'> }) {
   );
 }
 
-/** The card for a question to this player, or null for a question that has no card of its own (roll, casino). */
-export function openAsk(id: number, p: Prompt): Open<void> | null {
-  switch (p.k) {
-    case 'deed': return openCard(() => <DeedCard id={id} p={p} />);
-    case 'pick': return openCard(() => <PickCard id={id} p={p} />);
-    case 'confirm': return openCard(() => <ConfirmCard id={id} p={p} />);
-    case 'news': return openCard((close) => <NewsCard c={p.card} close={() => close()} redraw={(again) => reply(id, again)} />);
-    default: return null;
-  }
-}
-
 // ---- Turn order: lowest total first, ties re-roll. Replays the rolls the server made ----
-function OrderCard({ players, passes, order, close }: { players: Player[]; passes: OrderPass[]; order: number[]; close(): void }) {
+export function OrderCard({ players, passes, order, close }: { players: Player[]; passes: OrderPass[]; order: number[]; close(): void }) {
   const [rolls, setRolls] = useState<[number, number][]>(players.map(() => [0, 0]));
   const [tie, setTie] = useState<number[]>([]);
   const [rank, setRank] = useState<Record<number, string>>({});
@@ -206,10 +186,9 @@ function OrderCard({ players, passes, order, close }: { players: Player[]; passe
     </Card>
   );
 }
-export const openOrder = (players: Player[], passes: OrderPass[], order: number[]) => openCard((close) => <OrderCard players={players} passes={passes} order={order} close={() => close()} />);
 
 // ---- Results ----
-function ResultsCard({ rank, close }: { rank: RankRow[]; close(v: 'menu' | 'again'): void }) {
+export function ResultsCard({ rank, close }: { rank: RankRow[]; close(v: 'menu' | 'again'): void }) {
   const S = state(), rows = rank.map((r) => ({ ...S.players[r.p], net: r.net }));
   const pod = [1, 0, 2].filter((k) => rows[k]).map((k) => ({ r: rows[k], k }));
   return (
@@ -233,22 +212,11 @@ function ResultsCard({ rank, close }: { rank: RankRow[]; close(v: 'menu' | 'agai
     </Card>
   );
 }
-export const openResults = (rank: RankRow[]) => openCard<'menu' | 'again'>((close) => <ResultsCard rank={rank} close={close} />).done;
-
-// ---- Menu ----
-export const openMenu = (room: string, quit: () => void) => openCard((close) => (
-  <Card title="MENU" sub={`Room ${room}`} dismiss="resume" foot={<>
-    <Btn id="quit" cls="danger" onClick={() => { close(); quit(); }}>QUIT TO TITLE</Btn>
-    <Btn id="rules" onClick={() => void openRules()}>HOW TO PLAY</Btn>
-    <Btn id="resume" cls="primary" onClick={() => close()}>RESUME</Btn>
-  </>} />
-));
 
 // ---- Casino: one card for a whole visit, told in views (see CasinoView). Lucky is one view, high stakes is a bet, a roll, then roll again or cash out ----
-interface Ctl { cid: number; view: Cell<CasinoView>; ask: Cell<{ id: number; mine: boolean } | null>; card: Open<void> }
-let casino: Ctl | null = null;
+export interface Ctl { cid: number; view: Cell<CasinoView>; ask: Cell<{ id: number; mine: boolean } | null>; card: Open<void> }
 
-function CasinoCard({ ctl, close }: { ctl: Ctl; close(): void }) {
+export function CasinoCard({ ctl, close }: { ctl: Ctl; close(): void }) {
   const v = useCell(ctl.view), ask = useCell(ctl.ask), lucky = v.v === 'lucky';
   const [bet, setBet] = useState(v.bet);
   const [shown, setShown] = useState(0); // rolls on the table
@@ -321,16 +289,3 @@ function CasinoCard({ ctl, close }: { ctl: Ctl; close(): void }) {
     </Card>
   );
 }
-
-/** Put a view on the casino card (the first one opens it). Settles when the card has closed. */
-export function showCasino(view: CasinoView, ask: { id: number; mine: boolean } | null): Promise<void> {
-  if (casino && casino.cid === view.cid) { casino.view.set(view); casino.ask.set(ask); return casino.card.done; }
-  const ctl: Ctl = { cid: view.cid, view: cell(view), ask: cell(ask), card: null as unknown as Open<void> };
-  ctl.card = openCard((close) => <CasinoCard ctl={ctl} close={() => close()} />);
-  ctl.card.done.then(() => { if (casino === ctl) casino = null; });
-  casino = ctl;
-  return ctl.card.done;
-}
-export const dropCasinoAsk = (id: number) => { if (casino?.ask.get()?.id === id) casino.ask.set(null); };
-export const closeCasino = () => casino?.card.close();
-export const forgetCasino = () => { casino = null; };

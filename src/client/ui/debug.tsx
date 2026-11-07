@@ -3,7 +3,7 @@ import { TILES } from '../../shared/data';
 import type { Cmd, NewsCard, Notice, Prompt } from '../../shared/types';
 import { hold } from '../asks';
 import { G, actionBtn, selectedTile, session, useCell } from '../store';
-import { openAlert, openAsk, openNews, openNotice } from './dialogs';
+import { openAlert, openAsk, openNews, openNotice } from './open';
 
 // ---- The dev panel: in a dev room (made from a page opened with ?dev=1) ----
 // Its commands go to the server as answers to the roll question (see `Game.debug`), so they work while ROLL DICE is up. The preview is local: it shows a card the game knows nothing of.

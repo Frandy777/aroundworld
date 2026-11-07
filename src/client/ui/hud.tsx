@@ -5,10 +5,10 @@ import type { Step } from '../../shared/types';
 import { leaveRoom } from '../controller';
 import { CAM, focusTok, lookAtMap, lookAtTile, setMinimap } from '../stage';
 import { G, actionBtn, activeTab, cards, floats, hudLive, lastRoll, selectedTile, session, state, statsOf, tip, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
-import { Die, Face, Flag, Icon, Named, Pips, Rich, hex, money } from './bits';
-import { openMenu, openRules } from './dialogs';
+import { Die, Face, Flag, Icon, Named, Pips, Rich, hex, money, tileHead } from './bits';
 import { minimapToWorld } from './minimap';
-import { TileBody, tileHead } from './tile';
+import { openMenu, openRules } from './open';
+import { TileBody } from './tile';
 
 // ---- Top bar ----
 const PH: Step[] = ['redeem', 'roll', 'move', 'resolve'];

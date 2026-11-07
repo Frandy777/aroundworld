@@ -2,7 +2,7 @@ import * as director from './director';
 import * as net from './net';
 import { enterDemo } from './stage';
 import { G, clearCards, hudLive, selectedTile, session } from './store';
-import { openAlert } from './ui/dialogs';
+import { openAlert } from './ui/open';
 
 // Where this tab is: the title, a room's lobby, or a game. The room it is in survives a reload (the same seat comes back).
 const KEY = 'room';
@@ -28,7 +28,9 @@ export function leaveRoom() {
 }
 director.hooks.leave = leaveRoom;
 
+/** Starts the client's conversation with the server; returns what ends it. */
 export function boot() {
+  const stopDirector = director.start();
   net.listen({
     room(r) {
       sessionStorage.setItem(KEY, r.code);
@@ -47,4 +49,5 @@ export function boot() {
   });
   const code = sessionStorage.getItem(KEY);
   if (code) void net.open(code, '').then((err) => err && sessionStorage.removeItem(KEY));
+  return () => { stopDirector(); net.leave(1000); }; // closed as a page is closed, not with LEAVE: the seat (and a game under way) waits for the next boot to take it back
 }

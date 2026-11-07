@@ -16,8 +16,6 @@ export const DENSITY = 132 / (3 * BOARD_K);
 // level 2 (near) at DENSITY. The grid that puts a texel just over a screen pixel at the current zoom is shown (`lod.n`) and every `lodMap` swaps to it.
 export const lod = { n: -1 }; // -1 until the first frame has worked the level out from the zoom
 export const texels = (units: number, L = 2) => Math.round((units * DENSITY) / 2 ** (2 - L));
-const swaps: ((L: number) => void)[] = [];
-export const onLod = (fn: (L: number) => void) => { swaps.push(fn); if (lod.n >= 0) fn(lod.n); }; // fn(level) on every change of level, and now if it is known
 // The levels out of view can wait: they are made in the idle time, a few ms at a time (Safari has no requestIdleCallback: a timer stands in)
 const later: (() => void)[] = [];
 const idle = (f: (d?: IdleDeadline) => void) => ('requestIdleCallback' in window ? requestIdleCallback(f) : setTimeout(f, 16));
@@ -25,14 +23,16 @@ function drain(d?: IdleDeadline) {
   for (const end = performance.now() + (d?.timeRemaining() ?? 8); later.length && performance.now() < end;) later.shift()!();
   if (later.length) idle(drain);
 }
-// A material whose map has one drawing per level: make(level) -> texture. The level in view is made and uploaded when it is first shown, the other two when the page is idle,
-// so a level switch is a pointer swap by the time anyone zooms; one that comes sooner makes its level on the spot.
+// A material whose map has one drawing per level: make(level) -> texture. Every draw takes the level in view (nothing is registered anywhere, so nothing outlives the material).
+// The level in view is made when it is first drawn, the other two (and their upload) when the page is idle, so a level switch is a pointer swap by the time anyone zooms;
+// one that comes sooner makes its level on the spot.
 export const lodMap = <M extends THREE.Material & { map: THREE.Texture | null }>(mat: M, make: (L: number) => THREE.Texture): M => {
   const maps: THREE.Texture[] = [];
-  const get = (L: number) => { if (!maps[L]) renderer.initTexture((maps[L] = make(L))); return maps[L]; };
-  onLod((L) => (mat.map = get(L)));
+  const get = (L: number) => (maps[L] ??= make(L));
+  mat.onBeforeRender = () => { if (lod.n >= 0) mat.map = get(lod.n); };
+  mat.userData.maps = maps; // all three drawings, for disposeTree
   if (!later.length) idle(drain);
-  for (const L of [0, 1, 2]) later.push(() => get(L));
+  for (const L of [0, 1, 2]) later.push(() => renderer.initTexture(get(L)));
   return mat;
 };
 
@@ -50,7 +50,9 @@ const levelNow = () => {
   return L;
 };
 
-export const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gl') as HTMLCanvasElement, antialias: false });
+// The GL context is the page's, not this module's: a hot update keeps the renderer (a second one on the canvas would take over its one context)
+const kept = import.meta.hot?.data ?? {};
+export const renderer: THREE.WebGLRenderer = (kept.renderer ??= new THREE.WebGLRenderer({ canvas: document.getElementById('gl') as HTMLCanvasElement, antialias: false }));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.BasicShadowMap; // hard, stair-stepped shadows
 
@@ -80,7 +82,7 @@ export const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 600);
 const ELEV = THREE.MathUtils.degToRad(52);
 camera.position.set(0, Math.sin(ELEV) * 150, Math.cos(ELEV) * 150);
 
-export const controls = new OrbitControls(camera, renderer.domElement);
+export const controls = new OrbitControls(camera); // listens to nothing until initScene connects it to the canvas
 Object.assign(controls, {
   enableDamping: true, dampingFactor: 0.12, screenSpacePanning: false,
   minZoom: 0.8 / BOARD_K, maxZoom: 6, minPolarAngle: THREE.MathUtils.degToRad(22), maxPolarAngle: THREE.MathUtils.degToRad(68),
@@ -155,8 +157,6 @@ function resize() {
   Object.assign(camera, { left: -h * a / 2, right: h * a / 2, top: h / 2, bottom: -h / 2 });
   camera.updateProjectionMatrix();
 }
-addEventListener('resize', resize);
-resize();
 
 // Smooth "go look at X" camera goal; any user drag/zoom cancels it.
 let goal: { x: number; z: number; zoom?: number } | null = null;
@@ -173,8 +173,7 @@ export function updateCamera(dt: number) {
     if (goal.zoom) { camera.zoom += (goal.zoom - camera.zoom) * k; camera.updateProjectionMatrix(); }
   }
   controls.update();
-  const L = levelNow();
-  if (L !== lod.n) { lod.n = L; for (const swap of swaps) swap(L); } // the texel size crossed a threshold: show the other level's art from this frame on
+  lod.n = levelNow(); // when the texel size crosses a threshold, the other level's art is drawn from this frame on
   fitShadow();
 }
 
@@ -236,7 +235,7 @@ export function toScreen(v: THREE.Vector3): [number, number] {
 }
 
 // ---- Lights ----
-scene.add(new THREE.HemisphereLight(0xd8ecff, 0x56648a, 1.6));
+const sky = new THREE.HemisphereLight(0xd8ecff, 0x56648a, 1.6);
 // The sun stands to the west (the default view's left), fixed in the world like the tiles: the camera turns round it, so each side shows its own light and shadow.
 // It is exactly sideways, so the shadow map's texels line up with the ground's: a shadow is a block of whole ground texels, not a ragged diagonal. In the default
 // view each visible face lands on its own shading band: top, left, front (square to the light, mid-band) and right.
@@ -248,7 +247,6 @@ sun.shadow.mapSize.set(4096, 4096);
 Object.assign(sun.shadow.camera, { near: 1, far: 220 * BOARD_K });
 sun.shadow.bias = -0.0006 / BOARD_K;
 sun.shadow.normalBias = 0.04; // walls facing the camera lie along the light's rays: nudge their lookups off the wall, or the shadow map speckles them
-scene.add(sun, sun.target);
 
 // Shadow texels match ground texels: 4096 of them span ~190 x 150 world units, so the shadow frustum follows the view target (snapped to whole shadow
 // texels, so shadows never crawl) and only doubles when the visible ground would spill over its edge (far zoomed out, where a shadow texel is a
@@ -266,4 +264,30 @@ function fitShadow() {
   }
   sun.target.position.copy(t).addScaledVector(SUN_X, Math.round(x / tx) * tx - x).addScaledVector(SUN_Y, Math.round(y / ty) * ty - y);
   sun.position.copy(sun.target.position).add(SUN);
+}
+
+// ---- Life cycle: what the module does to the page is done here, not on import, and the function it returns undoes it (the page keeps the renderer, see above) ----
+// What the GPU holds for a tree of objects: their geometries and the textures of their materials. Whatever is drawn again later (a retained cache) is uploaded again.
+function disposeTree(root: THREE.Object3D) {
+  root.traverse((o) => {
+    if (!(o instanceof THREE.Mesh)) return;
+    o.geometry.dispose();
+    for (const m of [o.material].flat()) for (const v of [...Object.values(m), ...(m.userData.maps ?? [])]) if (v instanceof THREE.Texture) v.dispose();
+  });
+}
+export function initScene() {
+  controls.connect(renderer.domElement);
+  scene.add(sky, sun, sun.target);
+  addEventListener('resize', resize);
+  resize();
+  return () => {
+    removeEventListener('resize', resize);
+    controls.disconnect();
+    finishTweens();
+    goal = null;
+    later.length = 0;
+    disposeTree(scene);
+    scene.clear();
+    for (const o of [rt, post.geometry, post.material, sun.shadow]) o.dispose();
+  };
 }
