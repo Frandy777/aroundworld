@@ -91,11 +91,18 @@ const grid = (a: ArrayLike<number>, u: number, v: number) => { // a at (u, v), 0
   const row = (b: number) => cell(a, i, b) + (cell(a, i + 1, b) - cell(a, i, b)) * fx;
   return row(j) + (row(j + 1) - row(j)) * fy;
 };
-const blur = (a: Float32Array) => a.map((_: unknown, k: number) => {
-  let s = 0;
-  for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) s += cell(a, (k % EW) + i, Math.floor(k / EW) + j);
-  return s / 9;
-});
+const blur = (a: Float32Array) => { // the 3 x 3 mean as two passes of a 3-wide window: along each row (round in longitude), then down the columns (the end rows repeat at the poles)
+  const s = new Float64Array(a.length), o = new Float32Array(a.length); // row sums in doubles, so the mean is rounded once, as when the nine cells were added together
+  for (let r = 0; r < a.length; r += EW) {
+    let p = a[r + EW - 1], c = a[r];
+    for (let i = 0; i < EW; i++) { const n = a[r + ((i + 1) % EW)]; s[r + i] = p + c + n; p = c; c = n; }
+  }
+  for (let j = 0; j < EH; j++) {
+    const u = Math.max(j - 1, 0) * EW, m = j * EW, d = Math.min(j + 1, EH - 1) * EW;
+    for (let i = 0; i < EW; i++) o[m + i] = (s[u + i] + s[m + i] + s[d + i]) / 9;
+  }
+  return o;
+};
 let NEAR = Float32Array.from(LAND); // how near land is: 0 in open sea, 0.5 on a straight coast, 1 well inland. It gives the shallows off every coast and the sand along it
 for (let k = 0; k < 5; k++) NEAR = blur(NEAR);
 const BIOME = [[0.17, 0x2f9a56, 0x58c46e], [0.33, 0xe8c070, 0xc89a4a], [0.55, 0x58c46e, 0x2f9a56], [0.7, 0x2f7a52, 0x8d9a58], [2, 0xf4f8ff, 0xd8d4c4]]; // by latitude (0 equator, 1 pole): [up to, ground, patches] = rainforest, desert, grass, taiga, snow

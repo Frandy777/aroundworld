@@ -14,15 +14,25 @@ export const DENSITY = 132 / (3 * BOARD_K);
 // A texel is only crisp while it covers a screen pixel or more; squeezed below that it turns to mush, and text and windows go first. So every texture is
 // drawn three times, each a design on its own pixel grid with its own amount of detail: level 0 (far) at 1/4 of DENSITY, level 1 (mid) at 1/2 and
 // level 2 (near) at DENSITY. The grid that puts a texel just over a screen pixel at the current zoom is shown (`lod.n`) and every `lodMap` swaps to it.
-export const lod = { n: 2 };
+export const lod = { n: -1 }; // -1 until the first frame has worked the level out from the zoom
 export const texels = (units: number, L = 2) => Math.round((units * DENSITY) / 2 ** (2 - L));
 const swaps: ((L: number) => void)[] = [];
-export const onLod = (fn: (L: number) => void) => { swaps.push(fn); fn(lod.n); }; // fn(level) now and on every change of level
-// A material whose map has one drawing per level: make(level) -> texture. All three are built and uploaded up front, so a level switch is a pointer swap.
+export const onLod = (fn: (L: number) => void) => { swaps.push(fn); if (lod.n >= 0) fn(lod.n); }; // fn(level) on every change of level, and now if it is known
+// The levels out of view can wait: they are made in the idle time, a few ms at a time (Safari has no requestIdleCallback: a timer stands in)
+const later: (() => void)[] = [];
+const idle = (f: (d?: IdleDeadline) => void) => ('requestIdleCallback' in window ? requestIdleCallback(f) : setTimeout(f, 16));
+function drain(d?: IdleDeadline) {
+  for (const end = performance.now() + (d?.timeRemaining() ?? 8); later.length && performance.now() < end;) later.shift()!();
+  if (later.length) idle(drain);
+}
+// A material whose map has one drawing per level: make(level) -> texture. The level in view is made and uploaded when it is first shown, the other two when the page is idle,
+// so a level switch is a pointer swap by the time anyone zooms; one that comes sooner makes its level on the spot.
 export const lodMap = <M extends THREE.Material & { map: THREE.Texture | null }>(mat: M, make: (L: number) => THREE.Texture): M => {
-  const maps = [0, 1, 2].map((L) => make(L));
-  maps.forEach((m) => renderer.initTexture(m));
-  onLod((L) => (mat.map = maps[L]));
+  const maps: THREE.Texture[] = [];
+  const get = (L: number) => { if (!maps[L]) renderer.initTexture((maps[L] = make(L))); return maps[L]; };
+  onLod((L) => (mat.map = get(L)));
+  if (!later.length) idle(drain);
+  for (const L of [0, 1, 2]) later.push(() => get(L));
   return mat;
 };
 
