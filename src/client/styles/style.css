@@ -75,17 +75,10 @@ button, [data-tile], .pcard, .item, #minimap canvas { cursor: var(--cur-hand); }
    Stack: a window taller than wide. The top bar, the players, the stage and the panel go one under the other. */
 :root { --sl: 0px; --sr: 0px; --st: 0px; --sb: 0px; --m: 14px; --hh: 74px; --col: clamp(260px, 32vw, 320px); }
 :root:has(#hud) :is(#gl, #codes) { left: var(--sl); top: var(--st); width: calc(100% - var(--sl) - var(--sr)); height: calc(100% - var(--st) - var(--sb)); }
-#topbar { position: fixed; top: 12px; left: 328px; right: 348px; height: var(--hh); display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 2px 10px; z-index: 12; container: topbar / inline-size; }
+#topbar { position: fixed; top: 12px; left: 328px; right: 348px; height: var(--hh); display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 2px 10px; z-index: 12; }
 #round { white-space: nowrap; } #round b { color: var(--gold); font: 34px / 36px var(--font-hd); vertical-align: -2px; }
-#phases { display: flex; gap: 4px; list-style: none; margin: 0; padding: 0; }
-#phases li { font: var(--fs) / 20px var(--font); padding: 4px 8px 2px; color: var(--dim); background: var(--navy) padding-box; border: 6px solid transparent; border-image: var(--fr-well) 3 / 6px; }
-#phases li.done { color: var(--green); }
-#phases li.on { color: #5a2e08; background: linear-gradient(var(--gold-hi) 0 2px, var(--gold) 2px 50%, var(--gold-lo) 50%) padding-box; border-image-source: var(--fr-btn-gold); animation: blink 1s steps(2) infinite; }
 @keyframes blink { 50% { opacity: 0.6; } }
 .tools { display: flex; }
-/* The phases give way to the room the bar has (its width less the frame and padding): all four, the one in play, none */
-@container topbar (max-width: 540px) { #phases li:not(.on) { display: none; } }
-@container topbar (max-width: 349px) { #phases { display: none; } }
 
 /* The column: the players over the panel (and the minimap, in the dock layout). In the overlay layout it floats at the right, as tall as its content, down to above the minimap (306px = 12 at the top, and from the bottom
    22 + the camera buttons' 108 + 10 + the minimap's 144 + 10). No wider than 320px, or on laptop-sized windows it covers the top-right tiles of the whole-board view (the board is centred and ~0.96 x the window height wide) */

@@ -1,7 +1,6 @@
 import { Fragment, useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
 import { LEVEL_NAMES, REGIONS, TILES, maxLevel } from '../../shared/data';
 import { maxRounds } from '../../shared/state';
-import type { Step } from '../../shared/types';
 import { leaveRoom } from '../controller';
 import { CAM, focusTok, lookAtMap, lookAtTile, setMinimap } from '../stage';
 import { G, actionBtn, activeTab, cards, cashEls, floats, hudLive, lastRoll, selectedTile, session, state, statsOf, tip, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
@@ -11,14 +10,11 @@ import { openMenu, openRules } from './open';
 import { TileBody } from './tile';
 
 // ---- Top bar ----
-const PH: Step[] = ['redeem', 'roll', 'move', 'resolve'];
-
 function Topbar() {
-  const S = useGame(), room = useCell(session).room, at = S.step ? PH.indexOf(S.step) : -1, last = maxRounds(S);
+  const S = useGame(), room = useCell(session).room, last = maxRounds(S);
   return (
     <header id="topbar" className="box">
       <div id="round">ROUND <b>{S.round}</b> {last === Infinity ? <>&middot; ENDLESS</> : `/ ${last}`}</div>
-      <ol id="phases">{PH.map((p, k) => <li key={p} data-p={p} className={at < 0 ? '' : k < at ? 'done' : k === at ? 'on' : ''}>{p.toUpperCase()}</li>)}</ol>
       <div className="tools">
         <button className="btn sm" id="btn-help" onClick={() => void openRules()}><Icon n="help" /></button>
         <button className="btn sm" id="btn-menu" onClick={() => void openMenu(room!.code, leaveRoom)}><Icon n="menu" /></button>
