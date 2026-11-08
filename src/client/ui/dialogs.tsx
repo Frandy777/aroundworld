@@ -13,15 +13,16 @@ const d6 = () => 1 + Math.floor(Math.random() * 6);
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms / pace.speed));
 
 // ---- Card frame ----
-export function Card({ title, sub = '', tone = 0x333b66, ink = '#fff', cls = '', dismiss, foot, children }: {
-  title: ReactNode; sub?: ReactNode; tone?: number; ink?: string; cls?: string; dismiss?: string; foot?: ReactNode; children?: ReactNode;
+export function Card({ title, sub = '', tone = 0x333b66, ink = '#fff', cls = '', dismiss, foot, auto, children }: {
+  title: ReactNode; sub?: ReactNode; tone?: number; ink?: string; cls?: string; dismiss?: string; foot?: ReactNode; auto?: ReturnType<typeof useAuto>; children?: ReactNode;
 }) {
   return (
     <div className="modal" data-dismiss={dismiss}>
-      <div className={`card box ${cls}`}>
+      <div className={`card box ${cls}`} onPointerEnter={auto?.hold} onPointerLeave={auto?.free}>
         <div className="hd" style={{ '--tone': hex(tone), color: ink } as CSSProperties}><span>{title}</span><small>{sub}</small></div>
         <div className="bd">{children}</div>
         <div className="ft">{foot}</div>
+        {auto && <div className="bar fuse"><i style={{ width: `${auto.left}%` }} /></div>}
       </div>
     </div>
   );
@@ -29,11 +30,21 @@ export function Card({ title, sub = '', tone = 0x333b66, ink = '#fff', cls = '',
 export const Btn = ({ id, cls = '', disabled, onClick, children }: { id: string; cls?: string; disabled?: boolean; onClick(): void; children: ReactNode }) => (
   <button className={`btn ${cls}`} data-id={id} disabled={disabled} onClick={onClick}>{children}</button>
 );
-/** Run `fn` once, `ms` after the card is up (less while the screen is catching up, see `pace`): a card with nothing to decide closes itself. */
+const TICKS = 20; // the steps a card's wait is counted down in: its bar loses one at a time, like a 16-bit gauge
+/** Run `fn` once, `ms` after the card is up (less while the screen is catching up, see `pace`): a card with nothing to decide closes itself.
+ *  The wait is counted down in TICKS steps, and `left` (percent) is what is still to go, for the card to show as a bar. The count stands still while the pointer
+ *  is on the card, so a slow reader is not hurried, and goes on when it leaves. Without `ms` there is no count, and the card gets nothing back. */
 function useAuto(ms: number, fn: () => void) {
   const f = useRef(fn);
   f.current = fn;
-  useEffect(() => { if (!ms) return; const t = setTimeout(() => f.current(), ms / pace.speed); return () => clearTimeout(t); }, [ms]);
+  const [held, setHeld] = useState(false), [ticks, setTicks] = useState(TICKS);
+  useEffect(() => {
+    if (!ms || held) return;
+    const t = setInterval(() => setTicks((n) => Math.max(0, n - 1)), ms / pace.speed / TICKS);
+    return () => clearInterval(t);
+  }, [ms, held]);
+  useEffect(() => { if (!ticks) f.current(); }, [ticks]);
+  return ms ? { left: (ticks * 100) / TICKS, hold: () => setHeld(true), free: () => setHeld(false) } : undefined;
 }
 
 // ---- Rules ----
@@ -71,20 +82,20 @@ export function RulesCard({ close }: { close(v: string): void }) {
   );
 }
 
-// A card with nothing to decide (tax, exchange, rent, ...): its button is the default action (Space); it closes itself after a moment.
+// A card with nothing to decide (tax, exchange, rent, ...): its button is the default action (Space); it closes itself after a moment, counted down by its bar.
 export function NoticeCard({ n, close }: { n: Notice; close(): void }) {
-  useAuto(n.long ? 2 * READ : READ, close);
-  return <Card title={n.title} sub={<Rich m={n.sub} />} tone={n.tone} foot={<Btn id="ok" cls={`primary ${n.danger ? 'danger' : ''}`} onClick={close}>{n.label}</Btn>}><Blocks blocks={n.body} /></Card>;
+  const auto = useAuto(READ, close);
+  return <Card title={n.title} sub={<Rich m={n.sub} />} tone={n.tone} auto={auto} foot={<Btn id="ok" cls={`primary ${n.danger ? 'danger' : ''}`} onClick={close}>{n.label}</Btn>}><Blocks blocks={n.body} /></Card>;
 }
 
 // ---- News ----
 export function NewsCard({ c, close, redraw }: { c: News; close(): void; redraw?: (again: boolean) => void }) {
-  useAuto(redraw ? 0 : 2 * READ, close);
+  const auto = useAuto(redraw ? 0 : READ, close);
   const foot = redraw
     ? <><Btn id="again" onClick={() => redraw(true)}>DRAW AGAIN</Btn><Btn id="keep" cls="primary" onClick={() => redraw(false)}>KEEP</Btn></>
     : <Btn id="ok" cls="primary" onClick={close}>OK</Btn>;
   return (
-    <Card title="THE AROUNDWORLD TIMES" tone={0xf1e8cf} ink="#1a1c2c" cls="news" foot={foot}>
+    <Card title="THE AROUNDWORLD TIMES" tone={0xf1e8cf} ink="#1a1c2c" cls="news" auto={auto} foot={foot}>
       <span className="pill" style={{ alignSelf: 'flex-start' }}>{c.cat.toUpperCase()}</span>
       <h3>{c.title}</h3>
       <p>{c.text}</p>
@@ -172,7 +183,7 @@ export function OrderCard({ players, passes, order, close }: { players: Player[]
     })();
     return () => { dead = true; };
   }, []);
-  useAuto(ready ? 2 * READ : 0, close);
+  useAuto(ready ? READ : 0, close);
   return (
     <Card title="WHO GOES FIRST?" sub="Lowest total moves first" foot={<Btn id="go" cls="primary" disabled={!ready} onClick={close}>LET{'\u2019'}S GO</Btn>}>
       <div className="list" id="ord">{players.map((p, i) => (

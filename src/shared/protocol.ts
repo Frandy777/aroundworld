@@ -6,7 +6,7 @@ export const PID_RE = /^[\w-]{8,64}$/; // a player's id (the client makes a UUID
 export const ROUNDS_MIN = 5;
 export const ROUNDS_MAX = 100;
 export const DEFAULT_SETTINGS: Settings = { mode: 'limited', rounds: 30 };
-export const READ = 2000; // ms a card with nothing to decide stays up before it closes itself
+export const READ = 20_000; // ms a card with nothing to decide stays up before it closes itself
 
 export interface SeatInfo { seat: number; name: string; online: boolean; host: boolean; bot: boolean; pi: number } // seat picks the colour; pi is the player index once the game runs, else -1
 export interface RoomInfo { code: string; seats: SeatInfo[]; settings: Settings; started: boolean; me: number; dev: boolean } // me: the receiver's seat; dev: the host may seat bots

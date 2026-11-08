@@ -36,6 +36,8 @@
 .pill.gold { background: var(--gold); color: #5a2e08; } .pill.red { background: var(--red); color: #fff; }
 .lv { display: inline-flex; gap: 4px; } .lv i { width: 10px; height: 10px; background: var(--ink); box-shadow: inset 0 0 0 2px var(--indigo); } .lv i.on { background: var(--gold); box-shadow: 0 0 0 2px var(--ink), inset 2px 2px var(--gold-hi), inset -2px -2px var(--gold-lo); }
 .bar { height: 20px; } .bar > i { display: block; height: 100%; background: linear-gradient(var(--green-hi) 0 2px, var(--green) 2px 50%, var(--green-lo) 50%); }
+/* The countdown of a card that closes itself (see useAuto): the same gauge in gold, at the foot of the card, losing a step at a time */
+.fuse { flex: none; margin: 0 14px 10px; } .fuse > i { background: linear-gradient(var(--gold-hi) 0 2px, var(--gold) 2px 50%, var(--gold-lo) 50%); }
 .sw { display: inline-block; width: 14px; height: 14px; flex: none; box-shadow: 0 0 0 2px var(--ink), inset 2px 2px rgba(255, 255, 255, 0.4), inset -2px -2px rgba(0, 0, 0, 0.3); }
 .empty { color: var(--dim); text-align: center; padding: 18px 0; }
 
