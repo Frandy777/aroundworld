@@ -9,10 +9,12 @@
 .hd { --t: var(--tone, #3a4a9c); display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 4px 12px 2px; font: 34px / 36px var(--font-hd); color: #fff;
   background: linear-gradient(color-mix(in srgb, var(--t) 60%, #fff) 0 2px, var(--t) 2px 55%, color-mix(in srgb, var(--t) 82%, #000) 55%); box-shadow: inset 0 -2px rgba(0, 0, 0, 0.35); }
 .hd small { font: var(--fs) / 20px var(--font); opacity: 0.9; text-align: right; }
-/* a tile header carries its country flag left of the name; when the row is too crowded, the region drops to a second row */
+/* a tile header carries its country flag left of the name; the region always takes a second row of its own, whatever the length of the name (a flag in the subtitle only wraps when the row is too crowded) */
 .hd:has(.flag) { flex-wrap: wrap; row-gap: 0; }
 .hd:has(.flag) > span { display: flex; align-items: center; gap: 8px; }
 .hd:has(.flag) small { margin-left: auto; }
+.hd:has(> span > .flag) small { flex-basis: 100%; }
+.hd small .ic { width: 16px; height: 16px; vertical-align: -3px; } /* the star of a special tile: centred on the capitals, inside the 20px line */
 .flag { flex: none; }
 .logline .flag, .toast .flag, small .flag { vertical-align: -10px; margin-right: 6px; } /* in running text (log, toasts, a card's subtitle): on the line of text, a gap before the name */
 .bd { padding: 12px 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }

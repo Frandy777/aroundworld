@@ -25,16 +25,16 @@ export function Face({ color }: { color: number }) {
   return <Sprite rows={rows} cls="face" pal={pal} />;
 }
 const FLAGS = new Map<string, string[]>();
-export function Flag({ name }: { name: string }) { // the flag of a city's country (nothing for any other tile)
+export function Flag({ name, z = 2 }: { name: string; z?: number }) { // the flag of a city's country (nothing for any other tile), z px to an art pixel
   const code = COUNTRY[name];
   if (!code) return null;
   if (!FLAGS.has(code)) FLAGS.set(code, flagRows(code));
-  return <Sprite rows={FLAGS.get(code)!} cls="flag" pal={FLAG_PAL} z={2} />;
+  return <Sprite rows={FLAGS.get(code)!} cls="flag" pal={FLAG_PAL} z={z} />;
 }
-export const Named = ({ name }: { name: string }) => <><Flag name={name} />{name}</>; // a city's name with its flag on the left
+export const Named = ({ name, z }: { name: string; z?: number }) => <><Flag name={name} z={z} />{name}</>; // a city's name with its flag on the left
 // A tile's card header. Not in tile.tsx (components only, so it hot-refreshes in place) nor a file of its own: hud and dialogs would then refresh together, and Vite would re-run controller and director as stray copies.
 export const tileHead = (t: Tile) => ({
-  title: <Named name={t.name} />, tone: t.color, ink: inkOn(t.color),
+  title: <Named name={t.name} z={1} />, tone: t.color, ink: inkOn(t.color), // the flag at 1px to an art pixel: 17px high, inside the 20px capitals of the name
   sub: t.type === 'city' ? REGIONS[t.region!][0] : t.type === 'special' ? <><Icon n="star" /> SPECIAL {'\u00B7'} {REGIONS[t.region!][0]}</> : t.type === 'invest' ? INVEST[t.kind as InvestKind].label : 'Public tile',
 });
 export function Die({ v, cls = '', n = 16 }: { v: number; cls?: string; n?: number }) { // n x n art pixels: 16 for the HUD, 32 for the big casino dice
