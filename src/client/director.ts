@@ -111,15 +111,14 @@ function floatCard(pi: number, text: string, tone: string) {
   setTimeout(() => air[pi]--, 1500);
 }
 
-/** The beat that ends a turn: its player may end it sooner (click or Space); for everybody else it is a pause to read the result. */
+/** The beat that ends a turn: its player clicks (or presses Space) to go on; for everybody else it is a pause to read the result. */
 async function beat(who: number) {
   if (quiet()) return;
   if (who !== G.me) return pause(1.5);
   const e = epoch;
   await new Promise<void>((res) => {
-    const end = () => { clearTimeout(timer); if (e === epoch && actionBtn.get() === btn) actionBtn.set(null); res(); };
+    const end = () => { if (e === epoch && actionBtn.get() === btn) actionBtn.set(null); res(); };
     const btn: Button = { label: 'END TURN', kbd: true, click: end };
-    const timer = setTimeout(end, 1500 / pace.speed);
     actionBtn.set(btn);
   });
 }
