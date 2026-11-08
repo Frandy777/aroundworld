@@ -224,7 +224,7 @@ export class Game {
   give(pi: number, amt: number, bank = true) {
     if (amt <= 0) return;
     this.cash(pi, amt);
-    if (bank) this.bonus('Zurich', [500, 1000, 2000], false);
+    if (bank) this.bonus('Zurich', [100, 200, 500], false);
   }
   /** A special tile pays its owner by level. */
   private bonus(name: string, vals: number[], bank = true) {
@@ -503,7 +503,6 @@ export class Game {
       case 'start':
         this.give(pi, 3000);
         this.toast('Landed on START: +$3,000', 'good');
-        this.bonus('Zurich', [300, 600, 900], false);
         break;
       case 'jail': this.toast(`${p.name} is just visiting`); break;
       case 'gojail':

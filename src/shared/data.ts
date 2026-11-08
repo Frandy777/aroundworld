@@ -32,7 +32,7 @@ export const INVEST: Record<InvestKind, { label: string; price: number; fx: stri
 export const SPECIAL: Record<string, string> = {
   'Hong Kong': 'Charges players passing by 5% / 10% / 20% of their cash.',
   Pyongyang: 'Owner pays 10% / 20% / 30% less rent on regular cities.',
-  Zurich: 'Whenever anyone gets money from the bank, owner earns $500 / $1,000 / $2,000. Whenever anyone stops on START, owner earns $300 / $600 / $900.',
+  Zurich: 'Whenever anyone gets money from the bank, owner earns $100 / $200 / $500.',
   'New York': 'Whenever anyone upgrades a city to max level, owner earns $300 / $500 / $1,000.',
   'Las Vegas': 'Charges players stopping here dice total × $300 / $500 / $1,000.',
   Rio: 'Whenever anyone rolls doubles, owner earns $500 / $1,000 / $2,000.',
