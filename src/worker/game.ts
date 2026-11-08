@@ -1,6 +1,6 @@
 import { START_CASH, TILES, TILE_COUNT, cityRent, kindAt, maxLevel, tileAt, type Tile } from '../shared/data';
 import { B, P, T, m, money } from '../shared/msg';
-import { apply, canPick, hasMonopoly, maxRounds, ranking, stats } from '../shared/state';
+import { apply, canPick, command, hasMonopoly, maxRounds, ranking, stats } from '../shared/state';
 import type { Answer, Block, CasinoRoll, Cmd, Ev, GameState, Msg, Notice, OrderPass, Owned, PickItem, Prompt, Settings, Tone } from '../shared/types';
 import { NEWS } from './news';
 
@@ -78,25 +78,6 @@ function check(p: Prompt, v: unknown): Answer | undefined {
       if (p.view.stage === 'again') return a.act === 'roll' ? { act: 'roll', bet: p.view.bet } : a.act === 'cash' ? { act: 'cash' } : undefined;
       const bet = a.bet;
       return a.act === 'roll' && typeof bet === 'number' && Number.isInteger(bet) && bet % 100 === 0 && bet >= 200 && bet <= p.view.max ? { act: 'roll', bet } : undefined;
-    }
-  }
-}
-
-// A command of the dev panel, if it fits this game (who it names is in, its numbers are whole): a clean copy, so nothing else of what a client sent is kept.
-function command(S: GameState, v: unknown): Cmd | undefined {
-  const r = v as { c?: unknown; pi?: unknown; v?: unknown; i?: unknown; land?: unknown; o?: { p?: unknown; lv?: unknown; m?: unknown } | null } | null;
-  if (!r || typeof r !== 'object') return undefined;
-  const int = (x: unknown, lo: number, hi = Infinity): x is number => Number.isInteger(x) && (x as number) >= lo && (x as number) <= hi;
-  const who = (x: unknown): x is number => int(x, 0, S.players.length - 1) && !S.players[x].out;
-  switch (r.c) {
-    case 'draw': return Array.isArray(r.v) && r.v.length <= 20 && r.v.every((x) => int(x, 1)) ? { c: 'draw', v: r.v } : undefined;
-    case 'cash': return who(r.pi) && int(r.v, 0) ? { c: 'cash', pi: r.pi, v: r.v } : undefined;
-    case 'goto': return who(r.pi) && int(r.i, 0, N - 1) ? { c: 'goto', pi: r.pi, i: r.i, land: !!r.land } : undefined;
-    case 'own': {
-      if (!int(r.i, 0, N - 1) || TILES[r.i].type === 'public') return undefined;
-      const o = r.o;
-      if (!o) return { c: 'own', i: r.i, o: null };
-      return who(o.p) && int(o.lv, 0) ? { c: 'own', i: r.i, o: { p: o.p, lv: Math.min(o.lv, maxLevel(TILES[r.i])), m: !!o.m } } : undefined;
     }
   }
 }

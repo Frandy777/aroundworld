@@ -1,12 +1,13 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { TILES } from '../../shared/data';
+import { TILES, maxLevel } from '../../shared/data';
+import { command } from '../../shared/state';
 import type { Cmd, NewsCard, Notice, Prompt } from '../../shared/types';
 import { hold } from '../asks';
 import { G, actionBtn, selectedTile, session, useCell } from '../store';
 import { openAlert, openAsk, openNews, openNotice } from './open';
 
 // ---- The dev panel: in a dev room (made from a page opened with ?dev=1) ----
-// Its commands go to the server as answers to the roll question (see `Game.debug`), so they work while ROLL DICE is up. The preview is local: it shows a card the game knows nothing of.
+// Its commands go to the server as answers to the roll question (see `Game.debug`), so they work while ROLL DICE is up, and a button is grey when the server would refuse its command (`command`). The preview is local: it shows a card the game knows nothing of.
 
 // What the preview starts from. Anything of these shapes can be put in its place: a Prompt has `k`, a NewsCard has `cat`, the rest is a Notice.
 const SAMPLES: Record<string, Notice | NewsCard | Prompt> = {
@@ -43,14 +44,15 @@ export function Debug() {
   useEffect(() => { if (sel >= 0) setTile(sel); }, [sel]); // a tile clicked on the board is the one aimed at
   const S = G.S;
   if (!room?.dev || !S) return null;
-  const btn = (label: string, c: Cmd, cls = '') => <button className={`btn sm ${cls}`} disabled={!run} onClick={() => run?.(c)}>{label}</button>;
+  const aim = TILES[tile], cap = maxLevel(aim), level = Math.min(lv, cap), mortgaged = mort && aim.mort > 0; // the server takes any level and clamps it; the panel only offers what the tile has: levels up to its own, a mortgage if it has a value
+  const btn = (label: string, c: Cmd, cls = '') => <button className={`btn sm ${cls}`} disabled={!run || !command(S, c)} onClick={() => run?.(c)}>{label}</button>;
   return (
     <aside id="dev">
       <button className="btn sm" onClick={() => setOpen(!open)}>DEV</button>
       {open && (
         <div className="box"><div className="bd">
           <div className="note">{run ? 'Commands run before the roll.' : 'Commands work while ROLL DICE is up.'}</div>
-          <Field label="PLAYER"><div className="seg">{S.players.map((p, i) => <button key={i} className={who === i ? 'on' : ''} onClick={() => setWho(i)}>{p.name}</button>)}</div></Field>
+          <Field label="PLAYER"><div className="seg">{S.players.map((p, i) => <button key={i} className={who === i ? 'on' : ''} disabled={!!p.out} onClick={() => setWho(i)}>{p.name}</button>)}</div></Field>
           <Field label="NEXT DRAWS (dice, news card #...)">
             <div className="pl-row"><input value={draws} onChange={(e) => setDraws(e.target.value)} />{btn('SET', { c: 'draw', v: draws.split(/\D+/).filter(Boolean).map(Number) })}</div>
           </Field>
@@ -61,11 +63,11 @@ export function Debug() {
             <select value={tile} onChange={(e) => setTile(+e.target.value)}>{TILES.map((t) => <option key={t.i} value={t.i}>{t.i} {t.name}{t.variant ? ` (${t.variant})` : ''}</option>)}</select>
             <div className="pl-row">
               {btn('MOVE', { c: 'goto', pi: who, i: tile, land: false })}{btn('LAND', { c: 'goto', pi: who, i: tile, land: true }, 'primary')}
-              {btn('GIVE', { c: 'own', i: tile, o: { p: who, lv, m: mort } })}{btn('CLEAR', { c: 'own', i: tile, o: null })}
+              {btn('GIVE', { c: 'own', i: tile, o: { p: who, lv: level, m: mortgaged } })}{btn('CLEAR', { c: 'own', i: tile, o: null })}
             </div>
             <div className="seg">
-              {[0, 1, 2, 3].map((n) => <button key={n} className={lv === n ? 'on' : ''} onClick={() => setLv(n)}>Lv {n}</button>)}
-              <button className={mort ? 'on' : ''} onClick={() => setMort(!mort)}>MORT</button>
+              {[0, 1, 2, 3].map((n) => <button key={n} className={level === n ? 'on' : ''} disabled={n > cap} onClick={() => setLv(n)}>Lv {n}</button>)}
+              <button className={mortgaged ? 'on' : ''} disabled={!aim.mort} onClick={() => setMort(!mort)}>MORT</button>
             </div>
           </Field>
           <Field label="PREVIEW">

@@ -1,5 +1,5 @@
-import { TILES, type Tile } from './data';
-import type { Ev, GameState, PickRule, RankRow } from './types';
+import { TILES, TILE_COUNT, maxLevel, type Tile } from './data';
+import type { Cmd, Ev, GameState, PickRule, RankRow } from './types';
 
 const LOG_MAX = 80;
 
@@ -48,4 +48,24 @@ export function hasMonopoly(S: GameState, tile: Tile): boolean {
   const o = S.own[tile.i];
   if (!o) return false;
   return TILES.filter((x) => x.region === tile.region && x.type === 'city').every((x) => S.own[x.i]?.p === o.p && !S.own[x.i].m);
+}
+
+// A command of the dev panel, if it fits this game (who it names is in, its numbers are whole): a clean copy, so nothing else of what a client sent is kept.
+// The panel asks it of its own buttons too: one that gets nothing back is grey.
+export function command(S: GameState, v: unknown): Cmd | undefined {
+  const r = v as { c?: unknown; pi?: unknown; v?: unknown; i?: unknown; land?: unknown; o?: { p?: unknown; lv?: unknown; m?: unknown } | null } | null;
+  if (!r || typeof r !== 'object') return undefined;
+  const int = (x: unknown, lo: number, hi = Infinity): x is number => Number.isInteger(x) && (x as number) >= lo && (x as number) <= hi;
+  const who = (x: unknown): x is number => int(x, 0, S.players.length - 1) && !S.players[x].out;
+  switch (r.c) {
+    case 'draw': return Array.isArray(r.v) && r.v.length <= 20 && r.v.every((x) => int(x, 1)) ? { c: 'draw', v: r.v } : undefined;
+    case 'cash': return who(r.pi) && int(r.v, 0) ? { c: 'cash', pi: r.pi, v: r.v } : undefined;
+    case 'goto': return who(r.pi) && int(r.i, 0, TILE_COUNT - 1) ? { c: 'goto', pi: r.pi, i: r.i, land: !!r.land } : undefined;
+    case 'own': {
+      if (!int(r.i, 0, TILE_COUNT - 1) || TILES[r.i].type === 'public') return undefined;
+      const o = r.o;
+      if (!o) return { c: 'own', i: r.i, o: null };
+      return who(o.p) && int(o.lv, 0) ? { c: 'own', i: r.i, o: { p: o.p, lv: Math.min(o.lv, maxLevel(TILES[r.i])), m: !!o.m } } : undefined;
+    }
+  }
 }
