@@ -92,7 +92,7 @@ const plate = memo((bg: string, fg: string, W: number, H: number, text: string, 
 const plateMat = memo((bg: string, fg: string, W: number, H: number, text: string, s: number) => lodMap(new THREE.MeshBasicMaterial(), (L) => plate(bg, fg, W, H, text, s, L))); // unlit like the cards: colours stay the same in any light
 
 // ---- Voxel helpers ----
-export const GOLD = 0xffd23f, IRON = 0x555a6e, INK = 0x23263a;
+export const GOLD = 0xffd23f, IRON = 0x555a6e, INK = 0x23263a, LAVA = 0xff7a1a;
 const geo = memo((w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d));
 const cylGeo = memo((r: number, h: number) => new THREE.CylinderGeometry(r, r, h, 10));
 // hip roof: the 4-sided cone (shaded from its corners), each face laid flat in UV space so a roof texel is a world texel
@@ -106,7 +106,7 @@ const roofGeo = memo((w: number, d: number, h: number) => {
   }
   return g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
 });
-const NEON = new Set([0xff5de0, 0x5dfff0, 0xff3b3b, 0x3b6bff, 0xfff6b0]); // neon, lamps and flames are unlit: they glow in the shade as in the sun
+const NEON = new Set([0xff5de0, 0x5dfff0, 0xff3b3b, 0x3b6bff, 0xfff6b0, LAVA]); // neon, lamps, flames and lava are unlit: they glow in the shade as in the sun
 export const mat = memo((c: THREE.ColorRepresentation) => (NEON.has(c as number) ? new THREE.MeshBasicMaterial({ color: c }) : toon(c)));
 const wallMat = memo((cols: number, kind: string, c: number) => lodMap(toon(c), (L) => facade(cols, kind, L)));
 const roofMat = memo((c: number) => lodMap(toon(c), roofTex));

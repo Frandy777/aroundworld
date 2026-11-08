@@ -4,6 +4,7 @@ import { canvas } from './art';
 import { EARTH } from './earth';
 import { FOOT, TOP, SLAB, SZ } from './layout';
 import { sideTex } from './builder';
+import { ISLETS, WAKES, SPLASH, scenery, updateScenery } from './scenery';
 
 const rng = (s: number) => () => (s = (s * 16807) % 2147483647) / 2147483647;
 const smooth = (t: number) => t * t * (3 - 2 * t);
@@ -11,15 +12,16 @@ const smooth = (t: number) => t * t * (3 - 2 * t);
 // ---- Sea: one shader, no texture. The world is cut into the texels of the current zoom level and each is painted from a slow swell (four bands of navy, a
 // checker dithering the seams); near a slab or the centre drum the bands run on into lighter, shallower blues and a line of foam, read off a map of the distance
 // to the shore. The level's texel size is the only thing that changes with zoom, so the waves stay as wide in the world and the dither as wide in pixels. ----
-const SEA = 500, SHORE = 64, GRID = 256, DAIS = 7; // sea size, half the span of the shore map (units) and its resolution, radius of the centre drum
+const SEA = 500, SHORE = 100, GRID = 400, DAIS = 7; // sea size, half the span of the shore map (units) and its resolution (half a unit a cell), radius of the centre drum
 const PALETTE = ['#1b3f8e', '#20469a', '#264ea6', '#2c57b2', '#3170c0', '#3a92d0', '#5ec2dc'].map((c) => new THREE.Color(c));
 
-// Signed distance (units, negative inside) to the nearest slab (a rectangle) or the centre drum (a circle), kept within -2..8; a coarse grid is enough, a
+// Signed distance (units, negative inside) to the nearest slab (a rectangle), islet or the centre drum (a circle), kept within -2..8; a coarse grid is enough, a
 // distance is linear along a straight shore
 const dist = new Uint16Array(GRID * GRID);
 for (let j = 0; j < GRID; j++) for (let i = 0; i < GRID; i++) {
   const x = ((i + 0.5) / GRID * 2 - 1) * SHORE, z = ((j + 0.5) / GRID * 2 - 1) * SHORE;
   let d = Math.min(8, Math.hypot(x, z) - DAIS);
+  for (const [cx, cz, r] of ISLETS) d = Math.min(d, Math.hypot(x - cx, z - cz) - r);
   for (const [cx, cz, hx, hz] of FOOT) {
     const dx = Math.abs(x - cx) - hx, dz = Math.abs(z - cz) - hz;
     if (dx < 8 && dz < 8) d = Math.min(d, Math.hypot(Math.max(dx, 0), Math.max(dz, 0)) + Math.min(Math.max(dx, dz), 0));
@@ -30,7 +32,7 @@ const shore = new THREE.DataTexture(dist, GRID, GRID, THREE.RedFormat, THREE.Hal
 shore.minFilter = shore.magFilter = THREE.LinearFilter;
 shore.needsUpdate = true;
 
-const U = { uShore: { value: shore }, uPal: { value: PALETTE }, uTexel: { value: 1 / DENSITY }, uTime: { value: 0 } };
+const U = { uShore: { value: shore }, uPal: { value: PALETTE }, uTexel: { value: 1 / DENSITY }, uTime: { value: 0 }, uWake: { value: WAKES }, uSplash: { value: SPLASH } };
 const mat = toon(0x20469a);
 mat.onBeforeCompile = (sh) => {
   Object.assign(sh.uniforms, U);
@@ -39,7 +41,7 @@ mat.onBeforeCompile = (sh) => {
     .replace('#include <begin_vertex>', '#include <begin_vertex>\nvW = (modelMatrix * vec4(transformed, 1.)).xz;');
   sh.fragmentShader = sh.fragmentShader
     .replace('#include <common>', `#include <common>
-      varying vec2 vW; uniform sampler2D uShore; uniform vec3 uPal[7]; uniform float uTexel, uTime;
+      varying vec2 vW; uniform sampler2D uShore; uniform vec3 uPal[7], uSplash[2]; uniform vec4 uWake[${WAKES.length}]; uniform float uTexel, uTime;
       float hash(vec2 p) { p = fract(p * vec2(0.1031, 0.1030)); p += dot(p, p.yx + 33.33); return fract((p.x + p.y) * p.x); }`)
     .replace('#include <color_fragment>', `#include <color_fragment>
       vec2 c = floor(vW / uTexel), q = (c + 0.5) * uTexel;                 // this texel and its centre, in world units
@@ -54,9 +56,22 @@ mat.onBeforeCompile = (sh) => {
       if (depth > 2.5 && d0 > 0.5 && hash(vec2(floor((c.x + 9. * hash(vec2(c.y, 1.))) / run), c.y) + floor(t * 2.)) > 0.992) sea = vec3(0.62, 0.8, 1.); // glints twinkle on the crests
       float ph = fract(t * 0.18 + 0.15 * sin(dot(q, vec2(0.21, 0.17))));   // a ripple leaves the shore every ~5.5 s, each stretch of it on its own beat,
       if (abs(d0 - 0.15 - 0.6 * ph) < 0.5 * max(0.045, uTexel) && hash(c + 5.) > ph) sea = vec3(0.45, 0.75, 0.9); // a texel wide and breaking up as it goes
-      if (d0 < max(0.09, uTexel)) sea = vec3(0.9, 0.97, 1.); // the line of foam: two near texels wide, a whole texel on the coarser levels
+      float fw = max(0.09, uTexel);                                       // the foam's width: two near texels, a whole texel on the coarser levels
+      if (d0 < fw) sea = vec3(0.9, 0.97, 1.);                              // the line of foam
+      for (int i = 0; i < ${WAKES.length}; i++) {                             // a ship's wake: from its stern, two arms spreading and a churn between them, breaking up as they go
+        vec2 wr = q - uWake[i].xy, wf = uWake[i].zw;
+        float wa = -dot(wr, wf), ws = abs(wf.x * wr.y - wf.y * wr.x);      // how far behind it, and how far to the side of its track
+        if (wa > 0. && wa < 5. && (abs(ws - 0.15 - 0.3 * wa) < 0.5 * fw || (wa < 1.2 && ws < 0.3)) && hash(c + float(i)) > wa / 5.) sea = vec3(0.9, 0.97, 1.);
+      }
+      for (int i = 0; i < 2; i++) {                                        // a ring spreads from where the dolphin broke the surface (z: how far it has spread, 0 .. 1)
+        float k = uSplash[i].z;
+        if (k >= 0. && k <= 1. && abs(length(q - uSplash[i].xy) - 0.25 - 1.6 * k) < 0.5 * fw && hash(c + 7.) > k) sea = vec3(0.9, 0.97, 1.);
+      }
       diffuseColor.rgb = sea;`);
 };
+// three.js names a compiled program by the text of onBeforeCompile, which says nothing of the values the shader bakes in (SHORE, the number of wakes). A hot update keeps the renderer, and so its
+// programs: without these in the key, a changed value would be handed the program compiled for the old one, and the sea would be drawn at the wrong scale.
+mat.customProgramCacheKey = () => `${SHORE} ${WAKES.length} ${mat.onBeforeCompile}`;
 const sea = new THREE.Mesh(new THREE.PlaneGeometry(SEA, SEA), mat);
 sea.rotation.x = -Math.PI / 2;
 sea.position.y = -0.8;
@@ -165,10 +180,11 @@ const globe = new THREE.Group(), ball = new THREE.Mesh(new THREE.SphereGeometry(
   globe.add(dais, plinth, ball);
 }
 
-export const initWorld = () => scene.add(sea, dim, globe);
+export const initWorld = () => scene.add(sea, dim, globe, scenery);
 
 export function updateWorld(t: number, dt: number) {
   U.uTime.value = Math.floor(t * 4) / 4; // the sea moves in quarter-second steps
+  updateScenery(t, dt);
   ball.rotation.y += dt * 0.35;
   ball.position.y = FLOAT + Math.sin(t * 1.2) * 0.4;
 }
