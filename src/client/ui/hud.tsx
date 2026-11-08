@@ -3,7 +3,7 @@ import { LEVEL_NAMES, REGIONS, TILES, maxLevel } from '../../shared/data';
 import { maxRounds } from '../../shared/state';
 import { leaveRoom } from '../controller';
 import { CAM, focusTok, lookAtMap, lookAtTile, setMinimap } from '../stage';
-import { G, actionBtn, activeTab, cards, cashEls, floats, hudLive, lastRoll, selectedTile, session, state, statsOf, tip, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
+import { G, actionBtn, activeTab, cards, cashEls, floats, hudLive, lastRoll, selectedTile, session, showMinimap, state, statsOf, tip, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
 import { Die, Face, Flag, Icon, Named, Pips, Rich, hex, money, tileHead } from './bits';
 import { minimapToWorld } from './minimap';
 import { openMenu, openRules } from './open';
@@ -142,13 +142,14 @@ const CAMS = [['rotl', 'left', 'Rotate view left'], ['rotr', 'right', 'Rotate vi
 
 export function Hud() {
   if (!useCell(hudLive)) return null; // only whether it is up: each part below subscribes to what it shows
+  const mm = useCell(showMinimap);
   return (
     <div id="hud">
       <Topbar />
       <div id="col">
         <Players />
         <Side />
-        <div id="minimap" className="box"><canvas ref={(c) => { setMinimap(c); }} onClick={(e) => lookAtMap(...minimapToWorld(e))} /></div>
+        {mm && <div id="minimap" className="box"><canvas ref={(c) => { setMinimap(c); }} onClick={(e) => lookAtMap(...minimapToWorld(e))} /></div>}
       </div>
       <Actions />
       <div id="camctl">{CAMS.map(([c, ic, title]) => <button key={c} className="btn sm" data-cam={c} title={title} onClick={CAM[c]}><Icon n={ic} /></button>)}</div>
