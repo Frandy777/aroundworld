@@ -11,6 +11,9 @@ export default {
     if (url.pathname !== '/api/ws') return new Response('Not found', { status: 404 });
     if (req.headers.get('Upgrade') !== 'websocket') return new Response('Expected a WebSocket', { status: 426 });
 
+    // A browser always names the page that opens a socket: only this site's own page may (the page and this API are one Worker), not another site's, nor a script that names none.
+    if (req.headers.get('Origin') !== url.origin) return new Response('Forbidden', { status: 403 });
+
     // Past here an object is woken, and billed for it (requests, writes, an alarm): a bad id is turned away before that, and one address may open only so many sockets a minute (to create, to join, or to probe a code: all alike).
     if (!PID_RE.test(url.searchParams.get('pid') ?? '')) return new Response('Bad id', { status: 400 });
     const { success } = await env.LIMITER.limit({ key: req.headers.get('CF-Connecting-IP') ?? '' });

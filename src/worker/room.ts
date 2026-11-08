@@ -8,7 +8,8 @@ export interface Env { ROOM: DurableObjectNamespace<Room>; LIMITER: RateLimit }
 
 const SEAT_GRACE_MS = 30_000; // in the lobby, a seat whose player vanished is kept this long (a page reload must not cost it)
 const IDLE_MS = 5 * 60_000; // nobody connected for this long: the room is dissolved
-const RATE_MS = 500, BURST_MS = 10_000; // a seat's `name`, `settings` and `bot` (each one is broadcast to the room): one is let through per RATE_MS, with up to BURST_MS worth of them at once; the rest are dropped
+const RATE_MS = 500, BURST_MS = 10_000; // a seat's `name`, `settings` and `bot` (each one is broadcast to the room): one is let through per RATE_MS, with up to BURST_MS worth of them at once; a connection that sends one over that is closed
+const FRAME_MAX = 256; // the longest message a client sends (an `answer` that picks every city) is under 200 bytes: a frame over this is not from our client, and is closed before it is parsed
 const DEV_ROOMS = import.meta.env.DEV; // dev rooms (bots, the dev panel) exist in development builds only: in production `?dev=1` makes a plain room (bots wake the object every 300ms, and the panel's commands grow the tape without limit)
 
 interface Seat {
@@ -112,7 +113,7 @@ export class Room extends DurableObject<Env> implements Host {
   // ---- Events from the runtime ----
   webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer) {
     const s = this.seatOf(ws);
-    if (s) this.onMessage(s, raw); // what a message changes is written by what changes it (`changed`, or the game when it waits again): one that changes nothing writes nothing
+    if (s) this.onMessage(ws, s, raw); // what a message changes is written by what changes it (`changed`, or the game when it waits again): one that changes nothing writes nothing
   }
   webSocketClose(ws: WebSocket, code: number) { this.onClose(ws, code); }
   webSocketError(ws: WebSocket) { this.onClose(ws, 1006); }
@@ -241,11 +242,12 @@ export class Room extends DurableObject<Env> implements Host {
     return false;
   }
 
-  private onMessage(s: Seat, raw: unknown) {
+  private onMessage(ws: WebSocket, s: Seat, raw: string | ArrayBuffer) {
+    if ((typeof raw === 'string' ? raw.length : raw.byteLength) > FRAME_MAX) return ws.close(1009, 'too big');
     let msg: C2S;
     try { msg = JSON.parse(String(raw)); } catch { return; }
     if (!msg || typeof msg !== 'object') return;
-    if ((msg.t === 'name' || msg.t === 'settings' || msg.t === 'bot') && this.limited(s)) return;
+    if ((msg.t === 'name' || msg.t === 'settings' || msg.t === 'bot') && this.limited(s)) return ws.close(1008, 'too fast');
     const host = s.pid === this.host;
     switch (msg.t) {
       case 'name':
