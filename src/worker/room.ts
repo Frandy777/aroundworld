@@ -9,6 +9,7 @@ export interface Env { ROOM: DurableObjectNamespace<Room> }
 const SEAT_GRACE_MS = 30_000; // in the lobby, a seat whose player vanished is kept this long (a page reload must not cost it)
 const IDLE_MS = 5 * 60_000; // nobody connected for this long: the room is dissolved
 const RATE_MS = 500, BURST_MS = 10_000; // a seat's `name`, `settings` and `bot` (each one is broadcast to the room): one is let through per RATE_MS, with up to BURST_MS worth of them at once; the rest are dropped
+const DEV_ROOMS = import.meta.env.DEV; // dev rooms (bots, the dev panel) exist in development builds only: in production `?dev=1` makes a plain room (bots wake the object every 300ms, and the panel's commands grow the tape without limit)
 
 interface Seat {
   pid: string; seat: number; name: string; pi: number; // pi: player index in the game, -1 before it starts
@@ -27,7 +28,7 @@ export class Room extends DurableObject<Env> implements Host {
   private code = ''; // '' while there is no room
   private seats: Seat[] = [];
   private host = ''; // pid of the host
-  dev = false; // a dev room (made with ?dev=1): its host may seat bots, and its roll question takes the commands of the dev panel (see `Host`)
+  dev = false; // a dev room (made with ?dev=1, in development only: see DEV_ROOMS): its host may seat bots, and its roll question takes the commands of the dev panel (see `Host`)
   private settings: Settings = { ...DEFAULT_SETTINGS };
   private game: Game | null = null;
   private idle = 0; // when a room nobody is connected to is dissolved (epoch ms; 0: somebody is)
@@ -49,6 +50,7 @@ export class Room extends DurableObject<Env> implements Host {
     if (!json) return;
     try {
       const { game, ...room }: Stored = JSON.parse(json);
+      if (room.dev && !DEV_ROOMS) return this.dissolve(); // a dev room that storage holds from before they were shut off in production: it ends here
       this.stored = json;
       Object.assign(this, room);
       if (game) {
@@ -84,7 +86,7 @@ export class Room extends DurableObject<Env> implements Host {
   create(code: string, dev: boolean) {
     if (this.code) return false;
     this.code = code;
-    this.dev = dev;
+    this.dev = dev && DEV_ROOMS;
     this.idle = Date.now() + IDLE_MS; // nobody is connected yet: if nobody comes, the room must not stay for ever
     this.save();
     return true;
