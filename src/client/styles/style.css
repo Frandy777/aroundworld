@@ -132,10 +132,11 @@ button, [data-tile], .pcard, .item, #minimap canvas { cursor: var(--cur-hand); }
 #minimap { position: fixed; left: 14px; bottom: 22px; padding: 2px; z-index: 11; }
 #minimap canvas { display: block; width: 228px; height: 124px; /* content box 216x112 = the 108x56 canvas at exactly 2px per pixel */ image-rendering: pixelated; background: repeating-conic-gradient(#22347a 0 25%, #1a2866 0 50%) 0 0 / 4px 4px padding-box; border: 6px solid transparent; border-image: var(--fr-well) 3 / 6px; }
 #camctl { position: fixed; right: 14px; bottom: 22px; display: grid; grid-template-columns: repeat(3, auto); z-index: 11; }
-/* Dev panel (a dev room): above the cards, so that it can be used with one open; it ends above ROLL DICE (the rest scrolls) */
-#dev { position: fixed; left: 328px; top: 76px; width: 340px; z-index: 50; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+/* Dev panel (a dev room): above the cards, so that it can be used with one open. It is under the top bar, on the bar's left edge (the button has no margin, to be flush with it), and ends above ROLL DICE (the rest scrolls) */
+#dev { position: fixed; left: 328px; top: calc(12px + var(--hh) + 10px); width: 340px; z-index: 50; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+#dev > .btn { margin: 0; }
 #dev .box { width: 100%; }
-#dev .bd { max-height: calc(100vh - 240px); }
+#dev .bd { max-height: calc(100vh - 270px); }
 #dev select { width: 100%; cursor: var(--cur-hand); }
 #dev textarea { width: 100%; resize: vertical; }
 
@@ -168,7 +169,7 @@ button, [data-tile], .pcard, .item, #minimap canvas { cursor: var(--cur-hand); }
   #camctl { top: calc(var(--st) + 8px); right: calc(var(--sr) + 8px); bottom: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; max-width: calc(100vw - var(--sl) - var(--sr) - 16px); } /* the top and bottom of the whole board are free (it is wider than tall): the buttons are one row up there */
   @media (max-width: 519px) { #camctl .btn { padding-inline: 3px; margin: 1px; } }
   #toasts { top: calc(var(--st) + 70px); left: var(--sl); right: var(--sr); } /* under the camera buttons */
-  #dev { left: var(--m); top: calc(var(--st) + 8px); max-width: calc(100vw - 2 * var(--m)); }
+  #dev { left: calc(var(--sl) + 10px); top: calc(var(--st) + 10px); max-width: calc(100vw - 2 * var(--m) - 10px); } /* inside the stage's frame (6px) and 4px from it, as the camera buttons are at the other corner */
   /* Compact cards: the face, the name over the cash. The cyan tab of a viewed card (see .viewing) would stick out of the column, and its ring says the same */
   .pcard .nm { font: var(--fs) / 20px var(--font); }
   .pcard .cash { font: var(--fs-md) / 28px var(--font-md); }
