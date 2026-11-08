@@ -10,6 +10,7 @@ const JERU = tileAt('Jerusalem');
 const ASK_MS = 60_000; // how long a player has to decide before the default answer is taken
 const OFFLINE_MS = 8_000; // ... when they are not connected (long enough to reload the page)
 const BOT_MS = 300; // ... when it is a bot: a beat for the screen to follow, then the default answer
+const LAPSE_MAX = 20; // questions in a row that ran out of time, with no answer in between: nobody is playing (an open tab alone keeps the room up), and the game ends
 
 export interface Host {
   emit(ev: Ev): void; // tell every client
@@ -27,7 +28,7 @@ const noMods = (): Mods => ({ fuel: false, half: false, back: false, magnet: fal
 // What a restart keeps of a game: how a turn began (a checkpoint), and what that turn has taken from outside since (the tape: its dice, and the answers it was given; `k` is 'rnd' or the kind of prompt answered).
 interface Entry { k: string; v: unknown }
 export interface Ckpt { S: GameState; mods: Mods[]; nextId: number; gone: number[]; turn: number; round: number; rig: number[] }
-export interface Saved { ckpt: Ckpt; tape: Entry[]; due: number }
+export interface Saved { ckpt: Ckpt; tape: Entry[]; due: number; lapsed: number }
 
 /** The game before its first turn. */
 export const fresh = (players: { name: string; color: number }[], settings: Settings): Ckpt => ({
@@ -114,6 +115,7 @@ export class Game {
   private tape: Entry[] = []; // what the turn in progress has taken from outside so far
   private replay: Entry[] | null = null; // the tape while it plays back after a restart; null once the game is live
   private wasDue = 0; // the clock the open question had before the restart
+  private lapsed = 0; // questions in a row that ran out of time (a bot's do not count; an answer clears it): see LAPSE_MAX
   private caughtUp?: () => void; // the playback is over
 
   /** A game standing at a checkpoint: a new one (`fresh`), or the one a restart found. */
@@ -130,7 +132,7 @@ export class Game {
   /** When the open question answers itself (epoch ms; 0: it waits). */
   get due() { return this.pending?.due ?? 0; }
   /** What a restart needs to bring the game back. */
-  get saved(): Saved { return { ckpt: this.ckpt, tape: this.tape, due: this.due }; }
+  get saved(): Saved { return { ckpt: this.ckpt, tape: this.tape, due: this.due, lapsed: this.lapsed }; }
 
   // ---- Chance and the tape ----
   // The game is a chain of awaits, which a restart cannot carry over. A turn can be played again though: from its checkpoint, fed from the tape instead of the dice and the
@@ -195,12 +197,19 @@ export class Game {
     if (!pend || pend.id !== id || pend.to !== pi) return;
     // A dev room's roll question also takes the panel's commands. One that makes no sense is an answer of nothing (false): the question is asked again, and the panel never ends up without it.
     const a = this.host.dev && pend.p.k === 'roll' && v !== true ? command(this.S, v) ?? false : check(pend.p, v);
-    if (a !== undefined) this.settle(pend, a);
+    if (a === undefined) return;
+    this.lapsed = 0;
+    this.settle(pend, a);
   }
   /** Somebody connected or left: the clock on the open question runs differently now. */
   presence() { if (this.pending) this.arm(this.pending); }
   /** The clock of the open question may have run out: then the default answer is taken. */
-  tick(now: number) { if (this.pending?.due && this.pending.due <= now) this.settle(this.pending, fallback(this.pending.p)); }
+  tick(now: number) {
+    const pend = this.pending;
+    if (!pend?.due || pend.due > now) return;
+    if (!this.host.bot(pend.to)) this.lapsed++;
+    this.settle(pend, fallback(pend.p));
+  }
   forfeit(pi: number) {
     this.gone.add(pi);
     if (this.pending?.to === pi) this.settle(this.pending, fallback(this.pending.p));
@@ -292,10 +301,10 @@ export class Game {
   }
 
   /** After a restart: play the turn in progress again from its checkpoint, fed from the tape. Resolves once it stands where it stood; rejects when the code no longer plays it the same way. */
-  resume({ tape, due }: Saved) {
+  resume({ tape, due, lapsed }: Saved) {
     if (this.S.over) return Promise.resolve();
     return new Promise<void>((caughtUp, fail) => {
-      this.replay = tape; this.wasDue = due; this.caughtUp = caughtUp;
+      this.replay = tape; this.wasDue = due; this.lapsed = lapsed ?? 0; this.caughtUp = caughtUp; // a game saved before the count has none
       this.run(true).then(caughtUp, (err) => { if (this.replay) fail(err); else console.error('game crashed', err); });
     });
   }
@@ -317,7 +326,7 @@ export class Game {
         await this.play(pi);
         if (this.replay) throw new Error('the turn ended before its tape did'); // the code plays it differently than it was played
       } while (this.again && !this.over() && !S.players[pi].out);
-      if (this.over()) break;
+      if (this.over() || this.lapsed >= LAPSE_MAX) break;
       do { if (++turn >= S.order.length) { turn = 0; round++; } } while (S.players[S.order[turn]].out);
       if (round > maxRounds(S)) break;
     }
