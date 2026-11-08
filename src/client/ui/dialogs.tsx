@@ -93,9 +93,9 @@ export function NewsCard({ c, close, redraw }: { c: News; close(): void; redraw?
   const auto = useAuto(redraw ? 0 : READ, close);
   const foot = redraw
     ? <><Btn id="again" onClick={() => redraw(true)}>DRAW AGAIN</Btn><Btn id="keep" cls="primary" onClick={() => redraw(false)}>KEEP</Btn></>
-    : <Btn id="ok" cls="primary" onClick={close}>OK</Btn>;
+    : <Btn id="ok" cls="primary" onClick={close}>GOT IT</Btn>;
   return (
-    <Card title="THE AROUNDWORLD TIMES" tone={0xf1e8cf} ink="#1a1c2c" cls="news" auto={auto} foot={foot}>
+    <Card title="NEWS" tone={0xf1e8cf} ink="#1a1c2c" cls="news" auto={auto} foot={foot}>
       <span className="pill" style={{ alignSelf: 'flex-start' }}>{c.cat.toUpperCase()}</span>
       <h3>{c.title}</h3>
       <p>{c.text}</p>

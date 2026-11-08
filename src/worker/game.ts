@@ -39,7 +39,6 @@ export const fresh = (players: { name: string; color: number }[], settings: Sett
   mods: players.map(noMods), nextId: 1, gone: [], turn: 0, round: 1, rig: [],
 });
 
-const rows = (...r: [l: string, v: string, sum?: boolean, tone?: Tone][]): Block => ({ k: 'rows', rows: r.map(([l, v, sum, tone]) => ({ l: [l], v: [v], sum, tone })) });
 const note = (...a: Msg): Block => ({ k: 'note', m: a });
 const tiles = (sel: number[]): Msg => sel.flatMap((i, k) => (k ? [', ', T(i)] : [T(i)]));
 
@@ -519,7 +518,6 @@ export class Game {
   // ---- Public tiles ----
   private async publicTile(pi: number, t: Tile) {
     const S = this.S, p = S.players[pi], inv = this.owned(pi, ['invest']), cities = this.owned(pi, ['city', 'special']);
-    const base = { sub: [p.name] as Msg, tone: t.color };
     switch (t.kind) {
       case 'start':
         this.give(pi, 3000);
@@ -532,20 +530,19 @@ export class Game {
         break;
       case 'exchange':
         if (!inv) { this.toast(`${t.name}: no investments, no dividend`); break; }
-        this.notice({ ...base, title: 'STOCK EXCHANGE', label: `COLLECT ${money(inv * 500)}`, body: [rows(['Investments owned', String(inv)], ['Dividend each', '$500']), note('Dividends are paid by the bank.')] });
+        this.toast(m`${t.name}: +${money(inv * 500)}`, 'good');
         this.give(pi, inv * 500);
         break;
       case 'tax': {
         const amt = cities * 300 + inv * 500;
         if (!amt) { this.toast(`${t.name}: nothing to tax`); break; }
-        this.notice({ ...base, title: 'TAX BUREAU', label: `PAY ${money(amt)}`, danger: true,
-          body: [rows([`Cities \u00D7 $300 (${cities})`, money(cities * 300)], [`Investments \u00D7 $500 (${inv})`, money(inv * 500)], ['Total', money(amt), true, 'bad'])] });
+        this.toast(m`${t.name}: -${money(amt)}`, 'bad');
         await this.pay(pi, amt);
         break;
       }
       case 'casino': await this.casino(pi, t); break;
       case 'club':
-        this.notice({ ...base, title: 'NIGHTCLUB', label: 'PAY $100 & PARTY', body: [note('Pay $100 and stay here for one turn. The effect does not trigger again.')] });
+        this.toast(m`${t.name}: -${money(100)} & party`, 'bad');
         if (await this.pay(pi, 100)) this.emit({ t: 'flag', pi, k: 'party', v: true });
         break;
       case 'bank': {
