@@ -74,17 +74,18 @@ button, [data-tile], .pcard, .item, #minimap canvas { cursor: var(--cur-hand); }
    Dock: a narrower window. The top bar is over the stage, and the players, the panel and the minimap are one column beside it.
    Stack: a window taller than wide. The top bar, the players, the stage and the panel go one under the other. */
 @property --cr { syntax: '<length>'; inherits: true; initial-value: 0px; }
-:root { --sl: 0px; --sr: 0px; --st: 0px; --sb: 0px; --m: 14px; --hh: 74px; --col: clamp(260px, 32vw, 320px); --cr: calc(var(--col) + 2 * var(--m)); }
+:root { --sl: 0px; --sr: 0px; --st: 0px; --sb: 0px; --m: 14px; --hh: 74px; --col: clamp(260px, 32vw, 320px); --cb: 110px; --cr: calc(var(--col) + 2 * var(--m)); }
+:root:has(#minimap) { --cb: 264px; }
 :root:has(#hud) :is(#gl, #codes) { left: var(--sl); top: var(--st); width: calc(100% - var(--sl) - var(--sr)); height: calc(100% - var(--st) - var(--sb)); }
 #topbar { position: fixed; top: 12px; left: calc(100% - 14px - var(--col)); right: 14px; height: var(--hh); display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 2px 10px; z-index: 12; }
 #round { white-space: nowrap; } #round b { color: var(--gold); font: 34px / 36px var(--font-hd); vertical-align: -2px; }
 @keyframes blink { 50% { opacity: 0.6; } }
 .tools { display: flex; }
 
-/* The column: the players over the panel (and the minimap, in the dock layout). In the overlay layout it floats at the right, under the top bar (the column's width, its first row), as tall as its content, down to above the minimap:
-   the window less 12 + the bar + 10 at the top, and 28 + the camera buttons' 50 + 10 + the minimap's 144 + 10 at the bottom (264px + the bar). No wider than 320px, or in a short window it covers
-   the top-right tiles of the whole-board view (the board is centred there, and ~0.96 x the window height wide) */
-#col { position: fixed; top: calc(12px + var(--hh) + 10px); right: 14px; width: var(--col); max-height: calc(100vh - 264px - var(--hh)); display: flex; flex-direction: column; gap: 10px; z-index: 11; }
+/* The column: the players over the panel (and the minimap, in the dock layout). In the overlay layout it floats at the right, under the top bar (the column's width, its first row), and always reaches down to above
+   the minimap — or, it hidden, to above the camera buttons — with the panel filling what the players leave: the window less 12 + the bar + 10 at the top, and 28 + the buttons' 50 + 10 at the bottom (110px + the bar,
+   plus the minimap's 144 + 10 when it shows: --cb). No wider than 320px, or in a short window it covers the top-right tiles of the whole-board view (the board is centred there, and ~0.96 x the window height wide) */
+#col { position: fixed; top: calc(12px + var(--hh) + 10px); right: 14px; width: var(--col); height: calc(100vh - var(--cb) - var(--hh)); display: flex; flex-direction: column; gap: 10px; z-index: 11; }
 #players { display: flex; flex-direction: column; gap: 10px; }
 .pcard { display: grid; grid-template-columns: 44px 1fr; gap: 0 10px; align-content: start; padding: 4px 4px 2px; transition: translate 0.1s steps(2); }
 .pcard:hover { translate: 4px 0; }
@@ -109,7 +110,7 @@ button, [data-tile], .pcard, .item, #minimap canvas { cursor: var(--cur-hand); }
 .pcard.on .nm > span:first-child::before { content: ''; display: inline-block; width: 16px; height: 18px; margin-right: 4px; vertical-align: -2px; background: var(--spr-tri) center / contain no-repeat; image-rendering: pixelated; animation: blink 0.8s steps(2) infinite; }
 
 /* Side panel: what the players leave of the column (min-height: it gives way to them, and its panes scroll) */
-#side { display: flex; flex-direction: column; min-height: 0; }
+#side { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .tabs { display: flex; gap: 2px; background: var(--ink); }
 .tabs button { flex: 1; font: var(--fs) / 20px var(--font); padding: 6px 0 4px; border: 0; color: var(--dim); background: linear-gradient(#2e3b8c 50%, #222c70 50%); box-shadow: inset 0 2px #4152a8, inset 0 -2px var(--ink); }
 .tabs button:hover { color: #fff; }
@@ -164,7 +165,7 @@ button, [data-tile], .pcard, .item, #minimap canvas { cursor: var(--cur-hand); }
 @media (height < 760px) {
   :root { --cr: 0px; } /* the board is centred in the window and fitted to all of it, with room above and below for the bar over its top: as before */
   #topbar { left: 328px; right: 348px; }
-  #col { top: 12px; max-height: calc(100vh - 100px); }
+  #col { top: 12px; height: calc(100vh - 100px); }
   #minimap { right: auto; left: 14px; bottom: 28px; }
 }
 
@@ -185,8 +186,7 @@ button, [data-tile], .pcard, .item, #minimap canvas { cursor: var(--cur-hand); }
   :root { --sl: var(--m); --sr: calc(var(--col) + 2 * var(--m)); --st: calc(var(--m) + var(--hh) + 10px); --sb: var(--m); --cr: 0px; }
   #hud::before { content: ''; position: fixed; z-index: 10; left: var(--sl); top: var(--st); right: var(--sr); bottom: var(--sb); border: 6px solid transparent; border-image: var(--fr-well) 3 / 6px; pointer-events: none; image-rendering: pixelated; } /* the stage's frame, over the edge of the canvas */
   #topbar { top: var(--m); left: var(--sl); right: var(--sr); }
-  #col { top: var(--m); bottom: var(--m); max-height: none; }
-  #side { flex: 1; }
+  #col { top: var(--m); bottom: var(--m); height: auto; max-height: none; }
   #minimap { position: static; align-self: center; }
   #actions { left: var(--sl); right: var(--sr); bottom: calc(var(--sb) + 14px); max-width: calc(100vw - var(--sl) - var(--sr) - 28px); flex-wrap: wrap; justify-content: center; }
   #camctl { top: calc(var(--st) + 8px); right: calc(var(--sr) + 8px); bottom: auto; width: auto; flex-wrap: wrap; justify-content: flex-end; max-width: calc(100vw - var(--sl) - var(--sr) - 16px); } /* the top and bottom of the whole board are free (it is wider than tall): the buttons are one row up there */
