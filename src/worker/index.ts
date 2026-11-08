@@ -1,4 +1,4 @@
-import { CODE_RE } from '../shared/protocol';
+import { CODE_RE, PID_RE } from '../shared/protocol';
 import type { Env } from './room';
 
 export { Room } from './room';
@@ -10,6 +10,11 @@ export default {
     const url = new URL(req.url);
     if (url.pathname !== '/api/ws') return new Response('Not found', { status: 404 });
     if (req.headers.get('Upgrade') !== 'websocket') return new Response('Expected a WebSocket', { status: 426 });
+
+    // Past here an object is woken, and billed for it (requests, writes, an alarm): a bad id is turned away before that, and one address may open only so many sockets a minute (to create, to join, or to probe a code: all alike).
+    if (!PID_RE.test(url.searchParams.get('pid') ?? '')) return new Response('Bad id', { status: 400 });
+    const { success } = await env.LIMITER.limit({ key: req.headers.get('CF-Connecting-IP') ?? '' });
+    if (!success) return new Response('Too many requests', { status: 429 });
 
     // Joining: the room is its code. Creating: draw codes until a free one is claimed.
     const code = url.searchParams.get('code');

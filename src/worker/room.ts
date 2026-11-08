@@ -1,10 +1,10 @@
 import { DurableObject } from 'cloudflare:workers';
 import { MAX_PLAYERS, PLAYER_DEFS } from '../shared/data';
-import { DEFAULT_SETTINGS, LEAVE, NAME_MAX, REPLACED, ROUNDS_MAX, ROUNDS_MIN, type C2S, type Fail, type RoomInfo, type S2C } from '../shared/protocol';
+import { DEFAULT_SETTINGS, LEAVE, NAME_MAX, PID_RE, REPLACED, ROUNDS_MAX, ROUNDS_MIN, type C2S, type Fail, type RoomInfo, type S2C } from '../shared/protocol';
 import type { Ev, Settings } from '../shared/types';
 import { Game, fresh, type Host, type Saved } from './game';
 
-export interface Env { ROOM: DurableObjectNamespace<Room> }
+export interface Env { ROOM: DurableObjectNamespace<Room>; LIMITER: RateLimit }
 
 const SEAT_GRACE_MS = 30_000; // in the lobby, a seat whose player vanished is kept this long (a page reload must not cost it)
 const IDLE_MS = 5 * 60_000; // nobody connected for this long: the room is dissolved
@@ -82,13 +82,12 @@ export class Room extends DurableObject<Env> implements Host {
     void (at < Infinity ? this.ctx.storage.setAlarm(at) : this.ctx.storage.deleteAlarm());
   }
 
-  /** Claim a code for a new room: false when it is taken. */
+  /** Claim a code for a new room: false when it is taken. Nothing is stored yet: the `fetch` that seats its creator follows, and saves once (a creator who never comes leaves nothing in storage, and no alarm). */
   create(code: string, dev: boolean) {
     if (this.code) return false;
     this.code = code;
     this.dev = dev && DEV_ROOMS;
     this.idle = Date.now() + IDLE_MS; // nobody is connected yet: if nobody comes, the room must not stay for ever
-    this.save();
     return true;
   }
 
@@ -165,7 +164,7 @@ export class Room extends DurableObject<Env> implements Host {
   // ---- Seats ----
   private join(ws: WebSocket, pid: string, name: string) {
     if (!this.code) return this.fail(ws, 'no-room');
-    if (!/^[\w-]{8,64}$/.test(pid)) return ws.close(1008, 'bad id');
+    if (!PID_RE.test(pid)) return ws.close(1008, 'bad id');
     let s = this.seats.find((x) => x.pid === pid);
     if (s?.left || (!s && this.game)) return this.fail(ws, 'started');
     if (!s) {

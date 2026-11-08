@@ -2,6 +2,7 @@ import type { Ev, GameState, Settings } from './types';
 
 export const NAME_MAX = 10;
 export const CODE_RE = /^\d{6}$/;
+export const PID_RE = /^[\w-]{8,64}$/; // a player's id (the client makes a UUID)
 export const ROUNDS_MIN = 5;
 export const ROUNDS_MAX = 100;
 export const DEFAULT_SETTINGS: Settings = { mode: 'limited', rounds: 30 };
