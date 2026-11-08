@@ -34,14 +34,17 @@ function takeInvite() {
   return CODE_RE.test(code) ? code : '';
 }
 
+const NAME_KEY = 'name'; // localStorage: the name you last went in with is already in the field
+
 /** Create a room, or join one by its number (`invite`: the one an invite link named). */
 function RoomCard({ join, invite, back }: { join: boolean; invite: string; back(): void }) {
-  const [name, setName] = useState(''), [code, setCode] = useState(invite), [why, setWhy] = useState(''), [busy, setBusy] = useState(false);
+  const [name, setName] = useState(() => localStorage.getItem(NAME_KEY) ?? ''), [code, setCode] = useState(invite), [why, setWhy] = useState(''), [busy, setBusy] = useState(false);
   const ok = !busy && (!join || CODE_RE.test(code));
   const go = async () => {
     if (!ok) return;
     setBusy(true);
     setWhy('');
+    localStorage.setItem(NAME_KEY, name);
     const err = await enter(join ? code : '', name);
     setBusy(false);
     if (err) setWhy(err);
@@ -94,7 +97,7 @@ const NAME_DELAY_MS = 300; // quiet after the last key before a name goes out
 /** The name of your own seat. Each name sent is broadcast to the whole room: it goes out once typing pauses, or at once when the field is left (so that START right after typing cannot beat it). */
 function NameInput({ name }: { name: string }) {
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const put = (v: string) => { clearTimeout(timer.current); timer.current = undefined; send({ t: 'name', name: v }); };
+  const put = (v: string) => { clearTimeout(timer.current); timer.current = undefined; localStorage.setItem(NAME_KEY, v); send({ t: 'name', name: v }); };
   return (
     <input maxLength={NAME_MAX} defaultValue={name}
       onChange={(e) => { const v = e.target.value; clearTimeout(timer.current); timer.current = setTimeout(() => put(v), NAME_DELAY_MS); }}
