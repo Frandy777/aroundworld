@@ -69,7 +69,7 @@ button, [data-tile], .pcard, .item, #minimap canvas { cursor: var(--cur-hand); }
 .ver { color: var(--dim); opacity: 0.8; text-shadow: 0 2px 0 var(--ink); }
 
 /* HUD, in three layouts by the room the window has. The 3D canvas is the window; once the HUD is up it is the stage: the window less the rails (--sl --sr --st --sb) that the panels take.
-   Overlay (the rules below): the whole board fits beside a 320px column, so the panels float over the canvas, all at the right: the top bar over the players over the panel, and at the bottom the minimap over the camera buttons.
+   Overlay (the rules below): the whole board fits beside a 320px column, so the panels float over the canvas, all at the right and as wide as the column: the top bar over the players over the panel, and at the bottom the minimap over the camera buttons (one row).
    The camera centres the board in what the column leaves of the canvas: --cr is how far it covers it from the right (its width and a gap), see scene.ts. The action bar, over the bottom of the canvas, is not made room for.
    Dock: a narrower window. The top bar is over the stage, and the players, the panel and the minimap are one column beside it.
    Stack: a window taller than wide. The top bar, the players, the stage and the panel go one under the other. */
@@ -82,9 +82,9 @@ button, [data-tile], .pcard, .item, #minimap canvas { cursor: var(--cur-hand); }
 .tools { display: flex; }
 
 /* The column: the players over the panel (and the minimap, in the dock layout). In the overlay layout it floats at the right, under the top bar (the column's width, its first row), as tall as its content, down to above the minimap:
-   the window less 12 + the bar + 10 at the top, and 22 + the camera buttons' 108 + 10 + the minimap's 144 + 10 at the bottom (316px + the bar). No wider than 320px, or in a short window it covers
+   the window less 12 + the bar + 10 at the top, and 28 + the camera buttons' 50 + 10 + the minimap's 144 + 10 at the bottom (264px + the bar). No wider than 320px, or in a short window it covers
    the top-right tiles of the whole-board view (the board is centred there, and ~0.96 x the window height wide) */
-#col { position: fixed; top: calc(12px + var(--hh) + 10px); right: 14px; width: var(--col); max-height: calc(100vh - 316px - var(--hh)); display: flex; flex-direction: column; gap: 10px; z-index: 11; }
+#col { position: fixed; top: calc(12px + var(--hh) + 10px); right: 14px; width: var(--col); max-height: calc(100vh - 264px - var(--hh)); display: flex; flex-direction: column; gap: 10px; z-index: 11; }
 #players { display: flex; flex-direction: column; gap: 10px; }
 .pcard { display: grid; grid-template-columns: 44px 1fr; gap: 0 10px; align-content: start; padding: 4px 4px 2px; transition: translate 0.1s steps(2); }
 .pcard:hover { translate: 4px 0; }
@@ -125,9 +125,10 @@ button, [data-tile], .pcard, .item, #minimap canvas { cursor: var(--cur-hand); }
 .dice-chip { display: flex; align-items: center; gap: 8px; padding: 4px 12px 2px; font: 34px / 36px var(--font-hd); color: var(--gold); text-shadow: 2px 2px 0 var(--brown); }
 .dice-chip .die { width: 32px; height: 32px; }
 
-#minimap { position: fixed; right: 14px; bottom: 140px; padding: 2px; z-index: 11; } /* over the camera buttons: 22px + their 108px + 10px */
-#minimap canvas { display: block; width: 228px; height: 124px; /* content box 216x112 = the 108x56 canvas at exactly 2px per pixel */ image-rendering: pixelated; background: repeating-conic-gradient(#22347a 0 25%, #1a2866 0 50%) 0 0 / 4px 4px padding-box; border: 6px solid transparent; border-image: var(--fr-well) 3 / 6px; }
-#camctl { position: fixed; right: 14px; bottom: 22px; display: grid; grid-template-columns: repeat(3, auto); z-index: 11; }
+#minimap { position: fixed; left: calc(100% - 14px - var(--col)); right: 14px; bottom: 88px; display: flex; padding: 2px; z-index: 11; } /* over the camera buttons: 28px + their 50px + 10px. As wide as the column, the canvas growing to fill it (the dock and short layouts leave it at 228px) */
+#minimap canvas { display: block; flex-grow: 1; width: 228px; height: 124px; /* a canvas pixel to every 2px of the content box (see drawMinimap): 216x112 = 108x56 pixels when it does not grow */ image-rendering: pixelated; background: repeating-conic-gradient(#22347a 0 25%, #1a2866 0 50%) 0 0 / 4px 4px padding-box; border: 6px solid transparent; border-image: var(--fr-well) 3 / 6px; }
+#camctl { position: fixed; right: 14px; bottom: 28px; width: var(--col); display: flex; justify-content: space-between; z-index: 11; } /* one row as wide as the column: six 50px buttons, 4px apart. Its bottom is in line with the action bar's buttons (its 26px and their 2px margin) */
+#camctl .btn { margin: 0; padding-inline: 3px; }
 /* Dev panel (a dev room): above the cards, so that it can be used with one open. It is on the left, where the top bar's left edge is in a short window (the button has no margin, to be flush with it), and ends above ROLL DICE (the rest scrolls) */
 #dev { position: fixed; left: 328px; top: calc(12px + var(--hh) + 10px); width: 340px; z-index: 50; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 #dev > .btn { margin: 0; }
@@ -163,8 +164,8 @@ button, [data-tile], .pcard, .item, #minimap canvas { cursor: var(--cur-hand); }
 @media (height < 760px) {
   :root { --cr: 0px; } /* the board is centred in the window and fitted to all of it, with room above and below for the bar over its top: as before */
   #topbar { left: 328px; right: 348px; }
-  #col { top: 12px; max-height: calc(100vh - 164px); }
-  #minimap { right: auto; left: 14px; bottom: 22px; }
+  #col { top: 12px; max-height: calc(100vh - 100px); }
+  #minimap { right: auto; left: 14px; bottom: 28px; }
 }
 
 /* Dock: a window with no room for the overlay (a 14px | 320px column on each side of the board), or too short for the players and the panel to share a side.
@@ -177,7 +178,8 @@ button, [data-tile], .pcard, .item, #minimap canvas { cursor: var(--cur-hand); }
   #side { flex: 1; }
   #minimap { position: static; align-self: center; }
   #actions { left: var(--sl); right: var(--sr); bottom: calc(var(--sb) + 14px); max-width: calc(100vw - var(--sl) - var(--sr) - 28px); flex-wrap: wrap; justify-content: center; }
-  #camctl { top: calc(var(--st) + 8px); right: calc(var(--sr) + 8px); bottom: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; max-width: calc(100vw - var(--sl) - var(--sr) - 16px); } /* the top and bottom of the whole board are free (it is wider than tall): the buttons are one row up there */
+  #camctl { top: calc(var(--st) + 8px); right: calc(var(--sr) + 8px); bottom: auto; width: auto; flex-wrap: wrap; justify-content: flex-end; max-width: calc(100vw - var(--sl) - var(--sr) - 16px); } /* the top and bottom of the whole board are free (it is wider than tall): the buttons are one row up there */
+  #camctl .btn { margin: 2px; padding-inline: 8px; } /* as buttons are elsewhere: the overlay's are narrower, to fit six in the column */
   @media (max-width: 519px) { #camctl .btn { padding-inline: 3px; margin: 1px; } }
   #toasts { top: calc(var(--st) + 70px); left: var(--sl); right: var(--sr); } /* under the camera buttons */
   #dev { left: calc(var(--sl) + 10px); top: calc(var(--st) + 10px); max-width: calc(100vw - 2 * var(--m) - 10px); } /* inside the stage's frame (6px) and 4px from it, as the camera buttons are at the other corner */

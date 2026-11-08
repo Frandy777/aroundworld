@@ -31,6 +31,9 @@ function drawBase(cv: HTMLCanvasElement, S: GameState) {
 }
 
 export function drawMinimap(cv: HTMLCanvasElement, S: GameState, toks: Token[], view: { x: number; z: number; w: number; h: number }) {
+  const w = cv.clientWidth >> 1, h = cv.clientHeight >> 1; // the page sizes the canvas (see style.css), a pixel to every 2px of it
+  if (!w) return; // hidden (see style.css): nothing to draw on
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; stale = true; } // sizing it clears it, and the chips are drawn again
   if (stale) drawBase(cv, S);
   const g = cv.getContext('2d')!, { k, ox, oz } = mm;
   g.clearRect(0, 0, cv.width, cv.height);

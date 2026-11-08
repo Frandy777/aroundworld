@@ -148,7 +148,7 @@ export function Hud() {
       <div id="col">
         <Players />
         <Side />
-        <div id="minimap" className="box"><canvas width={108} height={56} ref={(c) => { setMinimap(c); }} onClick={(e) => lookAtMap(...minimapToWorld(e))} /></div>
+        <div id="minimap" className="box"><canvas ref={(c) => { setMinimap(c); }} onClick={(e) => lookAtMap(...minimapToWorld(e))} /></div>
       </div>
       <Actions />
       <div id="camctl">{CAMS.map(([c, ic, title]) => <button key={c} className="btn sm" data-cam={c} title={title} onClick={CAM[c]}><Icon n={ic} /></button>)}</div>
