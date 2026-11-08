@@ -4,7 +4,7 @@ import type { GameState, Owned } from '../shared/types';
 import { addToken, clearTokens, initActors, placeAt, setActive, tokens, updateActors } from './render/actors';
 import { createBoard } from './render/board';
 import { POS } from './render/layout';
-import { BOARD_K, camera, controls, finishTweens, focus, initScene, overview, pick, render, renderer, resetView, rotateView, toScreen, updateCamera, updateTweens } from './render/scene';
+import { camera, controls, finishTweens, focus, initScene, overview, pick, render, renderer, resetView, rotateView, toScreen, updateCamera, updateTweens } from './render/scene';
 import { FLOAT, initWorld, updateWorld } from './render/world';
 import { SEED, SEED_AT } from './seed';
 import { G, activeTab, hudLive, selectedTile, tip } from './store';
@@ -47,7 +47,7 @@ export function enterDemo() {
   });
   board.select(-1);
   cam.follow = -1;
-  Object.assign(controls, { autoRotate: true, autoRotateSpeed: 0.5, minZoom: 0.7 / BOARD_K });
+  Object.assign(controls, { autoRotate: true, autoRotateSpeed: 0.5 });
   overview(FLOAT); // the camera orbits the globe itself, which stays in the middle of the screen
 }
 
@@ -55,7 +55,7 @@ export function enterGame() {
   controls.autoRotate = false;
   cam.follow = -1;
   resetView();
-  focus(0, 0, 1 / BOARD_K);
+  focus(0, 0, 'fit');
 }
 
 // ---- Camera ----
@@ -65,11 +65,11 @@ export const focusTok = (pi: number, zoom = 3) => {
   cam.follow = pi;
   focus(t.g.position.x, t.g.position.z, zoom);
 };
-const lookAt = (x: number, z: number, zoom = 3) => { cam.follow = -1; focus(x, z, zoom); };
-const zoom = (k: number) => lookAt(controls.target.x, controls.target.z, THREE.MathUtils.clamp(camera.zoom * k, 0.8 / BOARD_K, 6));
+const lookAt = (x: number, z: number, zoom: number | 'fit' = 3) => { cam.follow = -1; focus(x, z, zoom); };
+const zoom = (k: number) => lookAt(controls.target.x, controls.target.z, THREE.MathUtils.clamp(camera.zoom * k, controls.minZoom, controls.maxZoom));
 export const CAM = {
   rotl: () => rotateView(-1), rotr: () => rotateView(1), in: () => zoom(1.5), out: () => zoom(1 / 1.5),
-  follow: () => focusTok(G.S!.order[G.S!.turn]), map: () => lookAt(0, 0, 1 / BOARD_K),
+  follow: () => focusTok(G.S!.order[G.S!.turn]), map: () => lookAt(0, 0, 'fit'),
 };
 export const lookAtTile = (i: number) => { selectTile(i); lookAt(POS[i].x, POS[i].z); };
 export const lookAtMap = (x: number, z: number) => lookAt(x, z, Math.max(camera.zoom, 2));
@@ -80,10 +80,12 @@ export function selectTile(i: number) {
   board.select(i);
 }
 
-/** Where a token's floating numbers start, on screen. */
+/** Where a token's floating numbers start, in the window; none when the token is off the canvas (the panels are over there). */
 export function tokenSpot(pi: number): [number, number] | null {
   const t = tokens[pi];
-  return t && toScreen(new THREE.Vector3(t.g.position.x, t.g.position.y + 3.8, t.g.position.z));
+  if (!t) return null;
+  const [fx, fy] = toScreen(new THREE.Vector3(t.g.position.x, t.g.position.y + 3.8, t.g.position.z)), r = renderer.domElement.getBoundingClientRect();
+  return fx < 0 || fx > 1 || fy < 0 || fy > 1 ? null : [r.left + fx * r.width, r.top + fy * r.height];
 }
 
 // ---- The page ----

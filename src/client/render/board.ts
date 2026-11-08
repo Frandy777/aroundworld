@@ -93,7 +93,7 @@ export function createBoard() {
     if (!shown) return;
     const k = (w * camera.zoom) / (camera.right - camera.left), ph = down * k * Math.cos(controls.getPolarAngle()); // pixels per world unit, and the card's height on screen
     tiles.forEach((o, i) => {
-      const [x, y] = toScreen(o.card.getWorldPosition(at)).map((v) => (v * w) / innerWidth);
+      const [fx, fy] = toScreen(o.card.getWorldPosition(at)), x = fx * w, y = fy * h;
       if (x > -30 && x < w + 30 && y > -20 && y < h + 20) drawCode(ctx, TILES[i], x, y, ph, across * k, (o.card.material.color.getHex() & 255) / 255); // last: how bright the card looks (mortgaged = half)
     });
   }

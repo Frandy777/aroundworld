@@ -36,12 +36,12 @@ export const lodMap = <M extends THREE.Material & { map: THREE.Texture | null }>
   return mat;
 };
 
-// ---- Pixel pipeline: the scene renders at 1/PX of the window size and CSS upscales it with nearest-neighbour, so an art pixel is PX = 2 CSS px at every zoom: the
+// ---- Pixel pipeline: the scene renders at 1/PX of the canvas size and CSS upscales it with nearest-neighbour, so an art pixel is PX = 2 CSS px at every zoom: the
 // same grid as the UI frames. A buffer pixel bigger than a texel would average texels away, so a level is shown once its texels are a whole buffer pixel tall ----
 const PX = 2;
 const VIEW_H = 50; // world units on screen vertically at zoom 1
 const STEP = [PX / 2, PX]; // CSS px height of a near texel (a mid one is 2x that, a far one 4x) where the level goes far -> mid -> near
-const texelPx = () => (innerHeight * camera.zoom * Math.sin(ELEV)) / (VIEW_H * DENSITY);
+const texelPx = () => (rt.height * PX * camera.zoom * Math.sin(ELEV)) / (VIEW_H * DENSITY);
 // Up as soon as a threshold is reached, down only 8% below it, so a zoom resting on a threshold doesn't flicker between two designs.
 const levelNow = () => {
   const t = texelPx();
@@ -89,7 +89,7 @@ camera.position.set(0, Math.sin(ELEV) * 150, Math.cos(ELEV) * 150);
 export const controls = new OrbitControls(camera); // listens to nothing until initScene connects it to the canvas
 Object.assign(controls, {
   enableDamping: true, dampingFactor: 0.12, screenSpacePanning: false,
-  minZoom: 0.8 / BOARD_K, maxZoom: 6, minPolarAngle: THREE.MathUtils.degToRad(22), maxPolarAngle: THREE.MathUtils.degToRad(68),
+  maxZoom: 6, minPolarAngle: THREE.MathUtils.degToRad(22), maxPolarAngle: THREE.MathUtils.degToRad(68), // minZoom: see resize
 });
 controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
 controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
@@ -151,21 +151,27 @@ export function render() {
   camera.updateMatrixWorld();
 }
 
+// The zoom that shows the whole board, which with its margin is 52 * BOARD_K world units across: a canvas wider than tall is bound by its height, a narrow one by its width
+const fitZoom = () => Math.min(1, ((camera.right / camera.top) * VIEW_H) / 52) / BOARD_K;
+
 function resize() {
+  const cv = renderer.domElement, w = cv.clientWidth, h = cv.clientHeight;
+  if (!w || !h) return; // squeezed out of the page: it keeps the size it had
   renderer.setPixelRatio(1 / PX);
-  renderer.setSize(innerWidth, innerHeight);
+  renderer.setSize(w, h, false); // the page sizes the canvas (see style.css): the window, or what the panels leave of it
   const buf = renderer.getDrawingBufferSize(new THREE.Vector2());
   rt.setSize(buf.x, buf.y);
   texel.set(1 / buf.x, 1 / buf.y);
-  const a = buf.x / buf.y, h = VIEW_H; // the buffer's aspect, not the window's (it is rounded down): a world unit is then as many pixels across as down, which the pixel-exact lettering relies on
-  Object.assign(camera, { left: -h * a / 2, right: h * a / 2, top: h / 2, bottom: -h / 2 });
+  const a = buf.x / buf.y; // the buffer's aspect, not the canvas's (it is rounded down): a world unit is then as many pixels across as down, which the pixel-exact lettering relies on
+  Object.assign(camera, { left: -VIEW_H * a / 2, right: VIEW_H * a / 2, top: VIEW_H / 2, bottom: -VIEW_H / 2 });
   camera.updateProjectionMatrix();
+  controls.minZoom = 0.7 * fitZoom();
 }
 
-// Smooth "go look at X" camera goal; any user drag/zoom cancels it.
-let goal: { x: number; z: number; zoom?: number } | null = null;
+// Smooth "go look at X" camera goal; any user drag/zoom cancels it. 'fit' is the whole board, whatever the canvas is: the view follows it as the canvas changes.
+let goal: { x: number; z: number; zoom?: number | 'fit' } | null = null;
 controls.addEventListener('start', () => (goal = null));
-export const focus = (x: number, z: number, zoom?: number) => (goal = { x, z, zoom: zoom ?? goal?.zoom });
+export const focus = (x: number, z: number, zoom?: number | 'fit') => (goal = { x, z, zoom: zoom ?? goal?.zoom });
 
 export function updateCamera(dt: number) {
   const t = controls.target;
@@ -174,7 +180,7 @@ export function updateCamera(dt: number) {
   if (goal) {
     const k = 1 - Math.pow(0.003, dt), dx = (goal.x - t.x) * k, dy = -t.y * k, dz = (goal.z - t.z) * k; // the view also comes down to the ground (the title orbits the globe in the air)
     t.x += dx; t.y += dy; t.z += dz; camera.position.x += dx; camera.position.y += dy; camera.position.z += dz;
-    if (goal.zoom) { camera.zoom += (goal.zoom - camera.zoom) * k; camera.updateProjectionMatrix(); }
+    if (goal.zoom) { camera.zoom += ((goal.zoom === 'fit' ? fitZoom() : goal.zoom) - camera.zoom) * k; camera.updateProjectionMatrix(); }
   }
   controls.update();
   lod.n = levelNow(); // when the texel size crosses a threshold, the other level's art is drawn from this frame on
@@ -229,16 +235,18 @@ export function finishTweens() {
 
 // ---- Picking & projection ----
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
-// The index of the nearest of `objects` under the screen point, or -1. Only they are tested, not their children: pass plain shapes (the tiles' slabs), not the models standing on them.
+// The index of the nearest of `objects` under the point (x, y) of the window, or -1. Only they are tested, not their children: pass plain shapes (the tiles' slabs), not the models standing on them.
 export function pick(x: number, y: number, objects: THREE.Object3D[]) {
-  ndc.set((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1);
+  const r = renderer.domElement.getBoundingClientRect();
+  ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
   ray.setFromCamera(ndc, camera);
   const hit = ray.intersectObjects(objects, false)[0]?.object;
   return hit ? objects.indexOf(hit) : -1;
 }
+/** Where a world point is on the canvas, as a fraction of it across and down. */
 export function toScreen(v: THREE.Vector3): [number, number] {
   const p = v.clone().project(camera);
-  return [((p.x + 1) / 2) * innerWidth, ((1 - p.y) / 2) * innerHeight];
+  return [(p.x + 1) / 2, (1 - p.y) / 2];
 }
 
 // ---- Lights ----
@@ -288,10 +296,12 @@ function disposeTree(root: THREE.Object3D) {
 export function initScene() {
   controls.connect(renderer.domElement);
   scene.add(sky, sun, sun.target);
-  addEventListener('resize', resize);
+  renderer.domElement.style.width = renderer.domElement.style.height = ''; // the page sizes the canvas (see resize): drop a size that an older hot update gave it
+  const fit = new ResizeObserver(() => { resize(); render(); }); // a resized canvas is blank until it is drawn again, and the next frame may not be this one
+  fit.observe(renderer.domElement);
   resize();
   return () => {
-    removeEventListener('resize', resize);
+    fit.disconnect();
     controls.disconnect();
     finishTweens();
     goal = null;

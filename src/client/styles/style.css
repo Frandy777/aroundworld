@@ -9,7 +9,6 @@
   --green-hi: #b8f4a4; --green: #55d27a; --green-lo: #25985a; --pine: #146040;
   --cyan-hi: #a6e0ff; --cyan: #4da3ff; --cyan-lo: #2b68d4;
   --txt: var(--paper); --dim: var(--sky);
-  --pt: 98px; /* top of the player list and side panel: just under the top bar */
   --font: 'Jersey 10', monospace; --font-md: 'Jersey 15', 'Jersey 10', monospace; --font-hd: 'Jersey 20', 'Jersey 10', monospace; --fs: calc(56px / 3); --fs-md: 27px;
   --dither: repeating-conic-gradient(rgba(255, 255, 255, 0.05) 0 25%, transparent 0 50%); /* 2px checker, size set with background-size: 4px */
   --drop: drop-shadow(0 4px 0 rgba(6, 8, 28, 0.55));
@@ -18,7 +17,7 @@
 html, body { margin: 0; height: 100%; overflow: hidden; background: #14213d; font: var(--fs) / 20px var(--font); font-synthesis: none; -webkit-font-smoothing: none; color: var(--txt); user-select: none; cursor: var(--cur-arrow); }
 b { font-weight: normal; color: #fff; } /* one pixel weight only: emphasis = brighter colour, never faux-bold */
 [hidden] { display: none !important; }
-#gl, #codes { position: fixed; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+#gl, #codes { position: fixed; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; } /* the window, until a game has its HUD: then the stage (see HUD) */
 #codes { pointer-events: none; } /* the far level's card codes, over the 3D canvas */
 #gl.hot { cursor: var(--cur-hand); }
 button, input { font-family: inherit; }
@@ -69,9 +68,13 @@ button, [data-tile], .pcard, .item, #minimap canvas { cursor: var(--cur-hand); }
 .hint { margin: 0; color: var(--dim); text-shadow: 0 2px 0 var(--ink); }
 .ver { color: var(--dim); opacity: 0.8; text-shadow: 0 2px 0 var(--ink); }
 
-/* HUD */
-/* Centred by layout (auto margins), never by translate(-50%): a half-pixel transform would resample the frames and the text */
-#topbar { position: fixed; top: 12px; left: 0; right: 0; margin: 0 auto; width: max-content; display: flex; align-items: center; gap: 20px; padding: 2px 10px; z-index: 12; }
+/* HUD, in three layouts by the room the window has. The 3D canvas is the window; once the HUD is up it is the stage: the window less the rails (--sl --sr --st --sb) that the panels take.
+   Overlay (the rules below): the whole board, ~0.96 x the window height wide, fits between a 300px and a 320px column, so the panels float over the sides of the canvas.
+   Dock: a narrower window. The top bar is over the stage, and the players, the panel and the minimap are one column beside it.
+   Stack: a window taller than wide. The top bar, the players, the stage and the panel go one under the other. */
+:root { --sl: 0px; --sr: 0px; --st: 0px; --sb: 0px; --m: 14px; --hh: 74px; --col: clamp(260px, 32vw, 320px); }
+:root:has(#hud) :is(#gl, #codes) { left: var(--sl); top: var(--st); width: calc(100% - var(--sl) - var(--sr)); height: calc(100% - var(--st) - var(--sb)); }
+#topbar { position: fixed; top: 12px; left: 328px; right: 348px; height: var(--hh); display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 2px 10px; z-index: 12; container: topbar / inline-size; }
 #round { white-space: nowrap; } #round b { color: var(--gold); font: 34px / 36px var(--font-hd); vertical-align: -2px; }
 #phases { display: flex; gap: 4px; list-style: none; margin: 0; padding: 0; }
 #phases li { font: var(--fs) / 20px var(--font); padding: 4px 8px 2px; color: var(--dim); background: var(--navy) padding-box; border: 6px solid transparent; border-image: var(--fr-well) 3 / 6px; }
@@ -79,8 +82,12 @@ button, [data-tile], .pcard, .item, #minimap canvas { cursor: var(--cur-hand); }
 #phases li.on { color: #5a2e08; background: linear-gradient(var(--gold-hi) 0 2px, var(--gold) 2px 50%, var(--gold-lo) 50%) padding-box; border-image-source: var(--fr-btn-gold); animation: blink 1s steps(2) infinite; }
 @keyframes blink { 50% { opacity: 0.6; } }
 .tools { display: flex; }
+/* The phases give way to the room the bar has (its width less the frame and padding): all four, the one in play, none */
+@container topbar (max-width: 540px) { #phases li:not(.on) { display: none; } }
+@container topbar (max-width: 349px) { #phases { display: none; } }
 
-#players { position: fixed; left: 14px; top: var(--pt); width: 300px; display: flex; flex-direction: column; gap: 10px; z-index: 11; }
+#col { display: contents; } /* the column of the dock layout */
+#players { position: fixed; left: 14px; top: 12px; width: 300px; display: flex; flex-direction: column; gap: 10px; z-index: 11; }
 .pcard { display: grid; grid-template-columns: 44px 1fr; gap: 0 10px; align-content: start; padding: 4px 4px 2px; transition: translate 0.1s steps(2); }
 .pcard:hover { translate: 4px 0; }
 .pcard.on { --f: var(--fr-gold); background-image: var(--dither), linear-gradient(#3e4cb0, #28338a); }
@@ -106,7 +113,7 @@ button, [data-tile], .pcard, .item, #minimap canvas { cursor: var(--cur-hand); }
 .pcard.on .nm > span:first-child::before { content: ''; display: inline-block; width: 16px; height: 18px; margin-right: 4px; vertical-align: -2px; background: var(--spr-tri) center / contain no-repeat; image-rendering: pixelated; animation: blink 0.8s steps(2) infinite; }
 
 /* Side panel: no wider than 320px, or on laptop-sized windows it covers the top-right tiles of the whole-board view (the board is centred and ~0.96 x the window height wide) */
-#side { position: fixed; right: 14px; top: var(--pt); width: 320px; max-height: calc(100vh - var(--pt) - 152px); display: flex; flex-direction: column; z-index: 11; }
+#side { position: fixed; right: 14px; top: 12px; width: 320px; max-height: calc(100vh - 164px); display: flex; flex-direction: column; z-index: 11; }
 .tabs { display: flex; gap: 2px; background: var(--ink); }
 .tabs button { flex: 1; font: var(--fs) / 20px var(--font); padding: 6px 0 4px; border: 0; color: var(--dim); background: linear-gradient(#2e3b8c 50%, #222c70 50%); box-shadow: inset 0 2px #4152a8, inset 0 -2px var(--ink); }
 .tabs button:hover { color: #fff; }
@@ -115,6 +122,7 @@ button, [data-tile], .pcard, .item, #minimap canvas { cursor: var(--cur-hand); }
 .logline { padding: 4px 0; border-bottom: 2px dotted rgba(255, 255, 255, 0.14); color: var(--mist); }
 .logline i { color: var(--dim); font-style: normal; margin-right: 6px; }
 
+/* Centred by layout (auto margins), never by translate(-50%): a half-pixel transform would resample the frames and the text */
 #actions { position: fixed; bottom: 26px; left: 0; right: 0; margin: 0 auto; width: max-content; display: flex; align-items: center; gap: 14px; z-index: 12; }
 #actions .btn { animation: pulse 1.2s steps(2) infinite; }
 @keyframes pulse { 50% { translate: 0 -2px; } }
@@ -143,11 +151,45 @@ button, [data-tile], .pcard, .item, #minimap canvas { cursor: var(--cur-hand); }
 .float.hud { margin-left: -320px; text-align: right; --dy: -28px; } /* beside a card's cash: its right end sits at x, and it rises less */
 @keyframes float { to { transform: translateY(var(--dy, -64px)); opacity: 0; } }
 
-/* Wide enough for one row: the top bar stretches between the two panels (14px | 300px panel | 14px ... 14px | 320px panel | 14px) and all three share the top edge */
-@media (min-width: 1361px) { :root { --pt: 12px; } #topbar { left: 328px; right: 348px; margin: 0; width: auto; justify-content: space-between; } }
-@media (max-width: 1100px) { #side { width: 300px; } #players { width: 272px; } #phases { display: none; } }
-@media (max-width: 800px) { #side, #minimap { display: none; } .tagline { font: var(--fs) / 20px var(--font); } }
+@media (max-width: 800px) { .tagline { font: var(--fs) / 20px var(--font); } }
 @media (max-height: 830px) { .pcard:not(.on) .sub { display: none; } }
+
+/* Dock: a window with no room for the overlay (14px | 300px players | 14px ... 14px | 320px panel | 14px, the board in between), or too short for the players and the minimap to share a side.
+   The top bar sits over the stage, the players, the panel and the minimap are one column beside it */
+@media (width < calc(670px + 96vh)), (height < 620px) {
+  :root { --sl: var(--m); --sr: calc(var(--col) + 2 * var(--m)); --st: calc(var(--m) + var(--hh) + 10px); --sb: var(--m); }
+  #hud::before { content: ''; position: fixed; z-index: 10; left: var(--sl); top: var(--st); right: var(--sr); bottom: var(--sb); border: 6px solid transparent; border-image: var(--fr-well) 3 / 6px; pointer-events: none; image-rendering: pixelated; } /* the stage's frame, over the edge of the canvas */
+  #topbar { top: var(--m); left: var(--sl); right: var(--sr); }
+  #col { position: fixed; top: var(--m); right: var(--m); bottom: var(--m); width: var(--col); display: flex; flex-direction: column; gap: 10px; z-index: 11; }
+  #players { position: static; width: auto; gap: 6px; }
+  #side { position: static; width: auto; max-height: none; flex: 1; min-height: 0; }
+  #minimap { position: static; align-self: center; }
+  #actions { left: var(--sl); right: var(--sr); bottom: calc(var(--sb) + 14px); max-width: calc(100vw - var(--sl) - var(--sr) - 28px); flex-wrap: wrap; justify-content: center; }
+  #camctl { top: calc(var(--st) + 8px); right: calc(var(--sr) + 8px); bottom: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; max-width: calc(100vw - var(--sl) - var(--sr) - 16px); } /* the top and bottom of the whole board are free (it is wider than tall): the buttons are one row up there */
+  @media (max-width: 519px) { #camctl .btn { padding-inline: 3px; margin: 1px; } }
+  #toasts { top: calc(var(--st) + 70px); left: var(--sl); right: var(--sr); } /* under the camera buttons */
+  #dev { left: var(--m); top: calc(var(--st) + 8px); max-width: calc(100vw - 2 * var(--m)); }
+  /* Compact cards: the face, the name over the cash. The cyan tab of a viewed card (see .viewing) would stick out of the column, and its ring says the same */
+  .pcard .nm { font: var(--fs) / 20px var(--font); }
+  .pcard .cash { font: var(--fs-md) / 28px var(--font-md); }
+  .pcard .sub, .pcard.viewing::after { display: none; }
+  @media (min-aspect-ratio: 1/1) and (height < 560px) { #players { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); } .pcard { grid-template-columns: 1fr; } .face { display: none; } } /* two cards across, without their faces, to leave the panel its room */
+  @media (height < 800px) { #minimap { display: none; } }
+}
+
+/* Stack: a window taller than wide. From the top: the bar, the players (all across, or two by two in a narrow window), the stage, the panel */
+@media (max-aspect-ratio: 1/1) {
+  :root { --ph: 70px; --pnl: clamp(168px, 24dvh, 260px); --sr: var(--m); --st: calc(var(--m) + var(--hh) + var(--ph) + 16px); --sb: calc(var(--m) + var(--pnl) + 8px); }
+  #col { display: contents; }
+  #players { position: fixed; top: calc(var(--m) + var(--hh) + 8px); left: var(--m); right: var(--m); height: var(--ph); display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+  #side { position: fixed; top: auto; left: var(--m); right: var(--m); bottom: var(--m); height: var(--pnl); }
+  #minimap { display: none; }
+}
+@media (max-aspect-ratio: 1/1) and (max-width: 739px) {
+  :root:has(#players > :nth-child(3)) { --ph: 146px; }
+  #players { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @media (max-width: 399px) { .pcard { column-gap: 6px; } .pcard.on .nm > span:first-child::before { display: none; } } /* a name and YOU take all the room a card has: the gold frame says whose turn it is */
+}
 
 /* Multiplayer: who is who on a card, and the lobby's rows */
 .badge.gold { background: var(--gold); color: #5a2e08; }
