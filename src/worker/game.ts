@@ -401,6 +401,12 @@ export class Game {
     if (!o || o.m) return;
     if (o.p === pi) { if (t.kind === 'oil') { this.give(pi, 400); this.toast(m`${T(i)}: +$400`, 'good'); } return; }
     if (!this.collects(o.p)) return;
+    await this.toll(pi, i);
+  }
+
+  // The fee a chokepoint or Hong Kong charges a player who passes — or stops.
+  private async toll(pi: number, i: number) {
+    const S = this.S, t = TILES[i], o = S.own[i], p = S.players[pi];
     if (t.kind === 'choke') {
       const fee = [100, 300, 500, 1000][this.count(o.p, 'choke') - 1];
       this.toast(m`Toll at ${T(i)}: -${money(fee)}`, 'bad');
@@ -440,7 +446,10 @@ export class Game {
     if (o.m) return this.toast(m`${T(i)} is mortgaged: no fee`);
     if (!this.collects(o.p)) return this.toast(`${owner.name} is in jail: no fee`);
     const fee = this.rent(pi, t, o);
-    if (!fee) return this.toast(m`${owner.name} owns ${T(i)} (passive effect, no toll)`);
+    if (!fee) {
+      if (t.kind === 'choke' || t.name === 'Hong Kong') return this.toll(pi, i);
+      return this.toast(m`${owner.name} owns ${T(i)} (passive effect, no toll)`);
+    }
     this.log(m`${P(pi)} paid ${money(fee)} rent to ${P(o.p)}`);
     await this.pay(pi, fee, o.p);
   }

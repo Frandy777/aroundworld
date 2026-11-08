@@ -23,14 +23,14 @@ export const INVEST: Record<InvestKind, { label: string; price: number; fx: stri
   transport: { label: 'Transport Co.', price: 2000, fx: 'Players landing here pay $500 / $1,000 / $2,000 when the owner holds 1 / 2 / 3 transport companies.' },
   build: { label: 'Construction Co.', price: 4000, fx: 'Owner may upgrade any city from empty land to Lv1 for free.' },
   military: { label: 'Military Base', price: 3000, fx: 'When the owner lands here, pay $500 to lower any city by 1 building level.' },
-  choke: { label: 'Chokepoint', price: 1500, fx: 'Players passing pay $100 / $300 / $500 / $1,000 when the owner holds 1 / 2 / 3 / 4 chokepoints.' },
+  choke: { label: 'Chokepoint', price: 1500, fx: 'Players passing or stopping here pay $100 / $300 / $500 / $1,000 when the owner holds 1 / 2 / 3 / 4 chokepoints.' },
   oil: { label: 'Oil Co.', price: 2000, fx: 'Owner earns $400 whenever they pass this tile.' },
   bbc: { label: 'Media', price: 3000, fx: 'Whenever anyone triggers News, owner earns $500. When the owner triggers News, they may discard it and draw again.' },
   devil: { label: 'Prison Island', price: 3000, fx: 'Whenever anyone goes to jail, owner earns $700. If the owner is jailed, they may pay $700 bail and skip the stay.' },
 };
 
 export const SPECIAL: Record<string, string> = {
-  'Hong Kong': 'Charges players passing by 5% / 10% / 20% of their cash.',
+  'Hong Kong': 'Charges players passing or stopping here 5% / 10% / 20% of their cash.',
   Pyongyang: 'Owner pays 10% / 20% / 30% less rent on regular cities.',
   Zurich: 'Whenever anyone gets money from the bank, owner earns $100 / $200 / $500.',
   'New York': 'Whenever anyone upgrades a city to max level, owner earns $300 / $500 / $1,000.',
