@@ -25,9 +25,18 @@ function Banner({ text, i }: { text: string; i: number }) {
   return <span ref={ref} />;
 }
 
-/** Create a room, or join one by its number. */
-function RoomCard({ join, back }: { join: boolean; back(): void }) {
-  const [name, setName] = useState(''), [code, setCode] = useState(''), [why, setWhy] = useState(''), [busy, setBusy] = useState(false);
+/** The room number an invite link names (`?room=123456`). It leaves the address as it is read, so it is offered once: not again after a game, and a reload (which goes back to its room by itself, see boot) does not flash it. */
+function takeInvite() {
+  const url = new URL(location.href), code = url.searchParams.get('room');
+  if (code === null) return '';
+  url.searchParams.delete('room');
+  history.replaceState(history.state, '', url);
+  return CODE_RE.test(code) ? code : '';
+}
+
+/** Create a room, or join one by its number (`invite`: the one an invite link named). */
+function RoomCard({ join, invite, back }: { join: boolean; invite: string; back(): void }) {
+  const [name, setName] = useState(''), [code, setCode] = useState(invite), [why, setWhy] = useState(''), [busy, setBusy] = useState(false);
   const ok = !busy && (!join || CODE_RE.test(code));
   const go = async () => {
     if (!ok) return;
@@ -58,8 +67,9 @@ function RoomCard({ join, back }: { join: boolean; back(): void }) {
 
 export function Title() {
   const { view } = useCell(session);
-  const [dlg, setDlg] = useState<'create' | 'join' | null>(null);
-  useEffect(() => { if (view !== 'title') setDlg(null); }, [view]);
+  const [invite, setInvite] = useState(takeInvite), [dlg, setDlg] = useState<'create' | 'join' | null>(invite ? 'join' : null); // an invite link opens JOIN ROOM with its number in, once
+  const back = () => { setDlg(null); setInvite(''); };
+  useEffect(() => { if (view !== 'title') back(); }, [view]);
   return (
     <>
       <section id="title" className="screen">
@@ -73,7 +83,7 @@ export function Title() {
         <p className="hint">Drag: pan &nbsp;|&nbsp; Right-drag: rotate &nbsp;|&nbsp; Wheel: zoom</p>
         <small className="ver">AROUNDWORLD v0.1</small>
       </section>
-      {view === 'title' && dlg && <RoomCard join={dlg === 'join'} back={() => setDlg(null)} />}
+      {view === 'title' && dlg && <RoomCard join={dlg === 'join'} invite={invite} back={back} />}
     </>
   );
 }
@@ -109,6 +119,18 @@ function Seat({ i, s, me, bots }: { i: number; s?: SeatInfo; me: boolean; bots: 
   );
 }
 
+/** Puts `text` on the clipboard; the label says COPIED! for a moment (a toast would sit under the card, see .modal). */
+function CopyBtn({ id, text, children }: { id: string; text: string; children: string }) {
+  const [done, setDone] = useState(false), timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const copy = async () => {
+    await navigator.clipboard.writeText(text);
+    setDone(true);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setDone(false), 1500);
+  };
+  return <Btn id={id} cls="sm" onClick={() => void copy()}>{done ? 'COPIED!' : children}</Btn>;
+}
+
 const MODES: [Settings['mode'], string][] = [['limited', 'LIMITED ROUNDS'], ['endless', 'ENDLESS']];
 
 export function Lobby() {
@@ -124,7 +146,11 @@ export function Lobby() {
         ? <Btn id="go" cls="primary" disabled={seats.length < 2} onClick={() => send({ t: 'start' })}>START GAME</Btn>
         : <Btn id="wait" disabled onClick={() => {}}>WAITING FOR HOST</Btn>}
     </>}>
-      <div className="note">Friends join with the room number <b className="gold">{room.code}</b>.</div>
+      <div className="invite">
+        <div className="note">Friends join with the room number <b className="gold">{room.code}</b>.</div>
+        <CopyBtn id="code" text={room.code}>COPY CODE</CopyBtn>
+        <CopyBtn id="link" text={`${location.origin}/?room=${room.code}`}>COPY LINK</CopyBtn>
+      </div>
       <div className="field"><label>PLAYERS {seats.length} / {MAX_PLAYERS}</label>
         {PLAYER_DEFS.map((_, i) => <Seat key={i} i={i} s={seats.find((s) => s.seat === i)} me={i === room.me} bots={host && room.dev} />)}
       </div>

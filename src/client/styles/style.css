@@ -196,3 +196,5 @@ button, [data-tile], .pcard, .item, #minimap canvas { cursor: var(--cur-hand); }
 .badge.gold { background: var(--gold); color: #5a2e08; }
 .badge.dim { background: var(--indigo); color: var(--dim); }
 .pl-row .nm { flex: 1; min-width: 0; padding-left: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* a name that is not mine to edit, in line with my input */
+.invite { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; } /* the room number and the buttons that pass it on: in a narrow card the buttons drop under it */
+.invite .note { flex: 1 1 auto; }
