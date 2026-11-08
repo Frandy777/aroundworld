@@ -1,7 +1,7 @@
 import type { CasinoView, NewsCard as News, Notice, OrderPass, Player, Prompt, RankRow } from '../../shared/types';
 import { reply } from '../asks';
-import { cell, openCard, type Open } from '../store';
-import { Btn, Card, CasinoCard, ConfirmCard, DeedCard, NewsCard, NoticeCard, OrderCard, PickCard, ResultsCard, RulesCard, type Ctl } from './dialogs';
+import { autoFocus, cell, openCard, type Open } from '../store';
+import { Btn, Card, CasinoCard, Check, ConfirmCard, DeedCard, NewsCard, NoticeCard, OrderCard, PickCard, ResultsCard, RulesCard, type Ctl } from './dialogs';
 
 // Putting a card up is not a component, so it lives apart from the cards (dialogs.tsx): a module that exports anything but components can't be hot-refreshed in place.
 
@@ -37,7 +37,9 @@ export const openMenu = (room: string, quit: () => void) => openCard((close) => 
     <Btn id="quit" cls="danger" onClick={() => { close(); quit(); }}>QUIT TO TITLE</Btn>
     <Btn id="rules" onClick={() => void openRules()}>HOW TO PLAY</Btn>
     <Btn id="resume" cls="primary" onClick={() => close()}>RESUME</Btn>
-  </>} />
+  </>}>
+    <Check label="Auto-focus on current player" on={autoFocus} />
+  </Card>
 ));
 
 /** The card of a casino visit: one card for the whole visit, which stays up while `view` and `ask` (the question put to this player, if any) change under it. */

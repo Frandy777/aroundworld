@@ -6,7 +6,7 @@ import { clearDice, hideDice, hop, jump, placeAt, removeToken, rollDice, setActi
 import { home } from './render/layout';
 import { finishTweens, pace, wait } from './render/scene';
 import { enterDemo, enterGame, focusTok, selectTile, setOwner, showState, tokenSpot } from './stage';
-import { G, actionBtn, activeTab, bump, bumpAssets, cashEls, clearCards, floatText, floats, hudLive, lastRoll, selectedTile, session, tip, toast, toasts, viewedPlayer, waitingFor, type Button, type Open } from './store';
+import { G, actionBtn, activeTab, autoFocus, bump, bumpAssets, cashEls, clearCards, floatText, floats, hudLive, lastRoll, selectedTile, session, tip, toast, toasts, viewedPlayer, waitingFor, type Button, type Open } from './store';
 import { openAsk, openCasino, openNews, openNotice, openOrder, openResults } from './ui/open';
 import { money } from './ui/bits';
 
@@ -23,6 +23,8 @@ const BACKLOG = 10; // events waiting beyond this many speed everything up: 20 w
 const live = <T>(p: Promise<T>): Promise<T> => { const e = epoch; return p.then((v) => (e === epoch ? v : new Promise<T>(() => {}))); };
 const pause = (s: number) => live(wait(s));
 const quiet = () => document.hidden; // nobody sees it: no cards, toasts or numbers, only the state
+/** The view goes to the player whose turn it is (mine too), when the preference asks for it. */
+const focusTurn = (pi: number) => { if (autoFocus.get()) focusTok(pi); };
 
 let shown: Open<void> | null = null; // the card being waited on that has nothing to decide
 /** Wait for a card with nothing to decide. A hidden tab throttles the timer that closes it, and nobody sees it there: it comes down as the tab goes hidden. */
@@ -92,7 +94,7 @@ export function restore(m: { me: number; state: GameState; ask: Ev | null }) {
   session.set({ ...session.get(), view: 'game' });
   showState(m.state);
   enterGame();
-  focusTok(m.state.order[m.state.turn]);
+  focusTurn(m.state.order[m.state.turn]);
   if (m.ask) queue.push(m.ask);
   if (m.state.over) queue.push({ t: 'over', rank: ranking(m.state) });
   bumpAssets();
@@ -149,7 +151,7 @@ async function play(ev: Ev) {
       apply(S, ev);
       lastRoll.set(null); actionBtn.set(null); waitingFor.set(-1);
       setActive(S.order[S.turn]);
-      focusTok(S.order[S.turn]);
+      focusTurn(S.order[S.turn]);
       bump();
       await pause(0.6);
       return;
@@ -167,7 +169,7 @@ async function play(ev: Ev) {
       const tok = tokens[ev.pi];
       if (tok) await live(ev.how === 'hop' ? hop(tok, ev.to) : jump(tok, ev.to));
       apply(S, ev);
-      if (ev.how === 'jump' && ev.pi === cur) focusTok(ev.pi); // the camera follows a hop by itself; a jump leaves it behind
+      if (ev.how === 'jump' && ev.pi === cur) focusTurn(ev.pi); // the camera follows a hop by itself; a jump leaves it behind
       bump();
       return;
     }

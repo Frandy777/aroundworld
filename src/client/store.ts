@@ -43,6 +43,11 @@ export const lastRoll = cell<[number, number] | null>(null); // the last roll, i
 export const actionBtn = cell<Button | null>(null); // the one button in the action bar
 export const waitingFor = cell(-1); // the player the game is waiting for
 
+// ---- Preferences: this client's own, kept in localStorage ----
+const FOCUS_KEY = 'autoFocus';
+export const autoFocus = cell(localStorage.getItem(FOCUS_KEY) === 'true'); // the view goes to the player whose turn begins (mine too); off until asked for
+autoFocus.sub(() => localStorage.setItem(FOCUS_KEY, String(autoFocus.get())));
+
 // ---- Toasts and floating numbers: they remove themselves ----
 export interface Toast { id: number; m: Msg; tone: Tone }
 export interface Float { id: number; x: number; y: number; text: string; cls: string }

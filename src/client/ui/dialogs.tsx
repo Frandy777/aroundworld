@@ -30,6 +30,11 @@ export function Card({ title, sub = '', tone = 0x333b66, ink = '#fff', cls = '',
 export const Btn = ({ id, cls = '', disabled, onClick, children }: { id: string; cls?: string; disabled?: boolean; onClick(): void; children: ReactNode }) => (
   <button className={`btn ${cls}`} data-id={id} disabled={disabled} onClick={onClick}>{children}</button>
 );
+/** A yes / no option: a box that is ticked while `on` holds true, and flips with a click. */
+export function Check({ label, on }: { label: string; on: Cell<boolean> }) {
+  const v = useCell(on);
+  return <div className={`item ${v ? 'sel' : ''}`} onClick={() => on.set(!v)}><span className="check" /><span className="grow">{label}</span></div>;
+}
 const TICKS = 20; // the steps a card's wait is counted down in: its bar loses one at a time, like a 16-bit gauge
 /** Run `fn` once, `ms` after the card is up (less while the screen is catching up, see `pace`): a card with nothing to decide closes itself.
  *  The wait is counted down in TICKS steps, and `left` (percent) is what is still to go, for the card to show as a bar. The count stands still while the pointer
