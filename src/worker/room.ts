@@ -2,7 +2,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { MAX_PLAYERS, PLAYER_DEFS } from '../shared/data';
 import { DEFAULT_SETTINGS, LEAVE, NAME_MAX, PID_RE, REPLACED, ROUNDS_MAX, ROUNDS_MIN, type C2S, type Fail, type RoomInfo, type S2C } from '../shared/protocol';
 import type { Ev, Settings } from '../shared/types';
-import { Game, fresh, type Host, type Saved } from './game';
+import { Game, fresh, type Ckpt, type Host, type Saved } from './game';
 
 export interface Env { ROOM: DurableObjectNamespace<Room>; LIMITER: RateLimit }
 
@@ -16,8 +16,9 @@ interface Seat {
   left: boolean; drop: number; // drop: when the seat of a player who vanished is let go (epoch ms; 0: it is held)
   bot?: true; // a bot (dev rooms): no connection, always there, and it answers by itself (see `Host.bot`)
 }
-// What is written to storage of a room (see `save`). The connections are not: the runtime keeps them.
-interface Stored { code: string; host: string; dev: boolean; settings: Settings; idle: number; seats: Seat[]; game?: Saved }
+// What is written to storage of a room (see `save`), under two keys. 'room': the room, and what the turn in progress has taken so far (it changes at every step). 'ckpt': how that turn began (it changes once a turn, and it
+// is nearly all of the bytes: the whole state, with its log). The connections are not written: the runtime keeps them.
+interface Stored { code: string; host: string; dev: boolean; settings: Settings; idle: number; seats: Seat[]; game?: Omit<Saved, 'ckpt'> }
 
 const cleanName = (raw: string, seat: number) => Array.from(raw.replace(/[\u0000-\u001f\u007f]/g, '').trim()).slice(0, NAME_MAX).join('').trim() || PLAYER_DEFS[seat].name;
 
@@ -34,8 +35,9 @@ export class Room extends DurableObject<Env> implements Host {
   private idle = 0; // when a room nobody is connected to is dissolved (epoch ms; 0: somebody is)
   private batch: string[] = []; // events of this tick, already serialised: they go out together
   private next = new WeakMap<Seat, number>(); // per seat, when its next `name` or `settings` is due at the pace of RATE_MS (see `limited`; kept in memory only)
-  private stored = ''; // what storage holds of the room
-  private alarmAt = NaN; // what the alarm is set to (NaN: unknown)
+  private stored = ''; // what storage holds of the room ('room')
+  private ckpt?: Ckpt; // ... and of the game's checkpoint ('ckpt')
+  private alarmAt = Infinity; // what the alarm is set to (Infinity: none): it is only ever moved sooner, see `save`
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -48,16 +50,18 @@ export class Room extends DurableObject<Env> implements Host {
   private async restore() {
     const json = this.ctx.storage.kv.get<string>('room');
     if (!json) return;
+    this.alarmAt = (await this.ctx.storage.getAlarm()) ?? Infinity; // the alarm that was left set (see `save`): a deadline that it covers does not set it again
     try {
       const { game, ...room }: Stored = JSON.parse(json);
       if (room.dev && !DEV_ROOMS) return this.dissolve(); // a dev room that storage holds from before they were shut off in production: it ends here
       this.stored = json;
       Object.assign(this, room);
       if (game) {
-        let g = (this.game = new Game(this, game.ckpt));
+        const ckpt: Ckpt = JSON.parse(this.ctx.storage.kv.get<string>('ckpt')!);
+        let g = (this.game = new Game(this, (this.ckpt = ckpt)));
         try { await g.resume(game); } catch (err) { // the code plays the turn differently than it was played (game.ts was edited under it): the room is not lost for that, the turn starts over from its checkpoint
           console.warn('replay failed, the turn starts over', err);
-          g = this.game = new Game(this, game.ckpt);
+          g = this.game = new Game(this, ckpt);
           this.seats.forEach((s) => this.snapshot(s)); // whoever is still connected saw the turn go on: back to where it began (the events of the new run follow)
           g.run(true).catch((e) => console.error('game crashed', e));
         }
@@ -70,16 +74,20 @@ export class Room extends DurableObject<Env> implements Host {
     }
   }
 
-  /** Write the room down, and set the alarm for the first deadline there is. Called wherever something may have changed. */
+  /**
+   * Write the room down, and see that the alarm is set for the first deadline there is. Called wherever something may have changed: a write costs, so what is the same as stored is not written.
+   * The alarm is only ever moved sooner. A deadline that comes later than the alarm waits for it: it goes off early, finds nothing due, and `alarm` sets it for the next. So each question
+   * that is asked after another one costs no write for its clock. And an alarm that nothing waits for any more is left to go off: that is cheaper than taking it back.
+   */
   save() {
     if (!this.code) return; // dissolved: nothing is kept
-    const { code, host, dev, settings, idle, seats } = this;
-    const json = JSON.stringify({ code, host, dev, settings, idle, seats, game: this.game?.saved } satisfies Stored);
+    const { code, host, dev, settings, idle, seats } = this, saved = this.game?.saved;
+    if (saved && saved.ckpt !== this.ckpt) this.ctx.storage.kv.put('ckpt', JSON.stringify((this.ckpt = saved.ckpt))); // a checkpoint is never changed, only replaced (see `Game.mark`): it is written when it is a new one
+    const json = JSON.stringify({ code, host, dev, settings, idle, seats, game: saved && { tape: saved.tape, due: saved.due, lapsed: saved.lapsed } } satisfies Stored);
     if (json !== this.stored) this.ctx.storage.kv.put('room', (this.stored = json));
     const at = Math.min(...[idle, this.game?.due ?? 0, ...seats.map((s) => s.drop)].filter(Boolean)); // Infinity: nothing to wait for
-    if (at === this.alarmAt) return;
-    this.alarmAt = at;
-    void (at < Infinity ? this.ctx.storage.setAlarm(at) : this.ctx.storage.deleteAlarm());
+    if (at >= this.alarmAt) return;
+    void this.ctx.storage.setAlarm((this.alarmAt = at));
   }
 
   /** Claim a code for a new room: false when it is taken. Nothing is stored yet: the `fetch` that seats its creator follows, and saves once (a creator who never comes leaves nothing in storage, and no alarm). */
@@ -104,22 +112,18 @@ export class Room extends DurableObject<Env> implements Host {
   // ---- Events from the runtime ----
   webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer) {
     const s = this.seatOf(ws);
-    if (s) this.onMessage(s, raw);
-    this.save();
+    if (s) this.onMessage(s, raw); // what a message changes is written by what changes it (`changed`, or the game when it waits again): one that changes nothing writes nothing
   }
   webSocketClose(ws: WebSocket, code: number) { this.onClose(ws, code); }
   webSocketError(ws: WebSocket) { this.onClose(ws, 1006); }
 
   /** A deadline has come: of a room nobody is in, of the seat of a player who vanished, or of the question that waits for an answer. */
   alarm() {
-    this.alarmAt = NaN; // spent
+    this.alarmAt = Infinity; // spent
     const now = Date.now();
-    if (this.idle && this.idle <= now) this.dissolve();
-    else {
-      this.seats.filter((s) => s.drop && s.drop <= now).forEach((s) => this.leave(s));
-      this.game?.tick(now);
-    }
-    this.save();
+    if (this.idle && this.idle <= now) return this.dissolve();
+    this.seats.filter((s) => s.drop && s.drop <= now).forEach((s) => this.leave(s));
+    if (!this.game?.tick(now)) this.save(); // a question that answers itself is written by the game when it waits again, as one that was answered is
   }
 
   // ---- Host (what the game needs of its room) ----
@@ -154,6 +158,8 @@ export class Room extends DurableObject<Env> implements Host {
     };
   }
   private broadcastRoom() { this.seats.forEach((s) => this.send(s, { t: 'room', room: this.info(s) })); }
+  /** A seat or the settings changed: tell the room, and write it down. */
+  private changed() { this.broadcastRoom(); this.save(); }
   /** Where the game stands, for a client with nothing to go by: one that joined or came back, or one whose turn has just started over (see `restore`). */
   private snapshot(s: Seat) { if (this.game) this.send(s, { t: 'game', me: s.pi, state: this.game.S, ask: this.game.pendingEv }); }
   private fail(ws: WebSocket, why: Fail) {
@@ -221,7 +227,8 @@ export class Room extends DurableObject<Env> implements Host {
     this.code = '';
     this.idle = 0;
     this.stored = '';
-    this.alarmAt = NaN;
+    this.ckpt = undefined;
+    this.alarmAt = Infinity; // `deleteAll` takes the alarm with it
     void this.ctx.storage.deleteAll();
   }
 
@@ -244,13 +251,13 @@ export class Room extends DurableObject<Env> implements Host {
       case 'name':
         if (this.game || typeof msg.name !== 'string') return;
         s.name = cleanName(msg.name, s.seat);
-        this.broadcastRoom();
+        this.changed();
         break;
       case 'settings': {
         const { mode, rounds } = msg.s ?? {};
         if (this.game || !host || (mode !== 'limited' && mode !== 'endless') || !Number.isInteger(rounds) || rounds < ROUNDS_MIN || rounds > ROUNDS_MAX) return;
         this.settings = { mode, rounds };
-        this.broadcastRoom();
+        this.changed();
         break;
       }
       case 'bot': {
@@ -258,7 +265,7 @@ export class Room extends DurableObject<Env> implements Host {
         if (!this.dev || this.game || !host || !Number.isInteger(seat) || seat < 0 || seat >= MAX_PLAYERS || (at && !at.bot)) return;
         if (at) this.seats = this.seats.filter((x) => x !== at);
         else this.seats.push({ pid: crypto.randomUUID(), seat, name: `Bot ${PLAYER_DEFS[seat].name}`, pi: -1, left: false, drop: 0, bot: true }); // the id is nobody's to guess: no connection can take the seat over
-        this.broadcastRoom();
+        this.changed();
         break;
       }
       case 'start': if (!this.game && host && this.seats.length >= 2) this.start(); break;
@@ -271,7 +278,7 @@ export class Room extends DurableObject<Env> implements Host {
     [...this.seats].sort((a, b) => a.seat - b.seat).forEach((s, i) => (s.pi = i));
     const players = [...this.seats].sort((a, b) => a.pi - b.pi).map((s) => ({ name: s.name, color: PLAYER_DEFS[s.seat].color }));
     this.game = new Game(this, fresh(players, this.settings));
-    this.broadcastRoom();
+    this.broadcastRoom(); // not `changed`: the game asks its first question as `run` begins, and that writes the room
     this.game.run().catch((err) => console.error('game crashed', err));
   }
 
@@ -284,6 +291,6 @@ export class Room extends DurableObject<Env> implements Host {
     this.seats.forEach((s) => (s.pi = -1));
     if (!this.seats.some((s) => s.pid === this.host)) this.host = this.seats.find((s) => !s.bot)?.pid ?? '';
     if (!this.host) return this.dissolve(); // nobody but bots
-    this.broadcastRoom();
+    this.changed();
   }
 }

@@ -203,12 +203,13 @@ export class Game {
   }
   /** Somebody connected or left: the clock on the open question runs differently now. */
   presence() { if (this.pending) this.arm(this.pending); }
-  /** The clock of the open question may have run out: then the default answer is taken. */
+  /** The clock of the open question may have run out: then the default answer is taken (true). */
   tick(now: number) {
     const pend = this.pending;
-    if (!pend?.due || pend.due > now) return;
+    if (!pend?.due || pend.due > now) return false;
     if (!this.host.bot(pend.to)) this.lapsed++;
     this.settle(pend, fallback(pend.p));
+    return true;
   }
   forfeit(pi: number) {
     this.gone.add(pi);
@@ -301,7 +302,7 @@ export class Game {
   }
 
   /** After a restart: play the turn in progress again from its checkpoint, fed from the tape. Resolves once it stands where it stood; rejects when the code no longer plays it the same way. */
-  resume({ tape, due, lapsed }: Saved) {
+  resume({ tape, due, lapsed }: Omit<Saved, 'ckpt'>) {
     if (this.S.over) return Promise.resolve();
     return new Promise<void>((caughtUp, fail) => {
       this.replay = tape; this.wasDue = due; this.lapsed = lapsed ?? 0; this.caughtUp = caughtUp; // a game saved before the count has none
