@@ -203,18 +203,20 @@ export function overview(lift: number) {
   camera.updateProjectionMatrix();
 }
 
-// Orbit to an axis-aligned azimuth, where the tiles face the camera squarely.
+// Orbit to an axis-aligned azimuth, where the tiles face the camera squarely. pickY may also lift the camera back to a height
+// (resetView restores the default ELEV pitch after a free drag; rotateView keeps the height it has).
 const Q = Math.PI / 2;
-function orbitTo(pickAngle: (a: number) => number) {
+function orbitTo(pickAngle: (a: number) => number, pickY: (r: number, y: number) => number = (_r, y) => y) {
   const t = controls.target, off = camera.position.clone().sub(t);
   const a0 = Math.atan2(off.x, off.z), a1 = pickAngle(a0), r = Math.hypot(off.x, off.z);
+  const y0 = off.y, y1 = pickY(r, y0);
   return tween(0.5, (k) => {
     const a = a0 + (a1 - a0) * k;
-    camera.position.set(t.x + Math.sin(a) * r, camera.position.y, t.z + Math.cos(a) * r);
+    camera.position.set(t.x + Math.sin(a) * r, t.y + y0 + (y1 - y0) * k, t.z + Math.cos(a) * r);
   }, easeInOut);
 }
 export const rotateView = (dir: number) => orbitTo((a: number) => Math.round(a / Q) * Q + dir * Q);
-export const resetView = () => orbitTo(() => 0);
+export const resetView = () => orbitTo(() => 0, (r) => r * Math.tan(ELEV));
 
 // ---- Tweens (promise based, driven by the main loop) ----
 export const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);

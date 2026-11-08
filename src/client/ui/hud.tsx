@@ -138,7 +138,7 @@ function Actions() {
 }
 
 // ---- Camera ----
-const CAMS = [['rotl', 'left', 'Rotate view left'], ['rotr', 'right', 'Rotate view right'], ['in', 'plus', 'Zoom in'], ['out', 'minus', 'Zoom out'], ['follow', 'focus', 'Focus on current player'], ['map', 'globe', 'Whole board']] as const;
+const CAMS = [['rotl', 'left', 'Rotate view left'], ['reset', 'home', 'Reset view'], ['in', 'plus', 'Zoom in'], ['out', 'minus', 'Zoom out'], ['follow', 'focus', 'Focus on current player'], ['map', 'globe', 'Whole board']] as const;
 
 export function Hud() {
   if (!useCell(hudLive)) return null; // only whether it is up: each part below subscribes to what it shows

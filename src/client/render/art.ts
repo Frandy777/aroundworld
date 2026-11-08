@@ -160,6 +160,12 @@ export const ICONS: Record<string, string[]> = {
     'olLnLLLNNNNuuuuo', 'oLnnNLLNNNNmuuuo', 'oLLNLLLLNNmmuuuo', '.oLLLLLLNmmuuuo.',
     '.oLLLLLuumuuuuo.', '..oLLLuuuuuuuo..', '...oouuuuuuoo...', '.....oooooo.....',
   ],
+  home: [
+    '................', '.......oo.......', '......oabo......', '.....oaabbo.....',
+    '....oaabbcco....', '...oaabbcccco...', '..oaabbbccccco..', '..oooooooooooo..',
+    '....obbbbbbo....', '....obxbbxbo....', '....obbkkbbo....', '....obbkKbbo....',
+    '....obbkKbbo....', '....obbkKbbo....', '..oooooooooooo..', '................',
+  ],
   help: [
     '.....oooooo.....', '...oolllllloo...', '..olllLLLLlllo..', '.ollLLLLLLLLuuo.',
     '.olLLLwwwwLLLuo.', 'ollLLwwLLwwLLuuo', 'olLLLLLLwwLLLuuo', 'olLLLLLwwLLLuuuo',
