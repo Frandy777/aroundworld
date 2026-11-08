@@ -528,8 +528,6 @@ export class Game {
         break;
       case 'jail': this.toast(`${p.name} is just visiting`); break;
       case 'gojail':
-        this.notice({ ...base, title: 'GO TO JAIL', tone: 0xd9423e, label: 'BUSTED', danger: true,
-          body: [note('You are sent straight to Jail and will skip your next turn. Jailed players cannot collect fees.')] });
         await this.sendToJail(pi);
         break;
       case 'exchange':
