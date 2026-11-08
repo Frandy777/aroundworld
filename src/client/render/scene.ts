@@ -82,7 +82,9 @@ export const pixelTexture = (src: HTMLCanvasElement, repeat?: number) => {
 };
 
 // ---- Camera & controls ----
-export const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 600);
+// The near plane lies as far behind the camera as the far plane lies before it: the view is orthographic, so the camera's own plane is no reason to cut the world. At the lowest
+// tilt and the farthest zoom the sea along the bottom of the screen is behind it, and a band of bare background would show there.
+export const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -600, 600);
 const ELEV = THREE.MathUtils.degToRad(52);
 camera.position.set(0, Math.sin(ELEV) * 150, Math.cos(ELEV) * 150);
 
@@ -101,23 +103,23 @@ controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
 //   `unit` (world units per pixel) turns the depth difference into a number of pixels, so the same line is drawn at every zoom. ----
 const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthTexture: new THREE.DepthTexture(1, 1) });
 rt.texture.minFilter = rt.texture.magFilter = THREE.NearestFilter;
-const texel = new THREE.Vector2(), unit = { value: 0.07 };
+const texel = new THREE.Vector2(), unit = { value: 0.07 }, lim = { value: 0.72 };
 const post = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
-  uniforms: { tc: { value: rt.texture }, td: { value: rt.depthTexture }, texel: { value: texel }, unit, span: { value: camera.far - camera.near } },
+  uniforms: { tc: { value: rt.texture }, td: { value: rt.depthTexture }, texel: { value: texel }, unit, lim, span: { value: camera.far - camera.near } },
   vertexShader: 'varying vec2 v; void main() { v = uv; gl_Position = vec4(position.xy, 0., 1.); }',
   fragmentShader: `
-    uniform sampler2D tc, td; uniform vec2 texel; uniform float unit, span; varying vec2 v;
+    uniform sampler2D tc, td; uniform vec2 texel; uniform float unit, lim, span; varying vec2 v;
     void main() {
       vec2 n[4] = vec2[4](vec2(1, 0), vec2(-1, 0), vec2(0, 1), vec2(0, -1));
       vec3 c = texture2D(tc, v).rgb;
-      float z = texture2D(td, v).x * span, top = 0.72, sum = 0.; // 0.72 world units of depth make a silhouette
+      float z = texture2D(td, v).x * span, top = lim, sum = 0.; // lim: the depth step of a silhouette, 0.72 world units or more (see snap)
       bool rim = false; // on a silhouette (just behind a nearer pixel, or just in front of a farther one) the depth step is no crease
       for (int i = 0; i < 4; i++) {
         vec2 u = v + n[i] * texel;
         float d = texture2D(td, u).x * span - z; // > 0: the neighbour is farther
         sum += d;
         if (-d > top) { top = -d; c = texture2D(tc, u).rgb * 0.07 + vec3(0.003, 0.006, 0.02); }
-        rim = rim || abs(d) > 0.72;
+        rim = rim || abs(d) > lim;
       }
       float k = rim ? 0. : sum / unit; // the kink in pixels of depth: ~2 for a wall against the ground or a roof ridge, 0 on a flat face
       gl_FragColor = vec4(k > 0.9 ? c * 1.32 + 0.035 : k < -0.9 ? c * 0.62 : c, 1.);
@@ -140,6 +142,9 @@ function snap() {
   camera.position.add(snapped.set(m[0] * da + m[4] * db, m[1] * da + m[5] * db, m[2] * da + m[6] * db));
   camera.updateMatrixWorld();
   unit.value = u;
+  // Flat ground is a ramp in depth: up the screen it steps u * tan(polar angle) deeper per pixel. Far out and low down (the farthest zoom at the lowest tilt) that passes 0.72, and
+  // every pixel of the ground would be taken for the silhouette of the one below it and inked dark. A silhouette must then step a quarter deeper than the ground does.
+  lim.value = Math.max(0.72, 1.25 * u * Math.tan(controls.getPolarAngle()));
 }
 export function render() {
   snap();
