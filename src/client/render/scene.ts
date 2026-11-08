@@ -151,8 +151,13 @@ export function render() {
   camera.updateMatrixWorld();
 }
 
-// The zoom that shows the whole board, which with its margin is 52 * BOARD_K world units across: a canvas wider than tall is bound by its height, a narrow one by its width
-const fitZoom = () => Math.min(1, ((camera.right / camera.top) * VIEW_H) / 52) / BOARD_K;
+// The zoom that shows the whole board, which with its margin is 52 * BOARD_K world units across: a canvas wider than tall is bound by its height (leaving room above and below for the bars), a narrow one by its width.
+// In a game, in the overlay layout, the column floats over the canvas, and the page says how far it reaches into it from the right edge (--cr): the view then looks at the middle of what it leaves,
+// the stage, and the board is fitted to it, to its whole height (the action bar, over the bottom, is not made room for).
+let framed = false, fitZoom = 0.5; // fitZoom: worked out by resize
+export const free = { w: 1 }; // the share of the canvas's width that the column leaves
+export const frame = (on: boolean) => { if (on !== framed) { framed = on; resize(); } }; // a game begins, or ends
+const css = getComputedStyle(document.documentElement);
 
 function resize() {
   const cv = renderer.domElement, w = cv.clientWidth, h = cv.clientHeight;
@@ -164,11 +169,14 @@ function resize() {
   texel.set(1 / buf.x, 1 / buf.y);
   const a = buf.x / buf.y; // the buffer's aspect, not the canvas's (it is rounded down): a world unit is then as many pixels across as down, which the pixel-exact lettering relies on
   Object.assign(camera, { left: -VIEW_H * a / 2, right: VIEW_H * a / 2, top: VIEW_H / 2, bottom: -VIEW_H / 2 });
-  camera.updateProjectionMatrix();
-  controls.minZoom = 0.7 * fitZoom();
+  const cr = framed ? parseFloat(css.getPropertyValue('--cr')) || 0 : 0; // how far the column reaches in, CSS px
+  free.w = 1 - cr / w;
+  camera.setViewOffset(buf.x, buf.y, Math.round(cr / 2 / PX), 0, buf.x, buf.y); // the canvas's middle moves left by half of what is covered, in whole buffer pixels (see snap)
+  fitZoom = cr ? (VIEW_H / (52 * BOARD_K)) * Math.min(a * free.w, 1 / Math.sin(ELEV)) : Math.min(1, (a * VIEW_H) / 52) / BOARD_K;
+  controls.minZoom = 0.7 * fitZoom;
 }
 
-// Smooth "go look at X" camera goal; any user drag/zoom cancels it. 'fit' is the whole board, whatever the canvas is: the view follows it as the canvas changes.
+// Smooth "go look at X" camera goal; any user drag/zoom cancels it. 'fit' is the whole board, whatever the canvas and the panels are: the view follows it as they change.
 let goal: { x: number; z: number; zoom?: number | 'fit' } | null = null;
 controls.addEventListener('start', () => (goal = null));
 export const focus = (x: number, z: number, zoom?: number | 'fit') => (goal = { x, z, zoom: zoom ?? goal?.zoom });
@@ -180,7 +188,7 @@ export function updateCamera(dt: number) {
   if (goal) {
     const k = 1 - Math.pow(0.003, dt), dx = (goal.x - t.x) * k, dy = -t.y * k, dz = (goal.z - t.z) * k; // the view also comes down to the ground (the title orbits the globe in the air)
     t.x += dx; t.y += dy; t.z += dz; camera.position.x += dx; camera.position.y += dy; camera.position.z += dz;
-    if (goal.zoom) { camera.zoom += ((goal.zoom === 'fit' ? fitZoom() : goal.zoom) - camera.zoom) * k; camera.updateProjectionMatrix(); }
+    if (goal.zoom) { camera.zoom += ((goal.zoom === 'fit' ? fitZoom : goal.zoom) - camera.zoom) * k; camera.updateProjectionMatrix(); }
   }
   controls.update();
   lod.n = levelNow(); // when the texel size crosses a threshold, the other level's art is drawn from this frame on

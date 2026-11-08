@@ -4,7 +4,7 @@ import type { GameState, Owned } from '../shared/types';
 import { addToken, clearTokens, initActors, placeAt, setActive, tokens, updateActors } from './render/actors';
 import { createBoard } from './render/board';
 import { POS } from './render/layout';
-import { camera, controls, finishTweens, focus, initScene, overview, pick, render, renderer, resetView, rotateView, toScreen, updateCamera, updateTweens } from './render/scene';
+import { camera, controls, finishTweens, focus, frame, free, initScene, overview, pick, render, renderer, resetView, rotateView, toScreen, updateCamera, updateTweens } from './render/scene';
 import { FLOAT, initWorld, updateWorld } from './render/world';
 import { SEED, SEED_AT } from './seed';
 import { G, activeTab, hudLive, selectedTile, tip } from './store';
@@ -48,12 +48,14 @@ export function enterDemo() {
   board.select(-1);
   cam.follow = -1;
   Object.assign(controls, { autoRotate: true, autoRotateSpeed: 0.5 });
+  frame(false);
   overview(FLOAT); // the camera orbits the globe itself, which stays in the middle of the screen
 }
 
 export function enterGame() {
   controls.autoRotate = false;
   cam.follow = -1;
+  frame(true);
   resetView();
   focus(0, 0, 'fit');
 }
@@ -136,7 +138,7 @@ export function initStage() {
       updateCamera(dt);
       if (hudLive.get() && G.S && minimap) {
         const el = Math.PI / 2 - controls.getPolarAngle();
-        drawMinimap(minimap, G.S, tokens, { x: controls.target.x, z: controls.target.z, w: (camera.right - camera.left) / camera.zoom, h: (camera.top - camera.bottom) / camera.zoom / Math.sin(el) });
+        drawMinimap(minimap, G.S, tokens, { x: controls.target.x, z: controls.target.z, w: (free.w * (camera.right - camera.left)) / camera.zoom, h: (camera.top - camera.bottom) / camera.zoom / Math.sin(el) });
       }
       board.labels(hudLive.get());
       render();
