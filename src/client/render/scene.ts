@@ -42,6 +42,7 @@ const PX = 2;
 const VIEW_H = 50; // world units on screen vertically at zoom 1
 const STEP = [PX / 2, PX]; // CSS px height of a near texel (a mid one is 2x that, a far one 4x) where the level goes far -> mid -> near
 const texelPx = () => (rt.height * PX * camera.zoom * Math.sin(ELEV)) / (VIEW_H * DENSITY);
+export const pxUnit = (zoom = camera.zoom) => VIEW_H / (zoom * rt.height); // world units per buffer pixel, at the view's zoom or at another
 // Up as soon as a threshold is reached, down only 8% below it, so a zoom resting on a threshold doesn't flicker between two designs.
 const levelNow = () => {
   const t = texelPx();
@@ -85,7 +86,7 @@ export const pixelTexture = (src: HTMLCanvasElement, repeat?: number) => {
 // The near plane lies as far behind the camera as the far plane lies before it: the view is orthographic, so the camera's own plane is no reason to cut the world. At the lowest
 // tilt and the farthest zoom the sea along the bottom of the screen is behind it, and a band of bare background would show there.
 export const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -600, 600);
-const ELEV = THREE.MathUtils.degToRad(52);
+export const ELEV = THREE.MathUtils.degToRad(52);
 camera.position.set(0, Math.sin(ELEV) * 150, Math.cos(ELEV) * 150);
 
 export const controls = new OrbitControls(camera); // listens to nothing until initScene connects it to the canvas
@@ -135,7 +136,7 @@ const postScene = new THREE.Scene().add(post), postCam = new THREE.OrthographicC
 const snapped = new THREE.Vector3();
 function snap() {
   camera.updateMatrixWorld();
-  const m = camera.matrixWorld.elements, p = camera.position, u = VIEW_H / (camera.zoom * rt.height); // u: world units per buffer pixel
+  const m = camera.matrixWorld.elements, p = camera.position, u = pxUnit();
   const a = p.x * m[0] + p.y * m[1] + p.z * m[2], b = p.x * m[4] + p.y * m[5] + p.z * m[6]; // the position along the camera's right and up axes
   const ox = (rt.width & 1) / 2, oy = (rt.height & 1) / 2; // with an odd number of pixels the centre pixel is centred on the camera: offset half a pixel
   const da = (Math.round(a / u - ox + 1e-6) + ox) * u - a, db = (Math.round(b / u - oy + 1e-6) + oy) * u - b; // + 1e-6 settles the tie of a camera dead on the view axis (the title orbit, odd buffer): float noise would flip the rounding, and the picture a pixel, every frame
@@ -159,7 +160,8 @@ export function render() {
 // The zoom that shows the whole board, which with its margin is 52 * BOARD_K world units across: a canvas wider than tall is bound by its height (leaving room above and below for the bars), a narrow one by its width.
 // In a game, in the overlay layout, the column floats over the canvas, and the page says how far it reaches into it from the right edge (--cr): the view then looks at the middle of what it leaves,
 // the stage, and the board is fitted to it, to its whole height (the action bar, over the bottom, is not made room for).
-let framed = false, fitZoom = 0.5; // fitZoom: worked out by resize
+let framed = false;
+export let fitZoom = 0.5; // worked out by resize
 export const free = { w: 1 }; // the share of the canvas's width that the column leaves
 export const frame = (on: boolean) => { if (on !== framed) { framed = on; resize(); } }; // a game begins, or ends
 const css = getComputedStyle(document.documentElement);

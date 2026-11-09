@@ -114,7 +114,6 @@ export function initStage() {
     undo.push(initScene());
     initWorld(); initActors();
     board = createBoard();
-    undo.push(() => board.dispose());
     if (G.S) { showState(G.S); enterGame(); } else enterDemo();
     const off = new AbortController(), unfollow = () => (cam.follow = -1), hoverStep = bindCanvas(off.signal);
     controls.addEventListener('start', unfollow);
@@ -129,7 +128,7 @@ export function initStage() {
       updateTweens(dt); updateWorld(t, dt); updateActors(t, dt); board.update(t, dt);
       if (cam.follow >= 0 && tokens[cam.follow]) { const p = tokens[cam.follow].g.position; focus(p.x, p.z); }
       updateCamera(dt);
-      board.labels(hudLive.get());
+      board.labels();
       render();
     });
     undo.push(() => renderer.setAnimationLoop(null));

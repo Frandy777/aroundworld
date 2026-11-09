@@ -85,8 +85,8 @@ const plate = memo((bg: string, fg: string, W: number, H: number, text: string, 
   return tex(Math.round(W / k), Math.round(H / k), (f, w, h, g) => {
     f(bg, 0, 0, w, h);
     if (H > 8) for (const [x, y, bw, bh] of [[0, 0, w, 1], [0, h - 1, w, 1], [0, 0, 1, h], [w - 1, 0, 1, h]]) f(fg, x, y, bw, bh);
-    const tw = inkWidth(text, 1) * sl, th = inkHeight(text, 1) * sl;
-    if (sl >= 1 && tw + 2 <= w && th + (H > 8 ? 2 : 0) <= h) { g.fillStyle = fg; ink(g, text, 1, (w - tw) >> 1, ((h - th) >> 1) + th, sl); }
+    const tw = inkWidth(text) * sl, th = inkHeight(text) * sl;
+    if (sl >= 1 && tw + 2 <= w && th + (H > 8 ? 2 : 0) <= h) { g.fillStyle = fg; ink(g, text, (w - tw) >> 1, ((h - th) >> 1) + th, sl); }
   });
 });
 const plateMat = memo((bg: string, fg: string, W: number, H: number, text: string, s: number) => lodMap(new THREE.MeshBasicMaterial(), (L) => plate(bg, fg, W, H, text, s, L))); // unlit like the cards: colours stay the same in any light
@@ -151,7 +151,7 @@ export const box = (g: THREE.Group, w: number, h: number, d: number, color: THRE
 export const cyl = (g: THREE.Group, r: number, h: number, color: THREE.ColorRepresentation, x = 0, y = 0, z = 0) => part(g, cylGeo(r * K, h * K), h * K, mat(color), x * K, y * K, z * K);
 export const hip = (g: THREE.Group, w: number, d: number, h: number, y: number, color: number, x = 0, z = 0) => part(g, roofGeo(w * K, d * K, h * K), h * K, roofMat(color), x * K, y * K, z * K);
 export const plaque = (g: THREE.Group, text: string, bg: string, fg: string, w: number, h: number, x: number, y: number, z: number, s = 1) => { // sized in whole texels; s: texels to a pixel of its text (see plate)
-  const side = mat(bg), W = Math.max(texels(w * K), inkWidth(text, 1) * s + 2), H = texels(h * K);
+  const side = mat(bg), W = Math.max(texels(w * K), inkWidth(text) * s + 2), H = texels(h * K);
   return part(g, geo(W / DENSITY, H / DENSITY, 0.12 * K), H / DENSITY, [side, side, side, side, plateMat(bg, fg, W, H, text, s), side], x * K, y * K, z * K);
 };
 export const floor = (g: THREE.Group, cols: number, dcols: number, kind: string, color: number, y: number, x = 0, z = 0) => { // one storey, `cols` x `dcols` half-units, in final units; the entrance faces the viewer

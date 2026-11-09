@@ -1,13 +1,12 @@
 import * as THREE from 'three';
-import { scene, renderer, camera, controls, lod, toon, lodMap, pixelTexture, texels, toScreen, dirtyShadow, DENSITY } from './scene';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { scene, renderer, camera, controls, lod, toon, lodMap, pixelTexture, texels, dirtyShadow, pxUnit, fitZoom, ELEV, DENSITY } from './scene';
 import { TILES, type Tile } from '../../shared/data';
-import { canvas, shade } from './art';
-import { CARD_SIZE, cardText, drawCard, drawCode, drawGround, drawPad } from './labels';
+import { canvas, codePixels, shade } from './art';
+import { CARD_SIZE, codeOf, drawCard, drawGround, drawPad } from './labels';
 import { CARD, LOT, PAD, POS, S, SLAB, SZ, TOP } from './layout';
 import { bake, memo, sideTex } from './builder';
 import { buildProps, building, flag, level, sign } from './models';
-
-type Block = ReturnType<typeof cardText>[number];
 
 const VACANT = 0xb9b2a0; // the plot of a tile nobody owns
 
@@ -30,6 +29,9 @@ const twoGroups = (g: THREE.BoxGeometry) => {
 };
 const slabGeo = memo((w: number, h: number, d: number) => twoGroups(new THREE.BoxGeometry(w, h, d)));
 const CARD_GEO = new THREE.PlaneGeometry(CARD.w, CARD.d).rotateX(-Math.PI / 2);
+// A card's code is carved on it as raised letters: a unit voxel for each font pixel of an 11 x 5 grid centred on the middle of the card, standing on its face (see `labels` for the size).
+const codeGeo = memo((code: string) => mergeGeometries(codePixels(code).map(([x, y]) => new THREE.BoxGeometry().translate(x - 5, 0.5, y - 2))));
+const inkMat = memo((fg: number, dim: boolean) => toon(dim ? new THREE.Color(fg).multiply(new THREE.Color(0x808080)) : fg)); // dim: a mortgaged card is greyed, and its letters with it
 // The tile cursor (hover, selection) is a bracket at each corner of the cell: an L of voxels, its corner at the origin and its two arms (30 texels long, 6 across and tall) along +x and +z.
 // A line one pixel wide breaks into dashes and stairs on the half-size buffer and is cut by whatever stands before it; blocks are drawn like everything else, and the ink pass gives them their edges.
 const CORNERS = [[-1, -1], [1, -1], [1, 1], [-1, 1]], ARM = 30 / DENSITY, BAR = 6 / DENSITY;
@@ -57,76 +59,23 @@ export function createBoard() {
     slab.receiveShadow = slab.castShadow = true;
     const card = new THREE.Mesh(CARD_GEO, lodMap(new THREE.MeshBasicMaterial(), (L) => cardTex(t, L))); // unlit: exact colours, no shadow smudges
     card.position.set(CARD.x, TOP + 0.03, CARD.z);
+    const [code, fg] = codeOf(t), letters = new THREE.Mesh(codeGeo(code), inkMat(fg, false));
+    letters.position.copy(card.position);
     const pad = t.type === 'public' ? null : new THREE.Mesh(slabGeo(PAD.w, PAD.h, PAD.d), padMats(VACANT)); // the plot: city tiles only
     if (pad) { pad.position.set(PAD.x, TOP + PAD.h / 2, PAD.z); pad.castShadow = pad.receiveShadow = true; }
     const props = new THREE.Group(), bld = new THREE.Group();
     props.position.set(LOT.x, TOP + (pad ? PAD.h : 0), LOT.z); bld.position.copy(props.position);
     buildProps(props, t);
     bake(props);
-    g.add(slab, card, props, bld);
+    g.add(slab, card, letters, props, bld);
     if (pad) g.add(pad);
     root.add(g);
     if (pad) { sign(bld); bake(bld); }
-    return { g, slab, card, props, side, tint: [ground, card.material], pad, bld, key: '', pop: 1 };
+    return { g, slab, card, letters, props, side, tint: [ground, card.material], pad, bld, key: '', pop: 1 };
   });
   type Plot = (typeof tiles)[number];
   // A new owner or a new level: the building rises from the plot, squashed wide and flat first, with a little overshoot (ease out back)
   const squash = (o: Plot) => { const e = 1 + 2.70158 * (o.pop - 1) ** 3 + 1.70158 * (o.pop - 1) ** 2; o.bld.scale.set(1 + (1 - e) * 0.3, Math.max(e, 0.01), 1 + (1 - e) * 0.3); };
-
-  // Far level: the cards' codes are stamped on a canvas laid over the 3D one (same size, same pixels), see drawCode
-  const over = Object.assign(document.createElement('canvas'), { id: 'codes' }), ctx = over.getContext('2d')!, at = new THREE.Vector3();
-  renderer.domElement.after(over);
-  let shown = false;
-  function codes(on: boolean, across: number, down: number) { // put every card's code over it, or take them off (the zoom has left the far level, or there is no lettering, see labels)
-    if (!on && !shown) return;
-    const { width: w, height: h } = renderer.domElement; // the overlay has the 3D canvas's own pixels
-    if (over.width !== w || over.height !== h) { over.width = w; over.height = h; }
-    ctx.clearRect(0, 0, w, h);
-    shown = on;
-    if (!shown) return;
-    const k = (w * camera.zoom) / (camera.right - camera.left), ph = down * k * Math.cos(controls.getPolarAngle()); // pixels per world unit, and the card's height on screen
-    tiles.forEach((o, i) => {
-      const [fx, fy] = toScreen(o.card.getWorldPosition(at)), x = fx * w, y = fy * h;
-      if (x > -30 && x < w + 30 && y > -20 && y < h + 20) drawCode(ctx, TILES[i], x, y, ph, across * k, (o.card.material.color.getHex() & 255) / 255); // last: how bright the card looks (mortgaged = half)
-    });
-  }
-
-  // Mid and near levels: the lettering (the name of each card) is laid over the scene as quads, flat on the card.
-  // They are in the 3D scene, so a token standing in front of a card hides its lettering; they write no depth, so the ink pass never sees them.
-  const FLAT = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), BLANK = pixelTexture(canvas(1, 1, () => {})), texts = new Map<string, THREE.Texture>(), quads: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[] = [];
-  const quad = () => { const m = new THREE.Mesh(FLAT, new THREE.MeshBasicMaterial({ map: BLANK, transparent: true, depthWrite: false })); scene.add(m); return m; };
-  const right = new THREE.Vector3(), away = new THREE.Vector3(), look = new THREE.Vector3(), c = new THREE.Vector3();
-  function names(on: boolean, across: number, down: number) {
-    let n = 0; // quads in use
-    if (on) {
-      camera.updateMatrixWorld();
-      const e = camera.matrixWorld.elements, u = (camera.top - camera.bottom) / (camera.zoom * renderer.domElement.height); // world units per pixel
-      const cos = Math.hypot(e[4], e[6]), theta = Math.atan2(-e[2], e[0]); // a length along the ground looks this much shorter up the screen; the camera's azimuth
-      right.set(e[0], 0, e[2]); away.set(e[4], 0, e[6]).divideScalar(cos); look.set(e[8], e[9], e[10]);
-      // Block b is centred on c. Each quad is turned to the camera's azimuth, which squares it with the cards (see labels), so it shows as an upright rectangle, sized so that one of its texels is
-      // one buffer pixel, and moved to the pixel lattice that render() puts the camera on (see snap): each texel then covers exactly one pixel, whatever the zoom or tilt.
-      const lay = (b: Block, tint: THREE.Color) => {
-        const m = (quads[n] ??= quad());
-        c.addScaledVector(look, 0.02); // toward the camera, so it stays where it is on screen: clear of the card
-        const x = c.dot(right) / u, y = (c.x * e[4] + c.y * e[5] + c.z * e[6]) / u, fx = (b.w & 1) / 2, fy = (b.h & 1) / 2; // where c is on the lattice, in pixels
-        c.addScaledVector(right, (Math.round(x - fx) + fx - x) * u).addScaledVector(away, ((Math.round(y - fy) + fy - y) * u) / cos);
-        m.material.color.copy(tint);
-        m.position.copy(c); m.rotation.y = theta; m.scale.set(b.w * u, 1, (b.h * u) / cos);
-        m.material.map = texts.get(b.key) ?? texts.set(b.key, pixelTexture(canvas(b.w, b.h, b.draw))).get(b.key)!;
-        m.visible = true;
-        n++;
-      };
-      tiles.forEach((o, i) => {
-        const p = o.card.getWorldPosition(c).project(camera);
-        if (Math.abs(p.x) > 1.2 || Math.abs(p.y) > 1.2) return;
-        for (const b of cardText(TILES[i], across / u, (down * cos) / u)) {
-          c.setFromMatrixPosition(o.card.matrixWorld).addScaledVector(away, (0.5 - b.y) * down);
-          lay(b, o.card.material.color);
-        }
-      });
-    }
-    for (let i = n; i < quads.length; i++) quads[i].visible = false;
-  }
 
   function setOwner(i: number, st: { color: number; lv: number; m: boolean } | null) {
     const t = TILES[i], o = tiles[i];
@@ -137,6 +86,7 @@ export function createBoard() {
     o.bld.children.forEach((m) => (m as THREE.Mesh).geometry.dispose()); // the baked meshes own their geometry: free it
     o.bld.clear();
     o.tint.forEach((m) => m.color.set(st?.m ? 0x808080 : 0xffffff));
+    o.letters.material = inkMat(codeOf(t)[1], !!st?.m);
     const col = st?.m ? 0x555555 : st?.color ?? VACANT;
     o.pad!.material = padMats(col);
     if (!st) sign(o.bld);
@@ -156,13 +106,25 @@ export function createBoard() {
   let hov = -1, sel = -1;
   return {
     slabs: tiles.map((o) => o.slab), setOwner, // what the pointer picks: each tile's base, a plain box
-    // The lettering of every card, once the camera has moved and before render(). `on`: in a game. It is there only while the camera is square to the tiles (its azimuth a whole
-    // number of quarter turns): turned from them, lettering that stays upright would not sit on its card, and lettering that turns with them cannot be pixel exact.
-    labels(on: boolean) {
-      camera.updateMatrixWorld();
-      const e = camera.matrixWorld.elements, square = on && Math.cos(4 * Math.atan2(-e[2], e[0])) > 0.99984;
-      const [across, down] = Math.abs(e[2]) > 0.5 ? [CARD.d, CARD.w] : [CARD.w, CARD.d]; // a card's width and depth on the screen: they swap when the camera looks along x
-      codes(square && !lod.n, across, down); names(square && lod.n > 0, across, down);
+    // The carved codes, once the camera has moved and before render(). Their size is the view's at the 'fit' zoom: a font pixel is a buffer pixel (or the widest that 3 letters fit on a card), and a row is
+    // stretched by 1 / sin(ELEV), since the card lies back by that much: the rows come out a pixel high at the default tilt. A stroke is one pixel wide, so it needs a pixel to itself: where the zoom has gone
+    // out past that a column falls between two pixel centres and is lost, and the code is not drawn. The relief is a 25th of a font pixel while the view is far, since more and the ink pass takes the
+    // one-pixel strokes for creases and lights and shades them; once the zoom has its closer levels the letters rise by half a font pixel.
+    // Card and code sit on the pixel lattice that render() puts the camera on (see snap), the code's edges between pixel centres: left to chance, an edge on a centre is taken for the pixel on either side by
+    // a hair of relief. The code is 11 columns and 5 rows, so it is centred on a pixel, and so is the card, sized to an odd number of pixels (at most one off its true size): any other card would have
+    // its middle on a pixel's edge, and the code, which can only be moved a whole pixel, would sit half a pixel to one side.
+    labels() {
+      const u = Math.min(pxUnit(fitZoom), CARD.w / 11), p = pxUnit(), h = lod.n ? u / 2 : u / 25, s = Math.sin(ELEV), c = Math.cos(ELEV);
+      const odd = (n: number) => 2 * Math.round((n - 1) / 2) + 1, w = odd(CARD.w / p), d = odd((CARD.d * s) / p); // the card's size in pixels, across and up the screen
+      tiles.forEach((o) => {
+        const { x, y, z } = o.g.position, g = (y + TOP + 0.03) * c; // g: how high the card's plane is on the screen
+        const mx = (Math.floor((x + CARD.x) / p) + 0.5) * p, my = (Math.floor((g - (z + CARD.z) * s) / p) + 0.5) * p; // its middle moved to the middle of the pixel it is in, across and up the screen
+        o.card.scale.set((w * p) / CARD.w, 1, (d * p) / (s * CARD.d));
+        o.card.position.set(mx - x, TOP + 0.03, (g - my) / s - z);
+        o.letters.visible = p <= 1.01 * u;
+        o.letters.scale.set(u, h, u / s);
+        o.letters.position.set(mx - x, TOP + 0.03, (g + h * c - my) / s - z); // the tops of the letters are h higher, which is h * c up the screen
+      });
     },
     hover(i: number) { if (hov >= 0 && hov !== sel) tiles[hov].g.userData.lift = 0; hov = i; if (i >= 0) tiles[i].g.userData.lift = Math.max(tiles[i].g.userData.lift, 0.3); },
     select(i: number) {
@@ -182,6 +144,5 @@ export function createBoard() {
       const hop = [0, 1, 2, 1][Math.floor(t * 3) % 4] * px;
       place(hoverCursor, hov === sel ? -1 : hov, hop); place(selCursor, sel, hop);
     },
-    dispose() { over.remove(); for (const t of [BLANK, ...texts.values()]) t.dispose(); }, // the codes' canvas and the lettering the quads are not showing now; the rest goes with the scene
   };
 }

@@ -38,10 +38,7 @@ export const canvas = (w: number, h: number, draw: (g: CanvasRenderingContext2D,
   return c;
 };
 
-// ---- Hard-edged text for the 3D textures. The Jersey fonts are pixel fonts: every outline is a staircase on a fixed grid (Jersey 10 has 56/3 grid steps
-// per em, Jersey 15 has 27), so drawn at the size where one step is one texel (n = cap height / 5: Jersey 10 is n = 2, Jersey 15 is n = 3) every edge
-// lands on a texel, and a threshold is all it takes to drop the grey anti-aliasing of plain fillText, which looks soft next to the pixel-sharp ground.
-// At n = 1 a letter has only 5 texels to live on and no font stays legible there (5 and 6, 8 and 9 merge), so a hand-drawn 3x5 set takes over. ----
+// ---- Hard-edged text for the 3D textures: a hand-drawn 3x5 set. A letter has only 5 texels to live on and no font stays legible there (5 and 6, 8 and 9 merge). ----
 const TINY: Record<string, string> = { // '#' = ink; rows from the top down to the baseline, then an optional '|' and the rows hanging below it
   A: '.#./#.#/###/#.#/#.#', B: '##./#.#/##./#.#/##.', C: '.##/#../#../#../.##', D: '##./#.#/#.#/#.#/##.', E: '###/#../##./#../###',
   F: '###/#../##./#../#..', G: '.##/#../#.#/#.#/.##', H: '#.#/#.#/###/#.#/#.#', I: '###/.#./.#./.#./###', J: '..#/..#/..#/#.#/.#.',
@@ -57,7 +54,6 @@ const TINY: Record<string, string> = { // '#' = ink; rows from the top down to t
   '♦': '...#.../..###../.#####./#######/#######/.#####./..###../...#...', '★': '...#.../..###../#######/.#####./..###../.##.##./.#...#.',
   '⊕': '..###../.#.#.#./#..#..#/#######/#..#..#/.#.#.#./..###..', '🔒': '..###../..#.#../..#.#../#######/###.###/###.###/#######',
 };
-const FONT: Record<number, [string, number]> = { 2: ['Jersey 10', 56 / 3], 3: ['Jersey 15', 27] }; // n -> [family, px size at which one grid step is one texel]
 interface Glyph { px: [number, number][]; wide: number; adv: number }
 const glyphs: Record<string, Glyph> = {};
 const tiny = (ch: string): Glyph => { // an accent (Á, É, Í) is one texel above the capital's right corner
@@ -68,20 +64,19 @@ const tiny = (ch: string): Glyph => { // an accent (Á, É, Í) is one texel abo
   if (mark) px.push([2, -6]);
   return { px, wide, adv: wide ? wide + 1 : 2 };
 };
-const scaled = (ch: string, n: number): Glyph => { // the character is rasterised alone, shifted so its left ink edge sits on texel 0
-  const [family, size] = FONT[n], w = 7 * n, h = 11 * n, px: [number, number][] = []; let adv = 0, wide = 0; // baseline 8n rows down: room for accents and $ ,
-  const a = canvas(w, h, (g) => {
-    g.font = `${size}px "${family}"`;
-    const m = g.measureText(ch); g.fillText(ch, Math.round(m.actualBoundingBoxLeft), 8 * n); adv = m.width;
-  }).getContext('2d')!.getImageData(0, 0, w, h).data;
-  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) if (a[(j * w + i) * 4 + 3] > 127) { px.push([i, j - 8 * n]); wide = Math.max(wide, i + 1); }
-  return { px, wide, adv: Math.max(Math.round(adv), wide + 1) };
-};
-const glyph = (ch: string, n: number) => (glyphs[ch + n] ??= n > 1 ? scaled(ch, n) : tiny(ch)); // -> { px: texels [x, y] (y counts down from the baseline), wide: ink width, adv: advance }
-export const inkWidth = (str: string, n: number) => [...str].reduce((x, ch, k, all) => x + glyph(ch, n)[k < all.length - 1 ? 'adv' : 'wide'], 0);
-export const inkHeight = (str: string, n: number) => Math.max(...[...str].flatMap((ch) => glyph(ch, n).px.map(([, j]) => -j))); // the rows above the baseline
-export function ink(g: CanvasRenderingContext2D, str: string, n: number, x: number, y: number, s = 1) { // (x, y) is the left end of the baseline, painted in g's fill colour; s: texels to an ink pixel
-  for (const ch of str) { const o = glyph(ch, n); for (const [i, j] of o.px) g.fillRect(x + i * s, y + j * s, s, s); x += o.adv * s; }
+const glyph = (ch: string) => (glyphs[ch] ??= tiny(ch)); // -> { px: texels [x, y] (y counts down from the baseline), wide: ink width, adv: advance }
+export const inkWidth = (str: string) => [...str].reduce((x, ch, k, all) => x + glyph(ch)[k < all.length - 1 ? 'adv' : 'wide'], 0);
+export const inkHeight = (str: string) => Math.max(...[...str].flatMap((ch) => glyph(ch).px.map(([, j]) => -j))); // the rows above the baseline
+export function ink(g: CanvasRenderingContext2D, str: string, x: number, y: number, s = 1) { // (x, y) is the left end of the baseline, painted in g's fill colour; s: texels to an ink pixel
+  for (const ch of str) { const o = glyph(ch); for (const [i, j] of o.px) g.fillRect(x + i * s, y + j * s, s, s); x += o.adv * s; }
+}
+// A card's code for carving: the font pixels [x, y] (y down from the top row) of its letters, centred on a grid 11 columns wide and 5 rows high, which is what a card has room for. The letters are
+// the 3x5 set, except that M, N and W (wider in TINY, for the signs) take 3 columns like the rest, so that three letters and their gaps are 11 columns.
+const THIN: Record<string, string> = { M: '#.#/###/###/#.#/#.#', N: '###/#.#/#.#/#.#/#.#', W: '#.#/#.#/###/###/#.#' };
+export function codePixels(code: string) {
+  const px: [number, number][] = [], x0 = 6 - 2 * code.length; // two letters are 7 columns: 2 spare on each side
+  [...code].forEach((ch, k) => (THIN[ch] ?? TINY[ch]).split('/').forEach((r, y) => [...r].forEach((c, x) => c === '#' && px.push([x0 + 4 * k + x, y]))));
+  return px;
 }
 
 // ---- 9-slice frames: thickness T, round corners; tones = [top, right, bottom, left], each outer -> inner ----
