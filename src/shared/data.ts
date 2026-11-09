@@ -36,7 +36,7 @@ export const SPECIAL: Record<string, string> = {
   'New York': 'Whenever anyone upgrades a city, owner earns $300 / $500 / $1,000.',
   'Las Vegas': 'Charges players stopping here dice total × $300 / $500 / $700.',
   Rio: 'Whenever anyone rolls doubles, owner earns $200 / $500 / $1,000.',
-  Jerusalem: 'Owner still collects all fees while jailed. Cannot be upgraded.',
+  Jerusalem: 'When the owner stops here, they roll the dice: every other player pays the total × $100 / $200 / $300.',
   Singapore: "Owner's rent income from regular cities +10% / +15% / +20%.",
 };
 
@@ -105,7 +105,7 @@ export const TILES: Tile[] = [
   city('cam', 'San José', 1600), invest('choke', 'Panama Canal'), city('sam', 'Bogotá', 800),
   invest('oil', 'Venezuela Oil'), city('sam', 'Buenos Aires', 1000), special('sam', 'Rio', 2000, 1800, 1000),
   city('sam', 'Brasília', 1200), city('afr', 'Pretoria', 800), pub('news'), city('afr', 'Tunis', 600),
-  city('afr', 'Djibouti', 400), city('afr', 'Cairo', 1000), special('mea', 'Jerusalem', 3000, 0, 1500),
+  city('afr', 'Djibouti', 400), city('afr', 'Cairo', 1000), special('mea', 'Jerusalem', 3000, 2000, 1500),
   invest('military', 'Damascus Base'), city('mea', 'Abu Dhabi', 2200), invest('oil', 'Saudi Aramco'),
   city('mea', 'Dubai', 2800), invest('choke', 'Strait of Hormuz'), city('mea', 'Tehran', 1000), pub('tax'),
   city('cas', 'Islamabad', 600), pub('news'), city('cas', 'New Delhi', 1000), city('cas', 'Mumbai', 1400),

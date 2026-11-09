@@ -202,8 +202,8 @@ export class Game {
   // ---- Who is who ----
   alive() { return this.S.order.filter((i) => !this.S.players[i].out); }
   over() { return this.alive().length <= 1; }
-  /** Jailed players collect nothing, except the owner of Jerusalem. */
-  collects(pi: number) { const j = this.S.own[JERU]; return !this.S.players[pi].jail || (j?.p === pi && !j.m); }
+  /** Jailed players collect nothing. */
+  collects(pi: number) { return !this.S.players[pi].jail; }
   /** Working (not mortgaged) tiles of a kind that a player owns. */
   count(pi: number, kind: string) { return Object.keys(this.S.own).filter((k) => this.S.own[+k].p === pi && !this.S.own[+k].m && TILES[+k].kind === kind).length; }
   owned(pi: number, types: string[]) { return Object.keys(this.S.own).filter((k) => this.S.own[+k].p === pi && types.includes(TILES[+k].type)).length; }
@@ -435,6 +435,7 @@ export class Game {
     if (o.p === pi) {
       if (o.m) return this.toast(m`${T(i)} is mortgaged`);
       if (t.kind === 'military') return this.strike(pi, i);
+      if (i === JERU) { await this.jerusalem(pi, o); if (this.over()) return; }
       const price = o.lv === 0 && this.count(pi, 'build') ? 0 : t.up; // a construction company builds the first level for free
       if (o.lv >= maxLevel(t) || !(await this.offer(pi, i, 'upgrade', price)) || !(await this.pay(pi, price))) return;
       const lv = o.lv + 1;
@@ -465,6 +466,18 @@ export class Game {
     if (!sel || !(await this.pay(pi, 500))) return;
     this.toast(m`${p.name} paid $500: ${T(sel[0])} is lowered`, 'bad');
     this.lower(sel[0]);
+  }
+
+  // The owner stopping at Jerusalem rolls the dice and charges every other player the total × $100/$200/$300 by level.
+  private async jerusalem(pi: number, o: Owned) {
+    const a = this.d6(), b = this.d6(), fee = (a + b) * [100, 200, 300][o.lv];
+    this.emit({ t: 'dice', a, b });
+    this.toast(m`${T(JERU)}: rolled ${String(a + b)}, every other player pays ${money(fee)}`, 'good');
+    this.log(m`${P(pi)} rolled ${String(a + b)} at ${T(JERU, true)}: every other player pays ${money(fee)}`);
+    for (const q of this.alive()) {
+      if (q !== pi) await this.pay(q, fee, pi);
+      if (this.over()) return;
+    }
   }
 
   // BUY / UPGRADE card. Without the cash there is nothing to decide: say so and show the tile in the side panel.
