@@ -354,7 +354,7 @@ export class Game {
     const a = this.d6(), b = this.d6();
     this.roll = [a, b];
     this.emit({ t: 'dice', a, b });
-    if (a === b) this.bonus('Rio', [500, 1000, 2000]);
+    if (a === b) this.bonus('Rio', [200, 500, 1000]);
     // 3. Move and 4. resolve the tile
     this.emit({ t: 'step', s: 'move' });
     await this.walk(pi, a + b);
