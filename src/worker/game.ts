@@ -408,7 +408,7 @@ export class Game {
   private async toll(pi: number, i: number) {
     const S = this.S, t = TILES[i], o = S.own[i], p = S.players[pi];
     if (t.kind === 'choke') {
-      const fee = [100, 300, 500, 1000][this.count(o.p, 'choke') - 1];
+      const fee = [200, 300, 400, 500][this.count(o.p, 'choke') - 1];
       this.toast(m`Toll at ${T(i)}: -${money(fee)}`, 'bad');
       await this.pay(pi, fee, o.p);
     } else if (t.name === 'Hong Kong') {
