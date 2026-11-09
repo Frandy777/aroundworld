@@ -130,7 +130,8 @@ button, [data-tile], .pcard, .item, #minimap canvas { cursor: var(--cur-hand); }
 #minimap canvas { display: block; flex-grow: 1; width: 228px; height: 124px; /* a canvas pixel to every 2px of the content box (see drawMinimap): 216x112 = 108x56 pixels when it does not grow */ image-rendering: pixelated; background: repeating-conic-gradient(#22347a 0 25%, #1a2866 0 50%) 0 0 / 4px 4px padding-box; border: 6px solid transparent; border-image: var(--fr-well) 3 / 6px; }
 #camctl { position: fixed; right: 14px; bottom: 28px; width: var(--col); display: flex; justify-content: space-between; z-index: 11; } /* one row as wide as the column: six 50px buttons, 4px apart. Its bottom is in line with the action bar's buttons where the bar is at the bottom (its 26px and their 2px margin) */
 #camctl .btn { margin: 0; padding-inline: 3px; }
-/* Dev panel (a dev room): above the cards, so that it can be used with one open. It is on the left, where the top bar's left edge is in a short window (the button has no margin, to be flush with it), and ends above ROLL DICE (the rest scrolls) */
+/* Dev panel (a dev room): above the cards, so that it can be used with one open. It is on the left, where the top bar's left edge is in a short window (the button has no margin, to be flush with it), and ends above ROLL DICE (the rest scrolls).
+   In a wide, tall window it takes the top-left corner instead (see the overlay rule) */
 #dev { position: fixed; left: 328px; top: calc(12px + var(--hh) + 10px); width: 340px; z-index: 50; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 #dev > .btn { margin: 0; }
 #dev .box { width: 100%; }
@@ -172,12 +173,13 @@ button, [data-tile], .pcard, .item, #minimap canvas { cursor: var(--cur-hand); }
 /* The overlay in a window 760px high or more: the action bar goes in the bay that the loop leaves open at the bottom of the board (6 x 4 cells), where in the default view it covers no tile: the dice result over the button,
    the pair centred in the bay. --bay is the bay's centre from the top of the window: 6 cells (36 world units) south of the board's centre, which is at half the window's height (the view at 52° shortens depth to 0.788).
    The board, 104 world units across with its margin, is fitted to the stage (what the column leaves: --cr) by its width or its height, whichever it meets first (see fitZoom in scene.ts). The pair is 132px high: the dice
-   result (62px, its dice have a margin) and the button with its margin (62px), 8px apart. So the bar's bottom is 66px under the centre. The dev panel ends 26px over the dice result: 156px of it are over its body, and the
-   bar reaches 66px over the centre, which makes the 248px */
+   result (62px, its dice have a margin) and the button with its margin (62px), 8px apart. So the bar's bottom is 66px under the centre. The dev panel sits in the top-left corner and ends 26px over the dice result:
+   72px of it are over its body, and the bar reaches 66px over the centre, which makes the 164px */
 @media (width >= calc(670px + 96vh)) and (height >= 760px) {
   :root { --bay: calc(50vh + 36 / 104 * min(0.788 * (100vw - var(--cr)), 100vh)); }
   #actions { right: var(--cr); bottom: calc(100vh - var(--bay) - 66px); flex-direction: column; gap: 8px; }
-  #dev .bd { max-height: calc(var(--bay) - 248px); }
+  #dev { left: 14px; top: 12px; }
+  #dev .bd { max-height: calc(var(--bay) - 164px); }
 }
 
 /* Dock: a window with no room for the overlay (a 14px | 320px column on each side of the board), or too short for the players and the panel to share a side.
