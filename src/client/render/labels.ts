@@ -26,16 +26,16 @@ const SHORT: Record<string, string> = {
   'White Sands Base': 'WHITE/SANDS', 'Venezuela Oil': 'VENE-/ZUELA', Brasília: 'BRASÍ-/LIA', Pretoria: 'PRE-/TORIA', Djibouti: 'DJI-/BOUTI', Jerusalem: 'JERU-/SALEM',
   'Damascus Base': 'DAMAS-/CUS', 'Strait of Hormuz': 'STRAIT/HORMUZ', Islamabad: 'ISLAM-/ABAD',
 };
-// Far level: a code for every tile (mostly the airport / city codes), drawn over its card by drawCode
+// Far level: a code for every tile (the IATA city code for cities, invented for the rest), drawn over its card by drawCode
 const CODE: Record<string, string> = {
   START: 'GO', Casino: 'CAS', Nightclub: 'CLB', HKEX: 'HKX', 'News Agency': 'NWS', Jail: 'JAL', 'Tax Bureau': 'TAX', Bank: 'BNK', LSE: 'LSE', 'Go To Jail': 'GTJ', NASDAQ: 'NAS',
   Wellington: 'WLG', Canberra: 'CBR', Sydney: 'SYD', Jakarta: 'JKT', Singapore: 'SIN', 'Strait of Malacca': 'MAL', 'Kuala Lumpur': 'KUL', Bangkok: 'BKK', Hanoi: 'HAN',
   'Hong Kong': 'HKG', Shenzhen: 'SZX', CSCEC: 'CSC', Taipei: 'TPE', Shanghai: 'SHA', 'China Railway': 'CRH', Beijing: 'BJS', Tokyo: 'TYO', Osaka: 'OSA', Seoul: 'SEL',
-  'West Sea Base': 'WSB', Pyongyang: 'PYG', Vladivostok: 'VVO', Yekaterinburg: 'YEK', Moscow: 'MOS', 'Saint Petersburg': 'SPB', Warsaw: 'WAR', Prague: 'PRG', Vienna: 'VIE',
+  'West Sea Base': 'WSB', Pyongyang: 'FNJ', Vladivostok: 'VVO', Yekaterinburg: 'SVX', Moscow: 'MOW', 'Saint Petersburg': 'LED', Warsaw: 'WAW', Prague: 'PRG', Vienna: 'VIE',
   Budapest: 'BUD', Berlin: 'BER', Zurich: 'ZRH', VINCI: 'VIN', Paris: 'PAR', Madrid: 'MAD', BBC: 'BBC', London: 'LON', Maersk: 'MSK', Copenhagen: 'CPH', Oslo: 'OSL',
-  'Bering Strait': 'BRG', Ottawa: 'OTT', 'New York': 'NYC', Washington: 'WAS', 'United Airlines': 'UAL', Chicago: 'CHI', "Devil's Island": 'DEV', 'San Francisco': 'SFO',
+  'Bering Strait': 'BRG', Ottawa: 'YOW', 'New York': 'NYC', Washington: 'WAS', 'United Airlines': 'UAL', Chicago: 'CHI', "Devil's Island": 'DEV', 'San Francisco': 'SFO',
   'Las Vegas': 'LAS', 'White Sands Base': 'WHS', 'Area 51': 'UFO', 'Mexico City': 'MEX', Havana: 'HAV', 'San José': 'SJO', 'Panama Canal': 'PAN', Bogotá: 'BOG', 'Venezuela Oil': 'VEN',
-  'Buenos Aires': 'BUE', Rio: 'RIO', Brasília: 'BSB', Pretoria: 'PRE', Tunis: 'TUN', Djibouti: 'JIB', Cairo: 'CAI', Jerusalem: 'JER', 'Damascus Base': 'DAM', 'Abu Dhabi': 'AUH',
+  'Buenos Aires': 'BUE', Rio: 'RIO', Brasília: 'BSB', Pretoria: 'PRY', Tunis: 'TUN', Djibouti: 'JIB', Cairo: 'CAI', Jerusalem: 'JRS', 'Damascus Base': 'DAM', 'Abu Dhabi': 'AUH',
   'Saudi Aramco': 'ARA', Dubai: 'DXB', 'Strait of Hormuz': 'HRZ', Tehran: 'THR', Islamabad: 'ISB', 'New Delhi': 'DEL', Mumbai: 'BOM',
 };
 const ACCENT: Record<string, number> = { transport: 0x4da3ff, build: 0xf0a020, military: 0x6a8a4a, choke: 0xe0524e, oil: 0x4a4f6e, bbc: 0xd9423e, devil: 0x2fa84f }; // investment band colour per kind
