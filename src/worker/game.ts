@@ -485,7 +485,7 @@ export class Game {
       const up = (mono ? 0.5 : 0) + (sg ? [0.1, 0.2, 0.3][sg.lv] : 0), down = py ? [0.1, 0.2, 0.3][py.lv] : 0;
       return Math.round(base * (1 + up) * (1 - down));
     }
-    if (t.name === 'Las Vegas') return (this.roll[0] + this.roll[1]) * [300, 500, 1000][o.lv];
+    if (t.name === 'Las Vegas') return (this.roll[0] + this.roll[1]) * [300, 500, 700][o.lv];
     if (t.kind === 'transport') return [500, 1000, 2000][this.count(o.p, 'transport') - 1];
     return 0;
   }
