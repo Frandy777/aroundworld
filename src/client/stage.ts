@@ -117,13 +117,12 @@ export function initStage() {
     if (G.S) { showState(G.S); enterGame(); } else enterDemo();
     const off = new AbortController(), unfollow = () => (cam.follow = -1), hoverStep = bindCanvas(off.signal);
     controls.addEventListener('start', unfollow);
-    document.addEventListener('visibilitychange', () => document.hidden && finishTweens(), { signal: off.signal }); // a hidden tab draws no frames: its animations end at once
-    const timer = new THREE.Timer();
-    timer.connect(document); // a hidden tab comes back with a zero step, not one huge one
-    undo.push(() => { off.abort(); controls.removeEventListener('start', unfollow); timer.dispose(); });
+    let last = 0, t = 0; // the frame clock: `t` is only ever fed bounded steps, so a stalled loop cannot leap the world forward
+    document.addEventListener('visibilitychange', () => { if (document.hidden) { finishTweens(); last = 0; } }, { signal: off.signal }); // a hidden tab draws no frames: its animations end at once, and it comes back to a zero step, not one huge one
+    undo.push(() => { off.abort(); controls.removeEventListener('start', unfollow); });
     renderer.setAnimationLoop((now) => {
-      timer.update(now);
-      const dt = Math.min(timer.getDelta(), 0.1), t = timer.getElapsed();
+      const dt = last ? Math.min((now - last) / 1000, 0.1) : 0;
+      last = now; t += dt;
       hoverStep(); // against the frame just drawn, before the board reacts to it
       updateTweens(dt); updateWorld(t, dt); updateActors(t, dt); board.update(t, dt);
       if (cam.follow >= 0 && tokens[cam.follow]) { const p = tokens[cam.follow].g.position; focus(p.x, p.z); }

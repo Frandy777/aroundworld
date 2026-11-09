@@ -42,14 +42,24 @@ const TICKS = 20; // the steps a card's wait is counted down in: its bar loses o
 function useAuto(ms: number, fn: () => void) {
   const f = useRef(fn);
   f.current = fn;
-  const [held, setHeld] = useState(false), [ticks, setTicks] = useState(TICKS);
+  const [ticks, setTicks] = useState(TICKS);
+  const held = useRef(false); // the count stands still while the pointer is on the card (a ref: the timer below is not restarted for it)
   useEffect(() => {
-    if (!ms || held) return;
-    const t = setInterval(() => setTicks((n) => Math.max(0, n - 1)), ms / pace.speed / TICKS);
-    return () => clearInterval(t);
-  }, [ms, held]);
+    if (!ms) return;
+    let last = performance.now(), gone = 0; // `gone`: the share of the wait already over, by the clock — however seldom the timer runs
+    const t = setInterval(() => {
+      const now = performance.now(), dt = now - last;
+      last = now;
+      if (held.current || document.hidden) return; // ... or while the tab is away
+      gone += (dt * pace.speed) / ms;
+      setTicks(Math.max(0, Math.ceil((1 - gone) * TICKS)));
+    }, 50);
+    const wake = () => { last = performance.now(); }; // hidden time does not count: the clock starts fresh when the page is seen again
+    document.addEventListener('visibilitychange', wake);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', wake); };
+  }, [ms]);
   useEffect(() => { if (!ticks) f.current(); }, [ticks]);
-  return ms ? { left: (ticks * 100) / TICKS, hold: () => setHeld(true), free: () => setHeld(false) } : undefined;
+  return ms ? { left: (ticks * 100) / TICKS, hold: () => (held.current = true), free: () => (held.current = false) } : undefined;
 }
 
 // ---- Rules ----
