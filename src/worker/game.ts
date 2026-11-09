@@ -151,6 +151,12 @@ export class Game {
     this.emit({ t: 'cash', pi, d });
     this.log(m`${P(pi)} ${(d > 0 ? '+' : '') + money(d)} \u00B7 ${why}`);
   }
+  /** Money from one player to another: the same two cash events, but a single log line that names both. `paid` is what the payer's event reports. */
+  private xfer(from: number, to: number, amt: number, why: Msg | string, paid = amt) {
+    if (paid) this.emit({ t: 'cash', pi: from, d: -paid });
+    this.emit({ t: 'cash', pi: to, d: amt });
+    this.log(m`${P(from)} paid ${P(to)} ${money(amt)} \u00B7 ${why}`);
+  }
   own(i: number, o: Owned | null) { this.emit({ t: 'own', i, o }); }
   move(pi: number, to: number, how: 'hop' | 'jump') { this.emit({ t: 'move', pi, to, how }); }
   nm(pi: number) { return this.S.players[pi].name; }
@@ -250,7 +256,7 @@ export class Game {
         this.notice({ title: 'BANKRUPT!', sub: [p.name], tone: 0xb13e53, label: 'OH NO...', danger: true, long: true, body: [
           { k: 'face', p: pi },
           note(`${p.name} owes ${money(amt)} but can only raise ${money(raised)} (cash + mortgage value). ${to !== null ? S.players[to].name + ' receives what can be raised.' : 'The bank takes everything.'}`)] });
-        if (to !== null) this.cash(to, raised, m`${why} (from ${P(pi)}, bankrupt)`);
+        if (to !== null) this.xfer(pi, to, raised, m`${why} (bankrupt)`, p.cash);
         this.goBankrupt(pi);
         return false;
       }
@@ -260,8 +266,8 @@ export class Game {
         hint: `You can't afford this. Mortgage properties to raise at least ${money(amt - p.cash)}.`, items, rule: { k: 'raise', cash: p.cash, need: amt }, label: 'MORTGAGE & PAY' })) as number[];
       this.mortgage(pi, sel);
     }
-    this.cash(pi, -amt, to === null ? why : m`${why} (to ${P(to)})`);
-    if (to !== null) this.cash(to, amt, m`${why} (from ${P(pi)})`);
+    if (to === null) this.cash(pi, -amt, why);
+    else this.xfer(pi, to, amt, why);
     return true;
   }
   private mortgage(pi: number, sel: number[]) {
