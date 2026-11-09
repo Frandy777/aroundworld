@@ -482,7 +482,7 @@ export class Game {
       const base = cityRent(t)[o.lv];
       const mono = hasMonopoly(S, t);
       const sg = this.spOf(o.p, 'Singapore'), py = this.spOf(pi, 'Pyongyang'); // the owner's bonus adds to the monopoly's; the payer's discount takes off the sum
-      const up = (mono ? 0.5 : 0) + (sg ? [0.1, 0.2, 0.3][sg.lv] : 0), down = py ? [0.1, 0.2, 0.3][py.lv] : 0;
+      const up = (mono ? 0.5 : 0) + (sg ? [0.1, 0.15, 0.2][sg.lv] : 0), down = py ? [0.1, 0.15, 0.2][py.lv] : 0;
       return Math.round(base * (1 + up) * (1 - down));
     }
     if (t.name === 'Las Vegas') return (this.roll[0] + this.roll[1]) * [300, 500, 700][o.lv];
