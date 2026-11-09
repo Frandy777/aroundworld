@@ -441,7 +441,7 @@ export class Game {
       this.own(i, { ...o, lv });
       this.toast(m`${T(i)} upgraded to Lv ${String(lv)}`, 'good');
       this.log(m`${P(pi)} upgraded ${T(i, true)} to Lv ${String(lv)}`);
-      if (lv === maxLevel(t)) this.bonus('New York', [300, 500, 1000]);
+      this.bonus('New York', [300, 500, 1000]);
       return;
     }
     const owner = S.players[o.p];
