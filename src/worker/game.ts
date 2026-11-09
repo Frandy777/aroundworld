@@ -145,7 +145,12 @@ export class Game {
   log(msg: Msg) { this.emit({ t: 'log', m: msg }); }
   toast(msg: Msg | string, tone: Tone = '') { this.emit({ t: 'toast', m: typeof msg === 'string' ? [msg] : msg, tone }); }
   notice(n: Notice) { this.emit({ t: 'notice', n }); }
-  cash(pi: number, d: number) { if (d) this.emit({ t: 'cash', pi, d }); }
+  /** The one place a player's cash changes: the log says by how much, and what for. */
+  cash(pi: number, d: number, why: Msg | string) {
+    if (!d) return;
+    this.emit({ t: 'cash', pi, d });
+    this.log(m`${P(pi)} ${(d > 0 ? '+' : '') + money(d)} \u00B7 ${why}`);
+  }
   own(i: number, o: Owned | null) { this.emit({ t: 'own', i, o }); }
   move(pi: number, to: number, how: 'hop' | 'jump') { this.emit({ t: 'move', pi, to, how }); }
   nm(pi: number) { return this.S.players[pi].name; }
@@ -221,22 +226,22 @@ export class Game {
     return Object.keys(this.S.own).map(Number).filter((i) => this.S.own[i].p === pi && !this.S.own[i].m && TILES[i].mort).map((i) => ({ i, amt: TILES[i].mort }));
   }
 
-  // ---- Money ----
+  // ---- Money: what each of these is for (`why`) goes to the log with the sum ----
   /** Money from the bank: Zurich takes its cut. */
-  give(pi: number, amt: number, bank = true) {
+  give(pi: number, amt: number, why: Msg | string, bank = true) {
     if (amt <= 0) return;
-    this.cash(pi, amt);
-    if (bank) this.bonus('Zurich', [100, 200, 300], false);
+    this.cash(pi, amt, why);
+    if (bank) this.bonus('Zurich', [100, 200, 300], m`${P(pi)} got money from the bank`, false);
   }
-  /** A special tile pays its owner by level. */
-  private bonus(name: string, vals: number[], bank = true) {
-    const o = this.sp(name);
+  /** A special tile pays its owner by level, for what `why` says somebody did. */
+  private bonus(name: string, vals: number[], why: Msg, bank = true) {
+    const o = this.sp(name), i = tileAt(name);
     if (!o || !this.collects(o.p)) return;
-    this.toast(m`${T(tileAt(name))}: ${this.nm(o.p)} earns ${money(vals[o.lv])}`, 'good');
-    this.give(o.p, vals[o.lv], bank);
+    this.toast(m`${T(i)}: ${this.nm(o.p)} earns ${money(vals[o.lv])}`, 'good');
+    this.give(o.p, vals[o.lv], m`${T(i, true)}: ${why}`, bank);
   }
   /** Take `amt` from a player for the bank or for `to`, mortgaging what must be mortgaged. False when they went bankrupt instead. */
-  async pay(pi: number, amt: number, to: number | null = null): Promise<boolean> {
+  async pay(pi: number, amt: number, why: Msg | string, to: number | null = null): Promise<boolean> {
     const S = this.S, p = S.players[pi];
     if (amt <= 0) return true;
     if (p.cash < amt) {
@@ -245,7 +250,7 @@ export class Game {
         this.notice({ title: 'BANKRUPT!', sub: [p.name], tone: 0xb13e53, label: 'OH NO...', danger: true, long: true, body: [
           { k: 'face', p: pi },
           note(`${p.name} owes ${money(amt)} but can only raise ${money(raised)} (cash + mortgage value). ${to !== null ? S.players[to].name + ' receives what can be raised.' : 'The bank takes everything.'}`)] });
-        if (to !== null) this.cash(to, raised);
+        if (to !== null) this.cash(to, raised, m`${why} (from ${P(pi)}, bankrupt)`);
         this.goBankrupt(pi);
         return false;
       }
@@ -255,14 +260,13 @@ export class Game {
         hint: `You can't afford this. Mortgage properties to raise at least ${money(amt - p.cash)}.`, items, rule: { k: 'raise', cash: p.cash, need: amt }, label: 'MORTGAGE & PAY' })) as number[];
       this.mortgage(pi, sel);
     }
-    this.cash(pi, -amt);
-    if (to !== null) this.cash(to, amt);
+    this.cash(pi, -amt, to === null ? why : m`${why} (to ${P(to)})`);
+    if (to !== null) this.cash(to, amt, m`${why} (from ${P(pi)})`);
     return true;
   }
   private mortgage(pi: number, sel: number[]) {
     for (const i of sel) this.own(i, { ...this.S.own[i], m: true });
-    this.cash(pi, sel.reduce((s, i) => s + TILES[i].mort, 0));
-    this.log(m`${P(pi)} mortgaged ${tiles(sel)}`);
+    this.cash(pi, sel.reduce((s, i) => s + TILES[i].mort, 0), m`mortgaged ${tiles(sel)}`);
   }
   /** Out of the game: the properties go back to the bank. */
   private goBankrupt(pi: number) {
@@ -346,14 +350,14 @@ export class Game {
     if (mort.length && p.cash >= Math.min(...mort.map((i) => TILES[i].mort))) {
       const sel = (await this.ask(pi, { k: 'pick', of: 'tile', title: 'REDEEM PROPERTIES?', sub: [`${p.name} \u00B7 optional`], tone: 0x2d7d6f,
         hint: 'Pay the mortgage value to bring a property back to life. Skipping is fine.', items: mort.map((i) => ({ i, amt: TILES[i].mort })), rule: { k: 'redeem', cash: p.cash }, label: 'REDEEM', skip: 'SKIP' })) as number[] | null;
-      if (sel?.length) { for (const i of sel) this.own(i, { ...S.own[i], m: false }); this.cash(pi, -sel.reduce((s, i) => s + TILES[i].mort, 0)); }
+      if (sel?.length) { for (const i of sel) this.own(i, { ...S.own[i], m: false }); this.cash(pi, -sel.reduce((s, i) => s + TILES[i].mort, 0), m`redeemed ${tiles(sel)}`); }
     }
     // 2. Roll (in a dev room the question may be answered with a command of the panel instead: it runs, and the question is asked again)
     this.emit({ t: 'step', s: 'roll' });
     for (let go = await this.ask(pi, { k: 'roll' }); go !== true; go = await this.ask(pi, { k: 'roll' })) if (go && (await this.debug(go as Cmd))) return;
     const a = this.d6(), b = this.d6();
     this.emit({ t: 'dice', a, b });
-    if (a === b) this.bonus('Rio', [200, 500, 1000]);
+    if (a === b) this.bonus('Rio', [200, 500, 1000], m`${P(pi)} rolled doubles`);
     // 3. Move and 4. resolve the tile
     this.emit({ t: 'step', s: 'move' });
     await this.walk(pi, a + b);
@@ -366,7 +370,7 @@ export class Game {
   private async debug(c: Cmd): Promise<boolean> {
     switch (c.c) {
       case 'draw': this.rig = [...c.v]; this.toast(`DEV: next draws ${c.v.join(', ') || 'by chance'}`); break; // a copy: the tape keeps the command as it came
-      case 'cash': this.cash(c.pi, c.v - this.S.players[c.pi].cash); break;
+      case 'cash': this.cash(c.pi, c.v - this.S.players[c.pi].cash, 'DEV: set cash'); break;
       case 'own': this.own(c.i, c.o); break;
       case 'goto':
         if (c.land) this.emit({ t: 'step', s: 'resolve' });
@@ -398,9 +402,9 @@ export class Game {
 
   private async passEffect(pi: number, i: number) {
     const S = this.S, t = TILES[i], o = S.own[i], p = S.players[pi];
-    if (t.kind === 'start') { this.give(pi, 3000); return this.toast(`${p.name} passed START: +$3,000`, 'good'); }
+    if (t.kind === 'start') { this.give(pi, 3000, 'passed START'); return this.toast(`${p.name} passed START: +$3,000`, 'good'); }
     if (!o || o.m) return;
-    if (o.p === pi) { if (t.kind === 'oil') { this.give(pi, 400); this.toast(m`${T(i)}: +$400`, 'good'); } return; }
+    if (o.p === pi) { if (t.kind === 'oil') { this.give(pi, 400, m`passed ${T(i, true)}`); this.toast(m`${T(i)}: +$400`, 'good'); } return; }
     if (!this.collects(o.p)) return;
     await this.toll(pi, i);
   }
@@ -411,11 +415,11 @@ export class Game {
     if (t.kind === 'choke') {
       const fee = [200, 300, 400, 500][this.count(o.p, 'choke') - 1];
       this.toast(m`Toll at ${T(i)}: -${money(fee)}`, 'bad');
-      await this.pay(pi, fee, o.p);
+      await this.pay(pi, fee, m`toll at ${T(i, true)}`, o.p);
     } else if (t.name === 'Hong Kong') {
       const fee = Math.round((p.cash * [0.05, 0.1, 0.15][o.lv]) / 10) * 10;
       this.toast(m`${T(i)} levy: -${money(fee)}`, 'bad');
-      await this.pay(pi, fee, o.p);
+      await this.pay(pi, fee, m`${T(i, true)} levy`, o.p);
     }
   }
 
@@ -425,10 +429,9 @@ export class Game {
     this.log(m`${P(pi)} stops at ${T(i, true)}`);
     if (t.type === 'public') return this.publicTile(pi, t);
     if (!o) {
-      if (!(await this.offer(pi, i, 'buy', t.price)) || !(await this.pay(pi, t.price))) return;
+      if (!(await this.offer(pi, i, 'buy', t.price)) || !(await this.pay(pi, t.price, m`bought ${T(i, true)}`))) return;
       this.own(i, { p: pi, lv: 0, m: false });
       this.toast(m`${p.name} bought ${T(i)}`, 'good');
-      this.log(m`${P(pi)} bought ${T(i, true)} for ${money(t.price)}`);
       return;
     }
     if (o.p === pi) {
@@ -436,12 +439,12 @@ export class Game {
       if (t.kind === 'military') return this.strike(pi, i);
       if (i === JERU) { await this.jerusalem(pi, o); if (this.over()) return; }
       const price = o.lv === 0 && this.count(pi, 'build') ? 0 : t.up; // a construction company builds the first level for free
-      if (o.lv >= maxLevel(t) || !(await this.offer(pi, i, 'upgrade', price)) || !(await this.pay(pi, price))) return;
-      const lv = o.lv + 1;
+      const lv = o.lv + 1, what = m`upgraded ${T(i, true)} to Lv ${String(lv)}`;
+      if (o.lv >= maxLevel(t) || !(await this.offer(pi, i, 'upgrade', price)) || !(await this.pay(pi, price, what))) return;
+      if (!price) this.log(m`${P(pi)} ${what}`); // a free one has no payment to say it
       this.own(i, { ...o, lv });
       this.toast(m`${T(i)} upgraded to Lv ${String(lv)}`, 'good');
-      this.log(m`${P(pi)} upgraded ${T(i, true)} to Lv ${String(lv)}`);
-      this.bonus('New York', [300, 500, 1000]);
+      this.bonus('New York', [300, 500, 1000], m`${P(pi)} upgraded ${T(i, true)}`);
       return;
     }
     const owner = S.players[o.p];
@@ -453,8 +456,7 @@ export class Game {
       if (t.kind === 'choke' || t.name === 'Hong Kong') return this.toll(pi, i);
       return this.toast(m`${owner.name} owns ${T(i)} (passive effect, no toll)`);
     }
-    this.log(m`${P(pi)} paid ${money(fee)} rent to ${P(o.p)}`);
-    await this.pay(pi, fee, o.p);
+    await this.pay(pi, fee, m`rent at ${T(i, true)}`, o.p);
   }
 
   // The owner of a working Military Base may pay $500 to bring any built city (anybody's) down one level.
@@ -463,7 +465,7 @@ export class Game {
     if (p.cash < 500 || !items.length) return;
     const sel = (await this.ask(pi, { k: 'pick', of: 'tile', title: 'MILITARY BASE', sub: [`${p.name} \u00B7 optional`], tone: TILES[i].color,
       hint: 'Pay $500 to bring any city down by 1 level.', items, rule: { k: 'one', msg: 'Pick a city' }, label: 'LOWER FOR $500', skip: 'SKIP' })) as number[] | null;
-    if (!sel || !(await this.pay(pi, 500))) return;
+    if (!sel || !(await this.pay(pi, 500, m`strike on ${T(sel[0], true)}`))) return;
     this.toast(m`${p.name} paid $500: ${T(sel[0])} is lowered`, 'bad');
     this.lower(sel[0]);
   }
@@ -473,9 +475,9 @@ export class Game {
     const a = this.d6(), b = this.d6(), fee = (a + b) * [100, 200, 300][o.lv];
     this.emit({ t: 'dice', a, b });
     this.toast(m`${T(JERU)}: rolled ${String(a + b)}, every other player pays ${money(fee)}`, 'good');
-    this.log(m`${P(pi)} rolled ${String(a + b)} at ${T(JERU, true)}: every other player pays ${money(fee)}`);
+    this.log(m`${P(pi)} rolled ${String(a + b)} at ${T(JERU, true)}`);
     for (const q of this.alive()) {
-      if (q !== pi) await this.pay(q, fee, pi);
+      if (q !== pi) await this.pay(q, fee, m`${T(JERU, true)}: rolled ${String(a + b)}`, pi);
       if (this.over()) return;
     }
   }
@@ -485,8 +487,8 @@ export class Game {
     const a = this.d6(), b = this.d6(), fee = (a + b) * [300, 500, 700][o.lv];
     this.emit({ t: 'dice', a, b });
     this.toast(m`${T(VEGAS)}: rolled ${String(a + b)}, pays ${money(fee)}`, 'bad');
-    this.log(m`${P(pi)} rolled ${String(a + b)} at ${T(VEGAS, true)}: pays ${money(fee)} to ${P(o.p)}`);
-    await this.pay(pi, fee, o.p);
+    this.log(m`${P(pi)} rolled ${String(a + b)} at ${T(VEGAS, true)}`);
+    await this.pay(pi, fee, m`${T(VEGAS, true)}: rolled ${String(a + b)}`, o.p);
   }
 
   // BUY / UPGRADE card. Without the cash there is nothing to decide: say so and show the tile in the side panel.
@@ -516,7 +518,7 @@ export class Game {
     if (p.jail) return;
     if (this.spOf(pi, "Devil's Island") && p.cash >= 700 && (await this.ask(pi, { k: 'confirm', title: "DEVIL'S ISLAND", sub: [p.name], tone: TILES[tileAt("Devil's Island")].color,
       body: [note("You own Devil's Island. Pay $700 bail and only visit the Jail tile, with no stay?")], yes: 'PAY $700', no: 'GO TO JAIL' })) === true) {
-      await this.pay(pi, 700);
+      await this.pay(pi, 700, m`bail at ${T(tileAt("Devil's Island"), true)}`);
       this.toast(`${p.name} paid bail`);
       this.move(pi, JAIL, 'jump');
       return;
@@ -525,7 +527,7 @@ export class Game {
     this.toast(`${p.name} goes to JAIL!`, 'bad');
     this.log(m`${P(pi)} was sent to jail`);
     this.move(pi, JAIL, 'jump');
-    this.bonus("Devil's Island", [700]);
+    this.bonus("Devil's Island", [700], m`${P(pi)} went to jail`);
   }
 
   // ---- Public tiles ----
@@ -533,7 +535,7 @@ export class Game {
     const S = this.S, p = S.players[pi], inv = this.owned(pi, ['invest']), cities = this.owned(pi, ['city', 'special']);
     switch (t.kind) {
       case 'start':
-        this.give(pi, 3000);
+        this.give(pi, 3000, 'landed on START');
         this.toast('Landed on START: +$3,000', 'good');
         break;
       case 'jail': this.toast(`${p.name} is just visiting`); break;
@@ -543,19 +545,19 @@ export class Game {
       case 'exchange':
         if (!inv) { this.toast(`${t.name}: no investments, no dividend`); break; }
         this.toast(m`${t.name}: +${money(inv * 500)}`, 'good');
-        this.give(pi, inv * 500);
+        this.give(pi, inv * 500, `${t.name} dividend`);
         break;
       case 'tax': {
         const amt = cities * 300 + inv * 500;
         if (!amt) { this.toast(`${t.name}: nothing to tax`); break; }
         this.toast(m`${t.name}: -${money(amt)}`, 'bad');
-        await this.pay(pi, amt);
+        await this.pay(pi, amt, t.name);
         break;
       }
       case 'casino': await this.casino(pi, t); break;
       case 'club':
         this.toast(m`${t.name}: -${money(100)} & party`, 'bad');
-        if (await this.pay(pi, 100)) this.emit({ t: 'flag', pi, k: 'party', v: true });
+        if (await this.pay(pi, 100, t.name)) this.emit({ t: 'flag', pi, k: 'party', v: true });
         break;
       case 'bank': {
         const items = this.mortgageable(pi);
@@ -578,13 +580,14 @@ export class Game {
 
   // The Media owner is paid for every story and may throw their own away once.
   private async news(pi: number) {
-    this.bonus('BBC', [500]);
+    this.bonus('BBC', [500], m`${P(pi)} triggered News`);
     let story = this.pick(NEWS)(this, pi);
     if (this.spOf(pi, 'BBC')) {
       if ((await this.ask(pi, { k: 'news', card: story.card })) === true) { story = this.pick(NEWS)(this, pi); this.emit({ t: 'news', card: story.card }); }
     } else this.emit({ t: 'news', card: story.card });
-    this.log(m`News: ${B(story.card.title)}`);
-    await story.run();
+    const why = m`News: ${B(story.card.title)}`;
+    this.log(why);
+    await story.run(why); // what the story takes or gives says it was for this
   }
 
   // Lucky: a free roll on offer — doubles pay dice total × $1,000, anything else is jail; it may be declined. High stakes: up to 2 rolls, each staking
@@ -607,21 +610,21 @@ export class Game {
       let won = 0, max = Math.max(200, Math.floor(p.cash / 100) * 100);
       let bet = ((await this.ask(pi, { k: 'casino', view: { ...view, stage: 'bet', bet: Math.min(500, max), max } })) as { bet: number }).bet;
       for (let n = 1; n <= 2; n++) {
-        if (!(await this.pay(pi, bet))) { this.emit({ t: 'casino', view: { ...view, stage: 'cash' } }); return; } // the wager busted them: the visit is over
-        const a = this.d6(), b = this.d6(), sum = a + b, gain = Math.round(((sum - 2) / 5) * (bet - 100)), prev = rolls.at(-1);
+        if (!(await this.pay(pi, bet, `${t.name} bet`))) { this.emit({ t: 'casino', view: { ...view, stage: 'cash' } }); return; } // the wager busted them: the visit is over
+        const a = this.d6(), b = this.d6(), sum = a + b, gain = Math.round(((sum - 2) / 5) * (bet - 100)), prev = rolls.at(-1), why = m`${t.name}: rolled ${String(sum)}`;
         rolls.push([a, b, gain, bet]);
         won += gain;
         jail = !!prev && [prev[0], prev[1]].sort().join() === [a, b].sort().join() && sum > 7; // the same pair twice, above 7
         max = Math.floor((p.cash + gain) / 100) * 100; // what the next wager may be, once this round pays out
         const now = { ...view, bet, max, rolls: [...rolls], won, jail };
-        if (jail || n === 2 || max < 200) { this.emit({ t: 'casino', view: { ...now, stage: 'end' } }); this.give(pi, gain); break; } // not the smallest stake for another round: the table closes
+        if (jail || n === 2 || max < 200) { this.emit({ t: 'casino', view: { ...now, stage: 'end' } }); this.give(pi, gain, why); break; } // not the smallest stake for another round: the table closes
         const next = (await this.ask(pi, { k: 'casino', view: { ...now, stage: 'again', bet: Math.min(500, max) } })) as { act: 'roll'; bet: number } | { act: 'cash' };
-        this.give(pi, gain);
+        this.give(pi, gain, why);
         if (next.act === 'cash') { this.emit({ t: 'casino', view: { ...now, stage: 'cash' } }); break; }
         bet = next.bet;
       }
     }
-    if (delta > 0) this.give(pi, delta); else await this.pay(pi, -delta);
+    if (delta > 0) this.give(pi, delta, `${t.name}: doubles`); else await this.pay(pi, -delta, t.name);
     if (jail && !p.out) await this.sendToJail(pi);
   }
 }

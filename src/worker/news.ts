@@ -1,11 +1,11 @@
 import { REGIONS, TILES, TILE_COUNT, type InvestKind, type RegionKey } from '../shared/data';
 import { P, m, money } from '../shared/msg';
 import { stats } from '../shared/state';
-import type { NewsCard } from '../shared/types';
+import type { Msg, NewsCard } from '../shared/types';
 import type { Game } from './game';
 
-// A news event is drawn first (its dice, sign and targets are settled and shown on the card), then run.
-export interface Story { card: NewsCard; run(): Promise<void> }
+// A news event is drawn first (its dice, sign and targets are settled and shown on the card), then run. `why` is what the log gives as the reason of any money it moves.
+export interface Story { card: NewsCard; run(why: Msg): Promise<void> }
 type Def = (g: Game, pi: number) => Story;
 
 const N = TILE_COUNT;
@@ -18,19 +18,19 @@ const gap = (a: number, b: number) => (((b - a) % N) + N) % N; // tiles from a f
 // ---- Money: the player who drew it ----
 const win = (title: string, text: string, vals: number[]): Def => (g, pi) => {
   const v = g.pick(vals);
-  return { card: { cat: 'Money', title, text, amt: v }, run: async () => g.give(pi, v) };
+  return { card: { cat: 'Money', title, text, amt: v }, run: async (why) => g.give(pi, v, why) };
 };
 const lose = (title: string, text: string, vals: number[]): Def => (g, pi) => {
   const v = g.pick(vals);
-  return { card: { cat: 'Money', title, text, amt: -v }, run: async () => { await g.pay(pi, v); } };
+  return { card: { cat: 'Money', title, text, amt: -v }, run: async (why) => { await g.pay(pi, v, why); } };
 };
 const incentive: Def = (g, pi) => {
   const v = 50 * g.owned(pi, ['invest']);
-  return { card: { cat: 'Money', title: 'Investment Incentive', text: 'New policy: gain $50 × investments owned.', amt: v || undefined }, run: async () => g.give(pi, v) };
+  return { card: { cat: 'Money', title: 'Investment Incentive', text: 'New policy: gain $50 × investments owned.', amt: v || undefined }, run: async (why) => g.give(pi, v, why) };
 };
 const repairs: Def = (g, pi) => {
   const v = 10 * stats(g.S, pi).lv;
-  return { card: { cat: 'Money', title: 'Home Repairs', text: 'Lose $10 × the sum of your building levels.', amt: v ? -v : undefined }, run: async () => { await g.pay(pi, v); } };
+  return { card: { cat: 'Money', title: 'Home Repairs', text: 'Lose $10 × the sum of your building levels.', amt: v ? -v : undefined }, run: async (why) => { await g.pay(pi, v, why); } };
 };
 
 // ---- Asset: everyone who owns a kind of investment, gaining or losing the same sum ----
@@ -38,9 +38,9 @@ const boom = (kinds: InvestKind[], who: string, up: [string, string], down: [str
   const gain = g.coin(), v = g.pick(vals), [title, text] = gain ? up : down;
   return {
     card: { cat: 'Asset', title, text: `${text} ${who} ${gain ? 'gain' : 'lose'} ${money(v)}.` },
-    run: async () => {
+    run: async (why) => {
       for (const o of g.owners(kinds)) {
-        if (gain) { if (g.collects(o)) g.give(o, v); } else await g.pay(o, v);
+        if (gain) { if (g.collects(o)) g.give(o, v, why); } else await g.pay(o, v, why);
         if (g.over()) return;
       }
     },
@@ -50,7 +50,7 @@ const strike: Def = (g) => {
   const v = g.pick([100, 200, 300]);
   return {
     card: { cat: 'Asset', title: 'Labor Strike', text: `Walkouts hit chokepoints, transport, construction and oil. Their owners lose ${money(v)}.` },
-    run: async () => { for (const o of g.owners(['choke', 'transport', 'build', 'oil'])) { await g.pay(o, v); if (g.over()) return; } },
+    run: async (why) => { for (const o of g.owners(['choke', 'transport', 'build', 'oil'])) { await g.pay(o, v, why); if (g.over()) return; } },
   };
 };
 
@@ -59,14 +59,14 @@ const wedding: Def = (g, pi) => {
   const v = g.pick([50, 100, 150, 200, 250]);
   return {
     card: { cat: 'Players', title: 'Wedding Bells', text: `Collect ${money(v)} from every other player.` },
-    run: async () => { for (const o of g.alive()) { if (o !== pi) await g.pay(o, v, pi); if (g.over()) return; } },
+    run: async (why) => { for (const o of g.alive()) { if (o !== pi) await g.pay(o, v, why, pi); if (g.over()) return; } },
   };
 };
 const banquet: Def = (g, pi) => {
   const v = g.pick([20, 40, 60, 80, 100]);
   return {
     card: { cat: 'Players', title: 'Grand Banquet', text: `Pay every other player ${money(v)}.` },
-    run: async () => { for (const o of g.alive()) { if (o !== pi && !(await g.pay(pi, v, o))) return; if (g.over()) return; } },
+    run: async (why) => { for (const o of g.alive()) { if (o !== pi && !(await g.pay(pi, v, why, o))) return; if (g.over()) return; } },
   };
 };
 const pickpocket: Def = (g, pi) => {
@@ -74,10 +74,10 @@ const pickpocket: Def = (g, pi) => {
   const text = !hit.length ? 'Nobody was in your way this turn.' : take ? `You brushed past other players on the way. Collect ${money(v)} from each.` : `A hustler spotted you. Pay ${money(v)} to each player you passed.`;
   return {
     card: { cat: 'Players', title: take ? 'Pickpocket' : 'Hustler', text },
-    run: async () => {
+    run: async (why) => {
       for (const o of hit) {
         if (g.S.players[o].out) continue;
-        if (take) await g.pay(o, v, pi); else if (!(await g.pay(pi, v, o))) return;
+        if (take) await g.pay(o, v, why, pi); else if (!(await g.pay(pi, v, why, o))) return;
         if (g.over()) return;
       }
     },
@@ -87,7 +87,7 @@ const finders: Def = (g, pi) => {
   const v = g.pick([50, 100, 150]), o = g.nearest(pi, -1);
   return {
     card: { cat: 'Players', title: 'Finders Keepers', text: o < 0 ? 'There is nobody behind you.' : `Pay ${money(v)} to the nearest player behind you.` },
-    run: async () => { if (o >= 0) await g.pay(pi, v, o); },
+    run: async (why) => { if (o >= 0) await g.pay(pi, v, why, o); },
   };
 };
 
@@ -96,25 +96,25 @@ const olympics: Def = (g) => {
   const at = g.pick(places), v = 200;
   return {
     card: { cat: 'Position', title: 'Olympic Fever', text: `Players standing on ${TILES[at].name} lose ${money(v)}.` },
-    run: async () => { for (const o of g.alive()) { if (g.S.players[o].tile === at) await g.pay(o, v); if (g.over()) return; } },
+    run: async (why) => { for (const o of g.alive()) { if (g.S.players[o].tile === at) await g.pay(o, v, why); if (g.over()) return; } },
   };
 };
 const visas: Def = (g) => {
   const r = g.pick(Object.keys(REGIONS) as RegionKey[]), v = 300;
   return {
     card: { cat: 'Position', title: 'Visa Crackdown', text: `Players standing in ${REGIONS[r][0]} lose ${money(v)}.` },
-    run: async () => { for (const o of g.alive()) { if (REGION_OF[g.S.players[o].tile] === r) await g.pay(o, v); if (g.over()) return; } },
+    run: async (why) => { for (const o of g.alive()) { if (REGION_OF[g.S.players[o].tile] === r) await g.pay(o, v, why); if (g.over()) return; } },
   };
 };
 const tour: Def = (g) => {
   const at = g.pick(investments), v = 100;
   return {
     card: { cat: 'Position', title: 'Study Tour', text: `Players on ${TILES[at].name} pay ${money(v)} to its owner.` },
-    run: async () => {
+    run: async (why) => {
       for (const o of g.alive()) {
         if (g.S.players[o].tile !== at) continue;
         const own = g.S.own[at]; // a jailed owner collects nothing: the bank gets it
-        await g.pay(o, v, own && own.p !== o && g.collects(own.p) ? own.p : null);
+        await g.pay(o, v, why, own && own.p !== o && g.collects(own.p) ? own.p : null);
         if (g.over()) return;
       }
     },
@@ -135,11 +135,11 @@ const destination: Def = (g, pi) => {
 // ---- Action: everyone who owns something ----
 const homecoming: Def = (g) => ({
   card: { cat: 'Action', title: 'Homecoming', text: 'Transport owners move to START and stop, then pay $1,000.' },
-  run: async () => {
+  run: async (why) => {
     for (const o of g.owners(['transport'])) {
       g.move(o, 0, 'jump');
       await g.landOn(o, 0);
-      if (!g.S.players[o].out) await g.pay(o, 1000);
+      if (!g.S.players[o].out) await g.pay(o, 1000, why);
       if (g.over()) return;
     }
   },
