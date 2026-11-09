@@ -230,11 +230,21 @@ export const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 *
 interface Tween { t: number; dur: number; fn: (k: number) => void; ease: (t: number) => number; res: () => void }
 const tweens = new Set<Tween>();
 export const pace = { speed: 1 }; // how many times faster than designed the tweens run (and the cards' timers, see dialogs): the director raises it when the screen is far behind the game
+// A visible but occluded window gets no frames at all (the OS pauses the loop with no visibilitychange): a tween would wait on one forever, the
+// director's queue piling up behind it. While tweens wait, a watchdog finishes them when no frame has run for a second.
+let lastFrame = performance.now(), guard: ReturnType<typeof setInterval> | null = null;
+function watch() {
+  guard ??= setInterval(() => {
+    if (!tweens.size) { clearInterval(guard!); guard = null; }
+    else if (!document.hidden && performance.now() - lastFrame > 1000) finishTweens();
+  }, 500);
+}
 export const tween = (dur: number, fn: (k: number) => void, ease = (t: number) => t) =>
-  document.hidden ? (fn(ease(1)), dirtyShadow(), Promise.resolve()) : new Promise<void>((res) => tweens.add({ t: 0, dur, fn, ease, res }));
+  document.hidden ? (fn(ease(1)), dirtyShadow(), Promise.resolve()) : new Promise<void>((res) => { tweens.add({ t: 0, dur, fn, ease, res }); watch(); });
 const still = () => {};
 export const wait = (s: number) => tween(s, still); // moves nothing, so it is no reason to draw the shadows again
 export function updateTweens(dt: number) {
+  lastFrame = performance.now();
   for (const tw of tweens) {
     tw.t = Math.min(1, tw.t + (dt * pace.speed) / tw.dur);
     tw.fn(tw.ease(tw.t));

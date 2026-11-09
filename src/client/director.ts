@@ -17,7 +17,7 @@ const queue: Ev[] = [];
 let running = false;
 let epoch = 0; // a reset (a snapshot, a new game, leaving) ends whatever was being played
 let leave = () => {}; // how to leave the room, for the player who goes to the main menu after a game: given to `start`
-const BACKLOG = 10; // events waiting beyond this many speed everything up: 20 waiting play twice as fast as designed
+const BACKLOG = 25, MAX_SPEED = 4; // waiting events past this many speed everything up, to this much at most: a single turn's burst (~20 events) fits under the line and plays at 1x
 
 /** Hold on to a promise, but forget what comes after it if the director was reset meanwhile. */
 const live = <T>(p: Promise<T>): Promise<T> => { const e = epoch; return p.then((v) => (e === epoch ? v : new Promise<T>(() => {}))); };
@@ -28,7 +28,7 @@ const focusTurn = (pi: number) => { if (autoFocus.get()) focusTok(pi); };
 
 let shown: Open<void> | null = null; // the card being waited on that has nothing to decide
 /** Wait for a card with nothing to decide. A hidden tab throttles the timer that closes it, and nobody sees it there: it comes down as the tab goes hidden. */
-const show = (card: Open<void>) => live((shown = card).done);
+const show = (card: Open<void>) => live((shown = card).done.then(() => { if (shown === card) shown = null; }));
 
 let casino: ReturnType<typeof openCasino> | null = null; // the card of the casino visit in progress, if any
 /** Put a view on the casino card (the first one opens it). Settles when the card has closed. */
@@ -53,6 +53,7 @@ function reset() {
   running = false;
   pace.speed = 1;
   forget();
+  shown = null;
   casino = null;
   clearCards();
   toasts.set([]); floats.set([]); tip.set(null);
@@ -80,10 +81,10 @@ async function pump() {
   running = true;
   const e = epoch;
   while (queue.length && e === epoch) {
-    pace.speed = Math.max(1, queue.length / BACKLOG); // each event is played at the speed its backlog asks for when it starts
+    pace.speed = Math.min(MAX_SPEED, Math.max(1, queue.length / BACKLOG)); // each event is played at the speed its backlog asks for when it starts
     try { await play(queue.shift()!); } catch (err) { console.error(err); }
   }
-  if (e === epoch) running = false;
+  if (e === epoch) { pace.speed = 1; running = false; }
 }
 
 /** The screen as a snapshot says the game is now (joining a running game, or coming back to it). */
