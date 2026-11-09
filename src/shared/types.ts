@@ -42,10 +42,10 @@ export interface OrderPass { group: number[]; rolls: [number, number][] } // one
 export interface RankRow { p: number; net: number }
 
 // The casino card is one card across several steps; every step carries all of it.
-export type CasinoRoll = [a: number, b: number, gain: number];
+export type CasinoRoll = [a: number, b: number, gain: number, stake: number];
 export interface CasinoView {
   cid: number; v: CasinoVariant;
-  stage: 'bet' | 'again' | 'end' | 'cash'; // 'end': the result stays up a moment; 'cash': the player cashed out, the card just closes
+  stage: 'bet' | 'again' | 'play' | 'end' | 'cash'; // 'play': lucky's roll-or-leave choice; 'end': the result stays up a moment; 'cash': the player cashed out, the card just closes
   bet: number; max: number; // `max`: the largest bet on offer while betting
   rolls: CasinoRoll[]; won: number; jail: boolean; // `jail`: set at the end
 }

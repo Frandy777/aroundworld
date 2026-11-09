@@ -4,8 +4,8 @@ import { useGame } from '../store';
 import { Face, Pips, Rows, hex, money } from './bits';
 
 const CASINO = {
-  lucky: 'Roll two dice. Doubles send you to jail; otherwise win dice total \u00D7 $1,000.',
-  stakes: 'Bet any amount (multiples of $100), then roll: win (total - 2) \u00F7 5 \u00D7 (bet - 100). Play up to 2 rolls. If both rolls show the same pair with a total above 7, you go to jail.',
+  lucky: 'You may roll two dice: doubles win dice total \u00D7 $1,000; anything else sends you to jail.',
+  stakes: 'Bet any amount (multiples of $100): each roll stakes a bet of your choosing and wins (total - 2) \u00F7 5 \u00D7 (bet - 100), settling on its own. Up to 2 rolls. If both rolls show the same pair with a total above 7, you go to jail.',
 };
 const fxText = (t: Tile) => (t.type === 'special' ? SPECIAL[t.name] : t.type === 'invest' ? INVEST[t.kind as InvestKind].fx : t.kind === 'casino' ? CASINO[t.variant!] : PUBLIC[t.kind as PublicKind].fx);
 

@@ -74,7 +74,7 @@ const RULES: Record<string, ReactNode> = {
   </>,
   TILES: <>
     <h4>INVESTMENTS</h4><p>Transport, Construction, Military, Chokepoints, Oil, Media and Prison Island. Own more of a group to make it stronger.</p>
-    <h4>PUBLIC TILES</h4><ul><li><b>START:</b> collect $3,000 passing or stopping.</li><li><b>Exchanges:</b> investments owned {'\u00D7'} $500.</li><li><b>Tax Bureau:</b> cities {'\u00D7'} $300 + investments {'\u00D7'} $500.</li><li><b>Casino:</b> gamble, but doubles may send you to jail.</li><li><b>Nightclub:</b> pay $100, stay one turn.</li><li><b>Bank:</b> mortgage cities.</li><li><b>News Agency:</b> draw a random news event.</li></ul>
+    <h4>PUBLIC TILES</h4><ul><li><b>START:</b> collect $3,000 passing or stopping.</li><li><b>Exchanges:</b> investments owned {'\u00D7'} $500.</li><li><b>Tax Bureau:</b> cities {'\u00D7'} $300 + investments {'\u00D7'} $500.</li><li><b>Casino:</b> gamble on the dice — a wrong roll can send you to jail.</li><li><b>Nightclub:</b> pay $100, stay one turn.</li><li><b>Bank:</b> mortgage cities.</li><li><b>News Agency:</b> draw a random news event.</li></ul>
   </>,
 };
 export function RulesCard({ close }: { close(v: string): void }) {
@@ -229,12 +229,13 @@ export function ResultsCard({ rank, close }: { rank: RankRow[]; close(v: 'menu' 
   );
 }
 
-// ---- Casino: one card for a whole visit, told in views (see CasinoView). Lucky is one view, high stakes is a bet, a roll, then roll again or cash out ----
+// ---- Casino: one card for a whole visit, told in views (see CasinoView). Lucky is roll-or-leave, then the result; high stakes is up to 2 rolls, each staking a bet of its own, or cash out after the first ----
 export interface Ctl { view: Cell<CasinoView>; ask: Cell<{ id: number; mine: boolean } | null> }
 
 export function CasinoCard({ ctl, close }: { ctl: Ctl; close(): void }) {
   const v = useCell(ctl.view), ask = useCell(ctl.ask), lucky = v.v === 'lucky';
   const [bet, setBet] = useState(v.bet);
+  useEffect(() => setBet(v.bet), [v.bet]); // the server re-suggests a wager at every betting stage
   const [shown, setShown] = useState(0); // rolls on the table
   const [rolling, setRolling] = useState(false); // the dice are in the air
   const [dice, setDice] = useState<[number, number]>([0, 0]);
@@ -262,40 +263,44 @@ export function CasinoCard({ ctl, close }: { ctl: Ctl; close(): void }) {
   }, [rolling]);
 
   const done = !rolling && shown === v.rolls.length; // everything told is on the table
-  const last = shown ? v.rolls[shown - 1] : null, won = v.rolls.slice(0, shown).reduce((s, r) => s + r[2], 0), stake = v.stage === 'bet' ? bet : v.bet;
+  const last = shown ? v.rolls[shown - 1] : null, won = v.rolls.slice(0, shown).reduce((s, r) => s + r[2], 0), stake = v.stage === 'bet' || v.stage === 'again' ? bet : v.bet;
+  const betting = (v.stage === 'bet' && !shown) || (v.stage === 'again' && done); // a stake is being picked
   const finished = done && v.stage === 'end', me = state().order[state().turn] === G.me;
   useAuto(finished ? READ : 0, close); // a final result stays up a moment, then settles by itself
   useEffect(() => { if (done && v.stage === 'cash') close(); }, [done, v.stage]);
 
-  const go = () => { setSent(true); setRolling(true); reply(ask!.id, { act: 'roll', bet: v.stage === 'bet' ? bet : v.bet }); };
+  const go = () => { setSent(true); setRolling(true); reply(ask!.id, { act: 'roll', bet: betting ? bet : v.bet }); };
   const cash = () => { setSent(true); reply(ask!.id, { act: 'cash' }); };
   const sgn = (n: number) => (n > 0 ? '+' : '') + money(n);
-  const tally: [string, number][] = [['Bet', -stake], ['Won', won], ['Net', won - stake]];
+  const staked = v.rolls.slice(0, shown).reduce((s, r) => s + r[3], 0);
+  const tally: [string, number][] = [['Bets', -staked], ['Won', won], ['Net', won - staked]];
 
   return (
     <Card title={lucky ? 'LUCKY CASINO' : 'HIGH STAKES CASINO'} sub={lucky ? 'Free roll' : 'Bet, roll, cash out'} cls="casino" foot={
       !rolling && (
-        v.stage === 'bet' && mine ? <Btn id="roll" cls="primary" onClick={go}>ROLL 1/2</Btn>
-        : v.stage === 'again' && done && mine ? <><Btn id="roll" cls="primary" onClick={go}>ROLL 2/2</Btn><Btn id="cash" cls="gold" onClick={cash}>CASH OUT</Btn></>
+        v.stage === 'play' && mine ? <><Btn id="roll" cls="primary" onClick={go}>ROLL</Btn><Btn id="cash" cls="gold" onClick={cash}>WALK AWAY</Btn></>
+        : v.stage === 'bet' && mine ? <Btn id="roll" cls="primary" onClick={go}>ROLL 1/2</Btn>
+        : v.stage === 'again' && done && mine ? <><Btn id="roll" cls="primary" onClick={go}>ROLL {money(bet)}</Btn><Btn id="cash" cls="gold" onClick={cash}>CASH OUT</Btn></>
         : finished ? <Btn id="done" cls={`primary ${v.jail ? 'danger' : ''}`} onClick={close}>{me ? (v.jail ? 'GO TO JAIL' : 'COLLECT') : 'OK'}</Btn>
         : null
       )
     }>
       <div className="note" style={{ background: '#2b1a47' }}>
-        {lucky ? 'Roll two dice. Doubles send you to JAIL. Otherwise win dice total \u00D7 $1,000.'
-          : `Pay a bet (multiples of $100). Each roll pays (total - 2) \u00D7 ${money((stake - 100) / 5)}. Up to 2 rolls. Same pair twice with total above 7 = JAIL.`}
+        {lucky ? 'You may roll two dice. Doubles win dice total \u00D7 $1,000. Anything else sends you to JAIL.'
+          : `Place a bet (multiples of $100): each roll stakes a bet of its own and pays (total - 2) \u00D7 ${money((stake - 100) / 5)}. Up to 2 rolls. Same pair twice with total above 7 = JAIL.`}
       </div>
-      {!lucky && v.stage === 'bet' && mine && !shown && (
+      {!lucky && betting && mine && (
         <div className="stepper">
           <button className="btn sm" onClick={() => setBet(Math.max(200, bet - 100))}><Icon n="minus" /></button>
           <b>BET {money(bet)}</b>
           <button className="btn sm" onClick={() => setBet(Math.min(v.max, bet + 100))}><Icon n="plus" /></button>
+          <button className="btn sm gold" onClick={() => setBet(v.max)}>ALL IN</button>
         </div>
       )}
       <div className="dice-row"><Die v={dice[0]} cls={rolling ? 'roll' : ''} n={32} /><Die v={dice[1]} cls={rolling ? 'roll' : ''} n={32} /></div>
       <div className="big-msg">
         {!last ? 'Feeling lucky?'
-          : lucky ? (v.jail ? <span className="bad">DOUBLES! Off to jail!</span> : <span className="good">{last[0] + last[1]} {'\u00D7'} $1,000 = {money(won)}</span>)
+          : lucky ? (v.jail ? <span className="bad">No match! Off to jail!</span> : <span className="good">DOUBLES! {last[0] + last[1]} {'\u00D7'} $1,000 = {money(won)}</span>)
           : finished && v.jail ? <span className="bad">Same pair twice! Straight to jail!</span>
           : <>Total {last[0] + last[1]}: <span className="good">+{money(last[2])}</span></>}
       </div>

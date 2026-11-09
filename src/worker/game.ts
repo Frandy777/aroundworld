@@ -54,7 +54,7 @@ function fallback(p: Prompt): Answer {
       for (const x of [...p.items].sort((a, b) => (b.amt ?? 0) - (a.amt ?? 0))) { if (need <= 0) break; sel.push(x.i); need -= x.amt ?? 0; }
       return sel;
     }
-    case 'casino': return p.view.stage === 'bet' ? { act: 'roll', bet: p.view.bet } : { act: 'cash' };
+    case 'casino': return p.view.stage === 'bet' || p.view.stage === 'play' ? { act: 'roll', bet: p.view.bet } : { act: 'cash' };
     default: return false; // deed, confirm, news
   }
 }
@@ -75,9 +75,11 @@ function check(p: Prompt, v: unknown): Answer | undefined {
     case 'casino': {
       const a = v as { act?: unknown; bet?: unknown } | null;
       if (!a || typeof a !== 'object') return undefined;
-      if (p.view.stage === 'again') return a.act === 'roll' ? { act: 'roll', bet: p.view.bet } : a.act === 'cash' ? { act: 'cash' } : undefined;
+      if (a.act === 'cash') return p.view.stage === 'again' || p.view.stage === 'play' ? { act: 'cash' } : undefined;
+      if (a.act !== 'roll') return undefined;
+      if (p.view.stage === 'play') return { act: 'roll', bet: p.view.bet };
       const bet = a.bet;
-      return a.act === 'roll' && typeof bet === 'number' && Number.isInteger(bet) && bet % 100 === 0 && bet >= 200 && bet <= p.view.max ? { act: 'roll', bet } : undefined;
+      return typeof bet === 'number' && Number.isInteger(bet) && bet % 100 === 0 && bet >= 200 && bet <= p.view.max ? { act: 'roll', bet } : undefined;
     }
   }
 }
@@ -557,32 +559,39 @@ export class Game {
     await story.run();
   }
 
-  // Lucky: one roll, nothing to decide. High stakes: a bet, a roll, then roll again or cash out. The one card is told in views.
+  // Lucky: a free roll on offer — doubles pay dice total × $1,000, anything else is jail; it may be declined. High stakes: up to 2 rolls, each staking
+  // a bet of its own and settling before the next wager is offered; the same pair twice above 7 is jail. The one card is told in views.
   private async casino(pi: number, t: Tile) {
     const p = this.S.players[pi], v = t.variant ?? 'lucky', cid = this.nextId++;
     const view = { cid, v, bet: 0, max: 0, rolls: [] as CasinoRoll[], won: 0, jail: false };
     let delta = 0, jail = false;
     if (v === 'lucky') {
-      const a = this.d6(), b = this.d6();
-      jail = a === b;
-      delta = jail ? 0 : (a + b) * 1000;
-      this.emit({ t: 'casino', view: { ...view, stage: 'end', rolls: [[a, b, delta]], won: delta, jail } });
+      const go = (await this.ask(pi, { k: 'casino', view: { ...view, stage: 'play' } })) as { act: 'roll' | 'cash' };
+      if (go.act === 'cash') this.emit({ t: 'casino', view: { ...view, stage: 'cash' } });
+      else {
+        const a = this.d6(), b = this.d6();
+        jail = a !== b;
+        delta = jail ? 0 : (a + b) * 1000;
+        this.emit({ t: 'casino', view: { ...view, stage: 'end', rolls: [[a, b, delta, 0]], won: delta, jail } });
+      }
     } else {
-      const max = Math.max(200, Math.min(5000, Math.floor(p.cash / 100) * 100));
-      const first = (await this.ask(pi, { k: 'casino', view: { ...view, stage: 'bet', bet: Math.min(500, max), max } })) as { act: 'roll'; bet: number };
-      const bet = first.bet, rolls: CasinoRoll[] = [];
-      let won = 0;
+      const rolls: CasinoRoll[] = [];
+      let won = 0, max = Math.max(200, Math.floor(p.cash / 100) * 100);
+      let bet = ((await this.ask(pi, { k: 'casino', view: { ...view, stage: 'bet', bet: Math.min(500, max), max } })) as { bet: number }).bet;
       for (let n = 1; n <= 2; n++) {
+        if (!(await this.pay(pi, bet))) { this.emit({ t: 'casino', view: { ...view, stage: 'cash' } }); return; } // the wager busted them: the visit is over
         const a = this.d6(), b = this.d6(), sum = a + b, gain = Math.round(((sum - 2) / 5) * (bet - 100)), prev = rolls.at(-1);
-        rolls.push([a, b, gain]);
+        rolls.push([a, b, gain, bet]);
         won += gain;
         jail = !!prev && [prev[0], prev[1]].sort().join() === [a, b].sort().join() && sum > 7; // the same pair twice, above 7
+        max = Math.floor((p.cash + gain) / 100) * 100; // what the next wager may be, once this round pays out
         const now = { ...view, bet, max, rolls: [...rolls], won, jail };
-        if (jail || n === 2) { this.emit({ t: 'casino', view: { ...now, stage: 'end' } }); break; }
-        const next = (await this.ask(pi, { k: 'casino', view: { ...now, stage: 'again' } })) as { act: 'roll' | 'cash' };
+        if (jail || n === 2 || max < 200) { this.emit({ t: 'casino', view: { ...now, stage: 'end' } }); this.give(pi, gain); break; } // not the smallest stake for another round: the table closes
+        const next = (await this.ask(pi, { k: 'casino', view: { ...now, stage: 'again', bet: Math.min(500, max) } })) as { act: 'roll'; bet: number } | { act: 'cash' };
+        this.give(pi, gain);
         if (next.act === 'cash') { this.emit({ t: 'casino', view: { ...now, stage: 'cash' } }); break; }
+        bet = next.bet;
       }
-      delta = won - bet;
     }
     if (delta > 0) this.give(pi, delta); else await this.pay(pi, -delta);
     if (jail && !p.out) await this.sendToJail(pi);
