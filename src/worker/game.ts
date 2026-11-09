@@ -588,9 +588,8 @@ export class Game {
   private async news(pi: number) {
     this.bonus('BBC', [500], m`${P(pi)} triggered News`);
     let story = this.pick(NEWS)(this, pi);
-    if (this.spOf(pi, 'BBC')) {
-      if ((await this.ask(pi, { k: 'news', card: story.card })) === true) { story = this.pick(NEWS)(this, pi); this.emit({ t: 'news', card: story.card }); }
-    } else this.emit({ t: 'news', card: story.card });
+    if (this.spOf(pi, 'BBC') && (await this.ask(pi, { k: 'news', card: story.card })) === true) story = this.pick(NEWS)(this, pi);
+    this.emit({ t: 'news', card: story.card }); // kept or drawn again, the story is read by everyone (the ask only decided which)
     const why = m`News: ${B(story.card.title)}`;
     this.log(why);
     await story.run(why); // what the story takes or gives says it was for this

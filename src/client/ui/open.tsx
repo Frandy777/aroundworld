@@ -1,4 +1,4 @@
-import type { CasinoView, NewsCard as News, Notice, OrderPass, Player, Prompt, RankRow } from '../../shared/types';
+import type { Answer, CasinoView, NewsCard as News, Notice, OrderPass, Player, Prompt, RankRow } from '../../shared/types';
 import { reply } from '../asks';
 import { autoFocus, cell, openCard, type Open } from '../store';
 import { Btn, Card, CasinoCard, Check, ConfirmCard, DeedCard, NewsCard, NoticeCard, OrderCard, PickCard, ResultsCard, RulesCard, type Ctl } from './dialogs';
@@ -14,16 +14,16 @@ export const openAlert = (title: string, text: string) => openCard((close) => (
 
 export const openNotice = (n: Notice) => openCard((close) => <NoticeCard n={n} close={() => close()} />);
 
-/** A story to read: for everybody on a news tile, and for the players who are not asked when the Media owner may keep it. */
+/** A story to read: for everybody once the Media owner has kept or replaced it. */
 export const openNews = (c: News) => openCard((close) => <NewsCard c={c} close={() => close()} />);
 
-/** The card for a question to this player, or null for a question that has no card of its own (roll, casino). */
-export function openAsk(id: number, p: Prompt): Open<void> | null {
+/** The card for a question to this player, or null for a question that has no card of its own (roll, casino). `onAnswer` hears what the card itself answered. */
+export function openAsk(id: number, p: Prompt, onAnswer?: (v: Answer) => void): Open<void> | null {
   switch (p.k) {
     case 'deed': return openCard(() => <DeedCard id={id} p={p} />);
     case 'pick': return openCard(() => <PickCard id={id} p={p} />);
     case 'confirm': return openCard(() => <ConfirmCard id={id} p={p} />);
-    case 'news': return openCard((close) => <NewsCard c={p.card} close={() => close()} redraw={(again) => reply(id, again)} />);
+    case 'news': return openCard((close) => <NewsCard c={p.card} close={() => close()} redraw={(again) => { onAnswer?.(again); reply(id, again); }} />);
     default: return null;
   }
 }

@@ -1,5 +1,5 @@
 import { apply, ranking } from '../shared/state';
-import type { CasinoView, Ev, GameState, Prompt } from '../shared/types';
+import type { CasinoView, Ev, GameState, NewsCard, Prompt } from '../shared/types';
 import { close, forget, hold, reply, wasClosed } from './asks';
 import { send } from './net';
 import { clearDice, hideDice, hop, jump, placeAt, removeToken, rollDice, setActive, tokens } from './render/actors';
@@ -30,6 +30,7 @@ let shown: Open<void> | null = null; // the card being waited on that has nothin
 /** Wait for a card with nothing to decide. A hidden tab throttles the timer that closes it, and nobody sees it there: it comes down as the tab goes hidden. */
 const show = (card: Open<void>) => live((shown = card).done.then(() => { if (shown === card) shown = null; }));
 
+let kept: NewsCard | null = null; // the story this player read on its Media redraw card and kept: the 'news' event that follows is the same one, already seen
 let casino: ReturnType<typeof openCasino> | null = null; // the card of the casino visit in progress, if any
 /** Put a view on the casino card (the first one opens it). Settles when the card has closed. */
 function showCasino(view: CasinoView, ask: { id: number; mine: boolean } | null) {
@@ -54,6 +55,7 @@ function reset() {
   pace.speed = 1;
   forget();
   shown = null;
+  kept = null;
   casino = null;
   clearCards();
   toasts.set([]); floats.set([]); tip.set(null);
@@ -201,7 +203,12 @@ async function play(ev: Ev) {
     case 'sel': if (ev.pi === G.me) selectTile(ev.i); return;
     case 'skip': if (!quiet()) toast(ev.m, 'bad'); await pause(1.6); return;
     case 'notice': if (!quiet()) await show(openNotice(ev.n)); return;
-    case 'news': if (!quiet()) await show(openNews(ev.card)); return;
+    case 'news': {
+      const dupe = !!kept && kept.title === ev.card.title && kept.text === ev.card.text; // the story `me` kept on the redraw card: already read
+      kept = null;
+      if (!quiet() && !dupe) await show(openNews(ev.card));
+      return;
+    }
     case 'casino': if (quiet()) casino?.card.close(); else await live(showCasino(ev.view, null)); return;
     case 'ask': return ask(ev.id, ev.to, ev.p);
     case 'over': {
@@ -222,7 +229,7 @@ async function ask(id: number, to: number, p: Prompt) {
   let card: Open<void> | null = null, btn: Button | null = null;
   if (p.k === 'casino') void showCasino(p.view, { id, mine: me });
   else if (p.k === 'roll') { if (me) actionBtn.set((btn = { label: 'ROLL DICE', kbd: true, click: () => reply(id, true), reply: (v) => reply(id, v) })); }
-  else card = me ? openAsk(id, p) : p.k === 'news' ? openNews(p.card) : null;
+  else if (me) card = openAsk(id, p, (v) => { if (p.k === 'news' && v === false) kept = p.card; }); // the others only see who is being waited for
   waitingFor.set(me ? -1 : to);
   await live(over);
   card?.close();
