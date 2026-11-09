@@ -226,7 +226,7 @@ export class Game {
   give(pi: number, amt: number, bank = true) {
     if (amt <= 0) return;
     this.cash(pi, amt);
-    if (bank) this.bonus('Zurich', [100, 200, 500], false);
+    if (bank) this.bonus('Zurich', [100, 200, 300], false);
   }
   /** A special tile pays its owner by level. */
   private bonus(name: string, vals: number[], bank = true) {
