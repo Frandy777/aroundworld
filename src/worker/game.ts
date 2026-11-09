@@ -414,7 +414,7 @@ export class Game {
       this.toast(m`Toll at ${T(i)}: -${money(fee)}`, 'bad');
       await this.pay(pi, fee, o.p);
     } else if (t.name === 'Hong Kong') {
-      const fee = Math.round((p.cash * [0.05, 0.1, 0.2][o.lv]) / 10) * 10;
+      const fee = Math.round((p.cash * [0.05, 0.1, 0.15][o.lv]) / 10) * 10;
       this.toast(m`${T(i)} levy: -${money(fee)}`, 'bad');
       await this.pay(pi, fee, o.p);
     }
