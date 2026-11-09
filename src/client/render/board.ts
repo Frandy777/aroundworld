@@ -3,7 +3,7 @@ import { scene, renderer, camera, controls, lod, toon, lodMap, pixelTexture, tex
 import { TILES, type Tile } from '../../shared/data';
 import { canvas, shade } from './art';
 import { CARD_SIZE, cardText, drawCard, drawCode, drawGround, drawPad } from './labels';
-import { CARD, CENTRE, LOT, MID, PAD, POS, S, SLAB, SZ, TOP, WIDE, home } from './layout';
+import { CARD, LOT, PAD, POS, S, SLAB, SZ, TOP } from './layout';
 import { bake, memo, sideTex } from './builder';
 import { buildProps, building, flag, level, sign } from './models';
 
@@ -14,8 +14,6 @@ const VACANT = 0xb9b2a0; // the plot of a tile nobody owns
 // ---- Tile surfaces: the info card, the ground and the plot, one drawing per zoom level (see labels) ----
 const cardTex = (t: Tile, L: number) => pixelTexture(canvas(...CARD_SIZE[L], (g) => drawCard(g, t, L)));
 const groundTex = memo((type: string, kind: string, color: number, L: number) => pixelTexture(canvas(32 << L, 32 << L, (g) => drawGround(g, type, kind, color, L))));
-// START's ground, one texture over both its cells (see createBoard), with its finish line along the bottom edge
-const startTex = memo((color: number, L: number) => pixelTexture(canvas(texels(WIDE, L), texels(SZ, L), (g, w, h) => drawGround(g, 'public', 'start', color, L, w, h))));
 // the plot, in whole texels of each level: top face carries the carpet, the walls are a darker tone of the same colour
 const padMats = memo((color: number) => {
   const side = toon(shade(color, 0.6)), top = lodMap(toon(0xffffff), (L) => pixelTexture(canvas(texels(PAD.w, L), texels(PAD.d, L), (g, w, h) => drawPad(g, color, w, h, L))));
@@ -32,9 +30,6 @@ const twoGroups = (g: THREE.BoxGeometry) => {
 };
 const slabGeo = memo((w: number, h: number, d: number) => twoGroups(new THREE.BoxGeometry(w, h, d)));
 const CARD_GEO = new THREE.PlaneGeometry(CARD.w, CARD.d).rotateX(-Math.PI / 2);
-// START's slab, two cells wide: its long walls (the +z and -z faces, vertices 16-23) repeat their courses of stone over the extra length, so no stone is stretched
-const START_GEO = twoGroups(new THREE.BoxGeometry(WIDE, SLAB, SZ)), START_UV = START_GEO.attributes.uv;
-for (let i = 16; i < 24; i++) START_UV.setX(i, (START_UV.getX(i) * WIDE) / SZ);
 // The tile cursor (hover, selection) is a bracket at each corner of the cell: an L of voxels, its corner at the origin and its two arms (30 texels long, 6 across and tall) along +x and +z.
 // A line one pixel wide breaks into dashes and stairs on the half-size buffer and is cut by whatever stands before it; blocks are drawn like everything else, and the ink pass gives them their edges.
 const CORNERS = [[-1, -1], [1, -1], [1, 1], [-1, 1]], ARM = 30 / DENSITY, BAR = 6 / DENSITY;
@@ -51,19 +46,17 @@ export function createBoard() {
     g.visible = false; scene.add(g); return g;
   };
   const hoverCursor = cursor(0xffffff), selCursor = cursor(0xffe066);
-  // START is two cells wide, its own and the wing (the loop's last cell): one slab over both, so the ground, the walls and the finish line run across the join.
   const tiles = TILES.map((t) => {
-    const g = new THREE.Group(), wide = !t.i;
+    const g = new THREE.Group();
     g.position.set(POS[t.i].x, 0, POS[t.i].z);
     g.userData = { lift: 0 };
     const side = lodMap(toon(t.color), sideTex);
-    const ground = lodMap(toon(0xffffff), (L) => (wide ? startTex(t.color, L) : groundTex(t.type, t.kind, t.color, L))); // lit: buildings and tokens cast their shadows on it
-    const slab = new THREE.Mesh(wide ? START_GEO : slabGeo(SZ, SLAB, SZ), [side, ground]);
+    const ground = lodMap(toon(0xffffff), (L) => groundTex(t.type, t.kind, t.color, L)); // lit: buildings and tokens cast their shadows on it
+    const slab = new THREE.Mesh(slabGeo(SZ, SLAB, SZ), [side, ground]);
     slab.position.y = (TOP - 0.8) / 2;
     slab.receiveShadow = slab.castShadow = true;
     const card = new THREE.Mesh(CARD_GEO, lodMap(new THREE.MeshBasicMaterial(), (L) => cardTex(t, L))); // unlit: exact colours, no shadow smudges
     card.position.set(CARD.x, TOP + 0.03, CARD.z);
-    if (wide) { slab.position.add(MID); card.position.add(home(0)).sub(POS[0]); } // START: the slab spans its own cell and the wing, the card stands in the wing and the props in its own cell
     const pad = t.type === 'public' ? null : new THREE.Mesh(slabGeo(PAD.w, PAD.h, PAD.d), padMats(VACANT)); // the plot: city tiles only
     if (pad) { pad.position.set(PAD.x, TOP + PAD.h / 2, PAD.z); pad.castShadow = pad.receiveShadow = true; }
     const props = new THREE.Group(), bld = new THREE.Group();
@@ -153,17 +146,16 @@ export function createBoard() {
     dirtyShadow();
   }
 
-  const place = (r: THREE.Group, i: number, hop: number) => { // the cursor on tile i, hop above its resting height: START's spans both its cells
+  const place = (r: THREE.Group, i: number, hop: number) => { // the cursor on tile i, hop above its resting height
     r.visible = i >= 0;
     if (i < 0) return;
-    const p = i ? POS[i] : CENTRE, hw = (i ? S : 2 * S) / 2;
-    r.position.set(p.x, tiles[i].g.position.y + TOP + BRACKET_Y + hop, p.z);
-    r.children.forEach((b, k) => b.position.set(CORNERS[k][0] * hw, 0, (CORNERS[k][1] * S) / 2));
+    r.position.set(POS[i].x, tiles[i].g.position.y + TOP + BRACKET_Y + hop, POS[i].z);
+    r.children.forEach((b, k) => b.position.set((CORNERS[k][0] * S) / 2, 0, (CORNERS[k][1] * S) / 2));
   };
   const walls = (i: number, lit: boolean) => tiles[i].side.color.set(TILES[i].color).multiplyScalar(lit ? 1.3 : 1); // the selected tile's walls are one band up the shading ramp (its bands are about 1.3x apart)
   let hov = -1, sel = -1;
   return {
-    slabs: tiles.map((o) => o.slab), setOwner, // what the pointer picks: each tile's base, a plain box (START's spans both its cells)
+    slabs: tiles.map((o) => o.slab), setOwner, // what the pointer picks: each tile's base, a plain box
     // The lettering of every card, once the camera has moved and before render(). `on`: in a game. It is there only while the camera is square to the tiles (its azimuth a whole
     // number of quarter turns): turned from them, lettering that stays upright would not sit on its card, and lettering that turns with them cannot be pixel exact.
     labels(on: boolean) {

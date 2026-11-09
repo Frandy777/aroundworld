@@ -1,4 +1,4 @@
-import { box, final, floor, plaque, GOLD, IRON, INK, type Prop } from '../builder';
+import { box, cyl, final, floor, plaque, GOLD, IRON, INK, type Prop } from '../builder';
 
 // The public tiles' props, keyed by tile kind
 const bars = (xs: number[], h: number, y: number, z: number, c = INK) => xs.map((x): Prop => [c, 0.08, h, 0.08, x, y, z]);
@@ -60,5 +60,15 @@ export const PUBLIC_PROPS: Record<string, Prop[]> = {
       box(g, 0.9, 0.08, 0.9, 0xe8e8e8, 0.7, 2.66, -0.25); box(g, 0.5, 0.06, 0.5, 0x666a7e, 0.7, 2.74, -0.25); box(g, 0.12, 0.3, 0.12, 0xd9423e, 0.7, 2.74, -0.25); // dish
       box(g, 0.1, 1.1, 0.1, 0x333333, -0.95, 2.1, -0.5); box(g, 0.18, 0.18, 0.18, 0xff3b3b, -0.95, 3.2, -0.5); // mast
     }),
+  ],
+  area51: [ // a hangar with its sign over the door, and a flying saucer hovering beside it
+    [0xcbb98a, 2.0, 0.08, 1.3, 0, 0, 0],
+    [0x8f9aa8, 1.2, 0.8, 0.7, -0.4, 0.08, -0.25], [INK, 0.5, 0.42, 0.04, -0.4, 0.08, 0.1], [0x6f7a88, 1.3, 0.1, 0.8, -0.4, 0.88, -0.25], [0x5d6775, 0.9, 0.1, 0.5, -0.4, 0.98, -0.25],
+    (g) => plaque(g, 'AREA 51', '#1b2a3a', '#73eff7', 1.1, 0.3, -0.4, 0.52, 0.1),
+    (g) => { // the saucer: a hub, two discs, a glowing dome and six lamps round the rim
+      const [x, z] = [0.58, 0.22];
+      cyl(g, 0.18, 0.08, IRON, x, 0.5, z); cyl(g, 0.4, 0.1, 0xc9d1de, x, 0.58, z); cyl(g, 0.3, 0.07, 0xe4eaf3, x, 0.68, z); cyl(g, 0.17, 0.12, 0x5dfff0, x, 0.75, z);
+      for (let k = 0; k < 6; k++) box(g, 0.07, 0.05, 0.07, 0xfff6b0, x + 0.35 * Math.cos((k * Math.PI) / 3), 0.68, z + 0.35 * Math.sin((k * Math.PI) / 3));
+    },
   ],
 };

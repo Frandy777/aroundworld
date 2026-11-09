@@ -566,6 +566,13 @@ export class Game {
         break;
       }
       case 'news': await this.news(pi); break;
+      case 'area51': { // an event move to any other tile: nothing on the way is passed, and the effect of the tile it lands on is resolved
+        const to = this.pick(TILES.filter((x) => x.i !== t.i)).i;
+        this.toast(m`${t.name}: teleported to ${T(to)}`);
+        this.move(pi, to, 'jump');
+        await this.landOn(pi, to);
+        break;
+      }
     }
   }
 

@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { scene, toon, lodMap, pixelTexture, texels, tween, easeInOut, dirtyShadow, DENSITY } from './scene';
-import { home, LOT } from './layout';
+import { LOT, POS } from './layout';
 import { PAL, dieRows, paint, canvas, facePal, FACE, TORSO } from './art';
 import { TILES } from '../../shared/data';
 
 // ---- Chibi player tokens ----
 // Tokens stand on their tile, each on a disc base in its player's colour (readable from far away, so every player is marked,
-// not only the active one). Slots are in tile space (around the tile's `home`): the yard in front of the info card, 2 x 2. A token takes the first free slot of the tile it
+// not only the active one). Slots are in tile space (around the tile's centre): the yard in front of the info card, 2 x 2. A token takes the first free slot of the tile it
 // arrives on and keeps it until it leaves, so the front row fills first and a lone token never stands up over the card; `ry` is its facing, south unless it is
 // hopping. Every token also wears a pin above its head in its colour (so a player hidden behind another is still told apart); the active
 // token's is gold, bigger and bounces.
@@ -29,7 +29,7 @@ const slot = (tok: Token, i: number) => { // first slot of tile i that no other 
 };
 const spot = (tok: Token, i: number) => {
   const [x, z] = (tok.jailed && i === JAIL ? CAGE : SLOT)[tok.slot];
-  return new THREE.Vector3(x, 0, z).add(home(i));
+  return new THREE.Vector3(x, 0, z).add(POS[i]);
 };
 const place = (tok: Token, i: number) => { tok.tile = i; tok.slot = slot(tok, i); tok.g.position.copy(spot(tok, i)); dirtyShadow(); }; // a token that appears, or is moved with no tween (out of the cage)
 

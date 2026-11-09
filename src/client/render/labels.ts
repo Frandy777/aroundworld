@@ -34,7 +34,7 @@ const CODE: Record<string, string> = {
   'West Sea Base': 'WSB', Pyongyang: 'PYG', Vladivostok: 'VVO', Yekaterinburg: 'YEK', Moscow: 'MOS', 'Saint Petersburg': 'SPB', Warsaw: 'WAR', Prague: 'PRG', Vienna: 'VIE',
   Budapest: 'BUD', Berlin: 'BER', Zurich: 'ZRH', VINCI: 'VIN', Paris: 'PAR', Madrid: 'MAD', BBC: 'BBC', London: 'LON', Maersk: 'MSK', Copenhagen: 'CPH', Oslo: 'OSL',
   'Bering Strait': 'BRG', Ottawa: 'OTT', 'New York': 'NYC', Washington: 'WAS', 'United Airlines': 'UAL', Chicago: 'CHI', "Devil's Island": 'DEV', 'San Francisco': 'SFO',
-  'Las Vegas': 'LAS', 'White Sands Base': 'WHS', 'Mexico City': 'MEX', Havana: 'HAV', 'San José': 'SJO', 'Panama Canal': 'PAN', Bogotá: 'BOG', 'Venezuela Oil': 'VEN',
+  'Las Vegas': 'LAS', 'White Sands Base': 'WHS', 'Area 51': 'UFO', 'Mexico City': 'MEX', Havana: 'HAV', 'San José': 'SJO', 'Panama Canal': 'PAN', Bogotá: 'BOG', 'Venezuela Oil': 'VEN',
   'Buenos Aires': 'BUE', Rio: 'RIO', Brasília: 'BSB', Pretoria: 'PRE', Tunis: 'TUN', Djibouti: 'JIB', Cairo: 'CAI', Jerusalem: 'JER', 'Damascus Base': 'DAM', 'Abu Dhabi': 'AUH',
   'Saudi Aramco': 'ARA', Dubai: 'DXB', 'Strait of Hormuz': 'HRZ', Tehran: 'THR', Islamabad: 'ISB', 'New Delhi': 'DEL', Mumbai: 'BOM',
 };
@@ -64,6 +64,13 @@ const FLOOR: Record<string, (f: Fill, c: number, x: number, y: number, w: number
   club: (f, c, x, y, w, h, s) => { const q = s(8, 2); for (let i = 0; i < w / q; i++) for (let j = 0; j < h / q; j++) f((i + j) & 1 ? shade(c, 0.65) : shade(c, 1.3), x + i * q, y + j * q, q, q); },  // dance floor
   bank: (f, c, x, y, w, h, s) => { const p = s(14, 4); for (let i = 0; i < w; i += p) for (let j = 0; j < h; j += p) { f(shade(c, 1.35), x + i, y + j, p - 1, p - 1); f(shade(c, 1.55), x + i, y + j, p - 1, 1); } }, // marble tiles
   news: (f, c, x, y, w, h, s) => { for (let j = s(2), k = 0; j < h; j += s(4, 2), k++) f(shade(c, 0.6), x + s(4), y + j, w - 2 * s(4) - (k & 1) * s(7), s(2)); },                    // columns of print
+  area51: (f, c, x, y, w, h, s) => { // landing rings round the middle of the tile
+    const lit = shade(c, 1.4);
+    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+      const r = Math.hypot(i + 0.5 - w / 2, j + 0.5 - h / 2);
+      if ([18, 36, 54].some((n) => Math.abs(r - s(n)) < 0.75)) f(lit, x + i, y + j, 1, 1);
+    }
+  },
 };
 
 // A name broken at its spaces (and at the hyphenations in brk) into lines at most `max` pixels wide in the font of scale n
@@ -178,10 +185,9 @@ export function drawPad(g: Ctx, color: number, w: number, h: number, L: number) 
 // Ground: city tiles are paved with 4 x 4 square slabs in a soft tint of the region colour, joined by hairlines. Flat and quiet on purpose: nothing like
 // the side walls' courses, so it reads as floor, and nothing for the eye to read, so the cards and buildings stand out.
 // A hatched yard for investments, the signature floor for public tiles. Special cities get a gold inlay just inside the tile edge.
-// W x H is the canvas (a tile's ground is square; START's is two cells wide).
-export function drawGround(g: Ctx, type: string, kind: string, color: number, L: number, W = 32 << L, H = W) {
+export function drawGround(g: Ctx, type: string, kind: string, color: number, L: number) {
   const G = 32 << L, fill = filler(g), s = (n: number, min = 1) => Math.max(min, Math.round((n * G) / 128));
-  if (type === 'public') { const m = s(4); fill(hex(color), 0, 0, W, H); FLOOR[kind]?.(fill, color, m, m, W - 2 * m, H - 2 * m, s); }
+  if (type === 'public') { const m = s(4); fill(hex(color), 0, 0, G, G); FLOOR[kind]?.(fill, color, m, m, G - 2 * m, G - 2 * m, s); }
   else if (type === 'invest') { fill('#c3cbe0', 0, 0, G, G); for (let i = -G; i < G; i += s(12, 3)) for (let j = 0; j < G; j++) fill('#b3bdd6', i + j, j, s(4), 1); }
   else {
     const tint = (t: number) => shade(color, 0.38, t), S = G / 4, joint = tint(112);
@@ -193,5 +199,5 @@ export function drawGround(g: Ctx, type: string, kind: string, color: number, L:
       fill(GOLD[0], m, m, G - 2 * m, 1); fill(GOLD[2], m, G - m - 1, G - 2 * m, 1);
     }
   }
-  edge(fill, W, H, L > 0);
+  edge(fill, G, G, L > 0);
 }

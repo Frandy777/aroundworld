@@ -3,7 +3,7 @@ import type { CasinoView, Ev, GameState, Prompt } from '../shared/types';
 import { close, forget, hold, reply, wasClosed } from './asks';
 import { send } from './net';
 import { clearDice, hideDice, hop, jump, placeAt, removeToken, rollDice, setActive, tokens } from './render/actors';
-import { home } from './render/layout';
+import { POS } from './render/layout';
 import { finishTweens, pace, wait } from './render/scene';
 import { enterDemo, enterGame, focusTok, selectTile, setOwner, showState, tokenSpot } from './stage';
 import { G, actionBtn, activeTab, autoFocus, bump, bumpAssets, cashEls, clearCards, floatText, floats, hudLive, lastRoll, selectedTile, session, tip, toast, toasts, viewedPlayer, waitingFor, type Button, type Open } from './store';
@@ -158,7 +158,7 @@ async function play(ev: Ev) {
     case 'step': case 'log': apply(S, ev); bump(); return;
     case 'dice': {
       const tok = tokens[cur];
-      if (tok) await live(rollDice(home(tok.tile), [ev.a, ev.b]));
+      if (tok) await live(rollDice(POS[tok.tile], [ev.a, ev.b]));
       lastRoll.set([ev.a, ev.b]);
       await pause(0.7);
       await live(hideDice());

@@ -7,7 +7,7 @@ import type { Token } from '../render/actors';
 // Shaded tile chips, outlined tokens and the view frame (the dithered sea is the canvas' CSS background). One canvas pixel = one art pixel = 2px.
 // The chips change only with an owner: they are drawn once on `base` (again after `invalidateMinimap`), and a frame copies it and puts the tokens and the view frame on top.
 const px = (g: CanvasRenderingContext2D, c: string, x: number, y: number, w: number, h: number) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
-const chip = (g: CanvasRenderingContext2D, x: number, y: number, c: number, w = 3) => { px(g, shade(c, 0.55), x, y, w, 3); px(g, hex(c), x, y, w - 1, 2); }; // w x 3: body lit from the top-left, shade on the far edges
+const chip = (g: CanvasRenderingContext2D, x: number, y: number, c: number) => { px(g, shade(c, 0.55), x, y, 3, 3); px(g, hex(c), x, y, 2, 2); }; // 3 x 3: body lit from the top-left, shade on the far edges
 
 const xs = POS.map((p) => p.x), zs = POS.map((p) => p.z); // the board never moves: its bounds are worked out once
 const x0 = Math.min(...xs), x1 = Math.max(...xs), z0 = Math.min(...zs), z1 = Math.max(...zs);
@@ -23,8 +23,7 @@ function drawBase(cv: HTMLCanvasElement, S: GameState) {
   const g = base.getContext('2d')!;
   TILES.forEach((t) => {
     const X = Math.round(POS[t.i].x * k + ox), Z = Math.round(POS[t.i].z * k + oz), o = S.own[t.i];
-    const X2 = t.i ? X : Math.round(POS[TILES.length].x * k + ox); // START is two cells wide: its own and the wing, the loop's last cell
-    chip(g, Math.min(X, X2) - 1, Z - 1, t.color, Math.abs(X - X2) + 3);
+    chip(g, X - 1, Z - 1, t.color);
     if (o) px(g, o.m ? '#555' : hex(S.players[o.p].color), X, Z, 1, 1);
   });
   stale = false;

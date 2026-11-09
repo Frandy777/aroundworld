@@ -51,7 +51,7 @@ export const COUNTRY: Record<string, string> = {
   Jerusalem: 'il', 'Abu Dhabi': 'ae', Dubai: 'ae', Tehran: 'ir', Islamabad: 'pk', 'New Delhi': 'in', Mumbai: 'in',
 };
 
-export type PublicKind = 'start' | 'jail' | 'gojail' | 'exchange' | 'tax' | 'casino' | 'club' | 'bank' | 'news';
+export type PublicKind = 'start' | 'jail' | 'gojail' | 'exchange' | 'tax' | 'casino' | 'club' | 'bank' | 'news' | 'area51';
 // Public tiles: colour + effect text.
 export const PUBLIC: Record<PublicKind, { color: number; fx: string }> = {
   start: { color: 0x38b764, fx: 'Collect $3,000 when you pass or stop here.' },
@@ -63,8 +63,9 @@ export const PUBLIC: Record<PublicKind, { color: number; fx: string }> = {
   club: { color: 0x6a3fb5, fx: 'Pay $100 and stay here for one turn (effect does not repeat).' },
   bank: { color: 0x3b7bd9, fx: 'Stop here to voluntarily mortgage your cities.' },
   news: { color: 0xe8b53a, fx: 'Stop here to trigger a random news event.' },
+  area51: { color: 0x2bb5c8, fx: 'Stop here and you are teleported to a random other tile, whose effect then applies. An event move: nothing on the way is passed.' },
 };
-const PUBLIC_NAMES: Partial<Record<PublicKind, string>> = { start: 'START', jail: 'Jail', gojail: 'Go To Jail', tax: 'Tax Bureau', casino: 'Casino', club: 'Nightclub', bank: 'Bank', news: 'News Agency' };
+const PUBLIC_NAMES: Partial<Record<PublicKind, string>> = { start: 'START', jail: 'Jail', gojail: 'Go To Jail', tax: 'Tax Bureau', casino: 'Casino', club: 'Nightclub', bank: 'Bank', news: 'News Agency', area51: 'Area 51' };
 
 export type TileType = 'city' | 'special' | 'invest' | 'public';
 export type CasinoVariant = 'lucky' | 'stakes';
@@ -81,7 +82,7 @@ const special = (r: RegionKey, name: string, price: number, up: number, mort: nu
 const invest = (k: InvestKind, name: string) => row('invest', k, name, INVEST[k].price, 0, 0, 0x7d8aa6);
 const pub = (k: PublicKind, name = PUBLIC_NAMES[k] ?? '', variant?: CasinoVariant) => row('public', k, name, 0, 0, 0, PUBLIC[k].color, null, variant);
 
-// The loop, clockwise from START (see the map in the rules). START is one tile; the board draws it two cells wide.
+// The loop, clockwise from START (see the map in the rules).
 export const TILES: Tile[] = [
   pub('start'), city('oce', 'Wellington', 1600), city('oce', 'Canberra', 1800), city('oce', 'Sydney', 2600),
   city('sea', 'Jakarta', 1000), special('sea', 'Singapore', 5000, 4000, 2500), invest('choke', 'Strait of Malacca'),
@@ -101,7 +102,7 @@ export const TILES: Tile[] = [
   special('usa', 'New York', 5000, 4000, 2500), city('usa', 'Washington', 2800), invest('transport', 'United Airlines'),
   city('usa', 'Chicago', 2200), invest('devil', "Devil's Island"), city('usa', 'San Francisco', 4000),
   pub('casino', undefined, 'stakes'), special('usa', 'Las Vegas', 3000, 2000, 1500), pub('club'),
-  invest('military', 'White Sands Base'), city('cam', 'Mexico City', 1200), city('cam', 'Havana', 600), pub('news'),
+  invest('military', 'White Sands Base'), pub('area51'), city('cam', 'Mexico City', 1200), city('cam', 'Havana', 600), pub('news'),
   city('cam', 'San José', 1600), invest('choke', 'Panama Canal'), city('sam', 'Bogotá', 800),
   invest('oil', 'Venezuela Oil'), city('sam', 'Buenos Aires', 1000), special('sam', 'Rio', 2000, 1800, 1000),
   city('sam', 'Brasília', 1200), city('afr', 'Pretoria', 800), pub('news'), city('afr', 'Tunis', 600),

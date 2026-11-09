@@ -61,7 +61,7 @@ const RULES: Record<string, ReactNode> = {
   </>,
   TURN: <>
     <h4>YOUR TURN</h4><ul><li><b>1. Redeem</b> (optional): pay a mortgaged property's mortgage value to restore it.</li><li><b>2. Roll</b> two dice.</li><li><b>3. Move</b> tile by tile. Passing START or a chokepoint can trigger effects.</li><li><b>4. Stop</b> on the target tile and resolve it.</li></ul>
-    <p><b>Normal moves</b> pass every tile on the way. <b>Event moves</b> (news, jail) jump straight to the target.</p>
+    <p><b>Normal moves</b> pass every tile on the way. <b>Event moves</b> (news, jail, Area 51) jump straight to the target.</p>
   </>,
   CITIES: <>
     <h4>REGULAR CITIES</h4><ul><li>Rent: 10% / 25% / 50% / 100% of price (empty, Lv 1, Lv 2, Lv 3).</li><li>Upgrade cost: 25% of price. Mortgage value: 50% of price.</li><li>Own a whole region: <b>+50% rent</b>. Special cities do not count.</li></ul>
@@ -74,7 +74,7 @@ const RULES: Record<string, ReactNode> = {
   </>,
   TILES: <>
     <h4>INVESTMENTS</h4><p>Transport, Construction, Military, Chokepoints, Oil, Media and Prison Island. Own more of a group to make it stronger.</p>
-    <h4>PUBLIC TILES</h4><ul><li><b>START:</b> collect $3,000 passing or stopping.</li><li><b>Exchanges:</b> investments owned {'\u00D7'} $500.</li><li><b>Tax Bureau:</b> cities {'\u00D7'} $300 + investments {'\u00D7'} $500.</li><li><b>Casino:</b> gamble on the dice — a wrong roll can send you to jail.</li><li><b>Nightclub:</b> pay $100, stay one turn.</li><li><b>Bank:</b> mortgage cities.</li><li><b>News Agency:</b> draw a random news event.</li></ul>
+    <h4>PUBLIC TILES</h4><ul><li><b>START:</b> collect $3,000 passing or stopping.</li><li><b>Exchanges:</b> investments owned {'\u00D7'} $500.</li><li><b>Tax Bureau:</b> cities {'\u00D7'} $300 + investments {'\u00D7'} $500.</li><li><b>Casino:</b> gamble on the dice — a wrong roll can send you to jail.</li><li><b>Nightclub:</b> pay $100, stay one turn.</li><li><b>Bank:</b> mortgage cities.</li><li><b>News Agency:</b> draw a random news event.</li><li><b>Area 51:</b> get teleported to a random other tile, and its effect applies.</li></ul>
   </>,
 };
 export function RulesCard({ close }: { close(v: string): void }) {
