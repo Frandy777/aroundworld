@@ -7,6 +7,7 @@ import { NEWS } from './news';
 const N = TILE_COUNT;
 const JAIL = kindAt('jail');
 const JERU = tileAt('Jerusalem');
+const VEGAS = tileAt('Las Vegas');
 const ASK_MS = 60_000; // how long a player has to decide before the default answer is taken
 const OFFLINE_MS = 8_000; // ... when they are not connected (long enough to reload the page)
 const BOT_MS = 300; // ... when it is a bot: a beat for the screen to follow, then the default answer
@@ -89,7 +90,6 @@ export class Game {
   mods: Mods[];
   again = false; // Buy One, Get One: the player goes once more
   passed = new Set<number>(); // players walked past this turn
-  private roll: [number, number] = [1, 1];
   private rig: number[] = []; // what the dev panel wants the next random draws to be (see `rnd`)
   private nextId: number;
   private pending: Pending | null = null;
@@ -352,7 +352,6 @@ export class Game {
     this.emit({ t: 'step', s: 'roll' });
     for (let go = await this.ask(pi, { k: 'roll' }); go !== true; go = await this.ask(pi, { k: 'roll' })) if (go && (await this.debug(go as Cmd))) return;
     const a = this.d6(), b = this.d6();
-    this.roll = [a, b];
     this.emit({ t: 'dice', a, b });
     if (a === b) this.bonus('Rio', [200, 500, 1000]);
     // 3. Move and 4. resolve the tile
@@ -448,6 +447,7 @@ export class Game {
     const owner = S.players[o.p];
     if (o.m) return this.toast(m`${T(i)} is mortgaged: no fee`);
     if (!this.collects(o.p)) return this.toast(`${owner.name} is in jail: no fee`);
+    if (i === VEGAS) return this.vegas(pi, o);
     const fee = this.rent(pi, t, o);
     if (!fee) {
       if (t.kind === 'choke' || t.name === 'Hong Kong') return this.toll(pi, i);
@@ -480,6 +480,15 @@ export class Game {
     }
   }
 
+  // A visitor stopping at Las Vegas rolls the dice and pays the owner the total × $300/$500/$700 by level.
+  private async vegas(pi: number, o: Owned) {
+    const a = this.d6(), b = this.d6(), fee = (a + b) * [300, 500, 700][o.lv];
+    this.emit({ t: 'dice', a, b });
+    this.toast(m`${T(VEGAS)}: rolled ${String(a + b)}, pays ${money(fee)}`, 'bad');
+    this.log(m`${P(pi)} rolled ${String(a + b)} at ${T(VEGAS, true)}: pays ${money(fee)} to ${P(o.p)}`);
+    await this.pay(pi, fee, o.p);
+  }
+
   // BUY / UPGRADE card. Without the cash there is nothing to decide: say so and show the tile in the side panel.
   private async offer(pi: number, i: number, mode: 'buy' | 'upgrade', price: number) {
     const p = this.S.players[pi];
@@ -498,7 +507,6 @@ export class Game {
       const up = (mono ? 0.5 : 0) + (sg ? [0.1, 0.15, 0.2][sg.lv] : 0), down = py ? [0.1, 0.15, 0.2][py.lv] : 0;
       return Math.round(base * (1 + up) * (1 - down));
     }
-    if (t.name === 'Las Vegas') return (this.roll[0] + this.roll[1]) * [300, 500, 700][o.lv];
     if (t.kind === 'transport') return [500, 1000, 2000][this.count(o.p, 'transport') - 1];
     return 0;
   }

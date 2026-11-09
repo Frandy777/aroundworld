@@ -34,7 +34,7 @@ export const SPECIAL: Record<string, string> = {
   Pyongyang: 'Owner pays 10% / 15% / 20% less rent on regular cities.',
   Zurich: 'Whenever anyone gets money from the bank, owner earns $100 / $200 / $300.',
   'New York': 'Whenever anyone upgrades a city, owner earns $300 / $500 / $1,000.',
-  'Las Vegas': 'Charges players stopping here dice total × $300 / $500 / $700.',
+  'Las Vegas': 'Players stopping here roll the dice and pay the owner the total × $300 / $500 / $700.',
   Rio: 'Whenever anyone rolls doubles, owner earns $200 / $500 / $1,000.',
   Jerusalem: 'When the owner stops here, they roll the dice: every other player pays the total × $100 / $200 / $300.',
   Singapore: "Owner's rent income from regular cities +10% / +15% / +20%.",
