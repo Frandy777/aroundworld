@@ -28,7 +28,7 @@ export const svg = (rows: string[], cls = '', pal: Pal = PAL, z = 1) => {
   return `<svg xmlns="http://www.w3.org/2000/svg" class="${cls}" viewBox="0 0 ${w} ${h}" width="${w * z}" height="${h * z}" shape-rendering="crispEdges">${paths.map(([f, p]) => `<path fill="${f}" d="${p}"/>`).join('')}</svg>`;
 };
 const uri = (s: string) => `url("data:image/svg+xml,${encodeURIComponent(s)}")`;
-// the same sprites onto a 2D canvas (tile labels, minimap)
+// the same sprites onto a 2D canvas (tile labels, dice, token sprites)
 export const paint = (g: CanvasRenderingContext2D, rows: string[], x0: number, y0: number, pal: Pal = PAL) =>
   rows.forEach((r, y) => [...r].forEach((c, x) => { if (c !== '.') { g.fillStyle = pal[c]; g.fillRect(x0 + x, y0 + y, 1, 1); } }));
 // a w x h canvas, drawn by draw(ctx, w, h) (3D textures)

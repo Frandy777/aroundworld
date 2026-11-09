@@ -47,9 +47,6 @@ export const waitingFor = cell(-1); // the player the game is waiting for
 const FOCUS_KEY = 'autoFocus';
 export const autoFocus = cell(localStorage.getItem(FOCUS_KEY) === 'true'); // the view goes to the player whose turn begins (mine too); off until asked for
 autoFocus.sub(() => localStorage.setItem(FOCUS_KEY, String(autoFocus.get())));
-const MAP_KEY = 'showMinimap';
-export const showMinimap = cell(localStorage.getItem(MAP_KEY) === 'true'); // the minimap in the corner; off until asked for
-showMinimap.sub(() => localStorage.setItem(MAP_KEY, String(showMinimap.get())));
 
 // ---- Toasts and floating numbers: they remove themselves ----
 export interface Toast { id: number; m: Msg; tone: Tone }

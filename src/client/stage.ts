@@ -4,23 +4,17 @@ import type { GameState, Owned } from '../shared/types';
 import { addToken, clearTokens, initActors, placeAt, setActive, tokens, updateActors } from './render/actors';
 import { createBoard } from './render/board';
 import { POS } from './render/layout';
-import { camera, controls, finishTweens, focus, frame, free, initScene, overview, pick, render, renderer, resetView, rotateView, toScreen, updateCamera, updateTweens } from './render/scene';
+import { camera, controls, finishTweens, focus, frame, initScene, overview, pick, render, renderer, resetView, rotateView, toScreen, updateCamera, updateTweens } from './render/scene';
 import { FLOAT, initWorld, updateWorld } from './render/world';
 import { SEED, SEED_AT } from './seed';
 import { G, activeTab, hudLive, selectedTile, tip } from './store';
-import { drawMinimap, invalidateMinimap } from './ui/minimap';
 
 // The 3D side: the board, the tokens and the camera. The frame loop runs for the whole life of the page (or until a hot update, see initStage).
 let board: ReturnType<typeof createBoard>;
-let minimap: HTMLCanvasElement | null = null;
-export const setMinimap = (c: HTMLCanvasElement | null) => (minimap = c);
 export const cam = { follow: -1 }; // the player the camera tracks (-1: free)
 
 // ---- The board and its tokens ----
-export const setOwner = (i: number, o: Owned | null, S: GameState) => {
-  board.setOwner(i, o && { color: S.players[o.p].color, lv: o.lv, m: o.m });
-  invalidateMinimap(); // the minimap's chips show the owners
-};
+export const setOwner = (i: number, o: Owned | null, S: GameState) => board.setOwner(i, o && { color: S.players[o.p].color, lv: o.lv, m: o.m });
 const eachLot = (f: (i: number) => void) => TILES.forEach((t) => t.type !== 'public' && f(t.i));
 
 /** The board and tokens as the state has them (a new game, or a snapshot). */
@@ -74,7 +68,6 @@ export const CAM = {
   follow: () => focusTok(G.S!.order[G.S!.turn]), map: () => lookAt(0, 0, 'fit'),
 };
 export const lookAtTile = (i: number) => { selectTile(i); lookAt(POS[i].x, POS[i].z); };
-export const lookAtMap = (x: number, z: number) => lookAt(x, z, Math.max(camera.zoom, 2));
 
 export function selectTile(i: number) {
   selectedTile.set(i);
@@ -136,10 +129,6 @@ export function initStage() {
       updateTweens(dt); updateWorld(t, dt); updateActors(t, dt); board.update(t, dt);
       if (cam.follow >= 0 && tokens[cam.follow]) { const p = tokens[cam.follow].g.position; focus(p.x, p.z); }
       updateCamera(dt);
-      if (hudLive.get() && G.S && minimap) {
-        const el = Math.PI / 2 - controls.getPolarAngle();
-        drawMinimap(minimap, G.S, tokens, { x: controls.target.x, z: controls.target.z, w: (free.w * (camera.right - camera.left)) / camera.zoom, h: (camera.top - camera.bottom) / camera.zoom / Math.sin(el) });
-      }
       board.labels(hudLive.get());
       render();
     });

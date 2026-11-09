@@ -2,10 +2,9 @@ import { Fragment, useEffect, useRef, useState, type CSSProperties, type JSX } f
 import { LEVEL_NAMES, REGIONS, TILES, maxLevel } from '../../shared/data';
 import { maxRounds } from '../../shared/state';
 import { leaveRoom } from '../controller';
-import { CAM, focusTok, lookAtMap, lookAtTile, setMinimap } from '../stage';
-import { G, actionBtn, activeTab, cards, cashEls, floats, hudLive, lastRoll, selectedTile, session, showMinimap, state, statsOf, tip, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
+import { CAM, focusTok, lookAtTile } from '../stage';
+import { G, actionBtn, activeTab, cards, cashEls, floats, hudLive, lastRoll, selectedTile, session, state, statsOf, tip, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
 import { Die, Face, Flag, Icon, Named, Pips, Rich, hex, money, tileHead } from './bits';
-import { minimapToWorld } from './minimap';
 import { openMenu, openRules } from './open';
 import { TileBody } from './tile';
 
@@ -141,7 +140,7 @@ function Actions() {
 const CAMS = [['rotl', 'left', 'Rotate view left'], ['reset', 'home', 'Reset view'], ['in', 'plus', 'Zoom in'], ['out', 'minus', 'Zoom out'], ['follow', 'focus', 'Focus on current player'], ['map', 'globe', 'Whole board']] as const;
 
 export function Hud() {
-  const live = useCell(hudLive), mm = useCell(showMinimap);
+  const live = useCell(hudLive);
   if (!live) return null; // only whether it is up: each part below subscribes to what it shows
   return (
     <div id="hud">
@@ -149,7 +148,6 @@ export function Hud() {
       <div id="col">
         <Players />
         <Side />
-        {mm && <div id="minimap" className="box"><canvas ref={(c) => { setMinimap(c); }} onClick={(e) => lookAtMap(...minimapToWorld(e))} /></div>}
       </div>
       <Actions />
       <div id="camctl">{CAMS.map(([c, ic, title]) => <button key={c} className="btn sm" data-cam={c} title={title} onClick={CAM[c]}><Icon n={ic} /></button>)}</div>
