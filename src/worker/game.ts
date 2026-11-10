@@ -229,7 +229,7 @@ export class Game {
     return this.alive().filter((o) => o !== pi).sort((a, b) => gap(a) - gap(b))[0] ?? -1;
   }
   private mortgageable(pi: number): PickItem[] {
-    return Object.keys(this.S.own).map(Number).filter((i) => this.S.own[i].p === pi && !this.S.own[i].m && TILES[i].mort).map((i) => ({ i, amt: TILES[i].mort }));
+    return Object.keys(this.S.own).map(Number).filter((i) => this.S.own[i].p === pi && !this.S.own[i].m && TILES[i].mort).map((i) => ({ i, lv: this.S.own[i].lv, amt: TILES[i].mort }));
   }
 
   // ---- Money: what each of these is for (`why`) goes to the log with the sum ----

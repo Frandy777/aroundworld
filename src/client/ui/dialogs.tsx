@@ -156,6 +156,7 @@ export function PickCard({ id, p }: { id: number; p: Of<'pick'> }) {
             <span className="check" />
             {t && <><span className="sw" style={{ background: hex(t.color) }} /><Flag name={t.name} /><span className="grow">{t.name}</span></>}
             {who && <><Face color={who.color} /><span className="grow">{who.name}</span></>}
+            {x.lv !== undefined && <Pips n={x.lv} max={maxLevel(TILES[x.i])} />}
             {x.own ? <><Rich m={[{ p: x.own.p }]} /><Pips n={x.own.lv} max={maxLevel(TILES[x.i])} /></> : <b>{x.amt !== undefined ? money(x.amt) : x.note}</b>}
           </div>
         );

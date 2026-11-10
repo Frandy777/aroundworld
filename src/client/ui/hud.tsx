@@ -101,8 +101,8 @@ function Assets() {
           <div className="list">{mine.filter(([t]) => (t.region || 'inv') === k).map(([t, o]) => (
             <div className="item" key={t.i} data-tile={t.i} onClick={() => lookAtTile(t.i)}>
               <span className="sw" style={{ background: hex(t.color) }} /><Flag name={t.name} /><span className="grow">{t.name}</span>
-              {t.type !== 'invest' && <Pips n={o.lv} max={maxLevel(t) || 1} />}
               {o.m && <span className="pill red">MORT</span>}
+              {t.type !== 'invest' && <Pips n={o.lv} max={maxLevel(t) || 1} />}
             </div>
           ))}</div>
         </Fragment>

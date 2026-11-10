@@ -19,7 +19,7 @@ const SAMPLES: Record<string, Notice | NewsCard | Prompt> = {
   deed: { k: 'deed', tile: 1, mode: 'buy', price: 1600 },
   pick: {
     k: 'pick', of: 'tile', title: 'MORTGAGE TO PAY', sub: ['Ruby owes $1,200'], tone: 0x3b7bd9, hint: "You can't afford this. Mortgage properties to raise at least $1,100.",
-    items: [{ i: 1, amt: 800 }, { i: 2, amt: 900 }], rule: { k: 'raise', cash: 100, need: 1200 }, label: 'MORTGAGE & PAY',
+    items: [{ i: 1, lv: 2, amt: 800 }, { i: 2, lv: 0, amt: 900 }], rule: { k: 'raise', cash: 100, need: 1200 }, label: 'MORTGAGE & PAY',
   },
   confirm: { k: 'confirm', title: "DEVIL'S ISLAND", sub: ['Ruby'], tone: 0x2d7d6f, body: [{ k: 'note', m: ['Pay $700 bail and only visit the Jail tile, with no stay?'] }], yes: 'PAY $700', no: 'GO TO JAIL' },
 };
