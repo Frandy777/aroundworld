@@ -14,34 +14,36 @@ const at = (i: number, x: number, y: number, z: number, k = 1.25) => POS[i].clon
 const kinds = (kind: string) => TILES.filter((t) => t.kind === kind).map((t) => t.i);
 const [casinos, clubs] = [kinds('casino'), kinds('club')];
 const FIXED: [number, THREE.Vector3, number, number, number][] = [
-  [5, at(casinos[0], 0, 1, 0.8), 0xff5de0, 18, 9], [6, at(casinos[1], 0, 1, 0.8), 0xff5de0, 18, 9], // the casinos' marquees
-  [7, at(clubs[0], 0, 0.8, 0.8), 0x5dfff0, 16, 8], [8, at(clubs[1], 0, 0.8, 0.8), 0x5dfff0, 16, 8], // the nightclubs' neon
-  [9, POS[kindAt('area51')].clone().add(new THREE.Vector3(LOT.x + 0.6, 2.4, LOT.z)), 0x5dfff0, 22, 10], // the saucer's beam
-  [10, at(kindAt('start'), 0, 2.2, 0.8), 0xffd23f, 16, 9], // the gold gate of START
-  [11, new THREE.Vector3(ISLETS[1][0] + 0.3, 3.6, ISLETS[1][1]), 0xfff0c0, 55, 18], // the lighthouse
-  [12, new THREE.Vector3(ISLETS[4][0], 4.4, ISLETS[4][1]), 0xff7a1a, 40, 18], // the volcano's lava
-  [13, new THREE.Vector3(0, FLOAT, 0), 0x8fc4ff, 40, 20], // the globe
+  [5, at(casinos[0], 0, 1, 0.8), 0xff5de0, 12, 7], [6, at(casinos[1], 0, 1, 0.8), 0xff5de0, 12, 7], // the casinos' marquees
+  [7, at(clubs[0], 0, 0.8, 0.8), 0x5dfff0, 10, 7], [8, at(clubs[1], 0, 0.8, 0.8), 0x5dfff0, 10, 7], // the nightclubs' neon
+  [9, POS[kindAt('area51')].clone().add(new THREE.Vector3(LOT.x + 0.6, 2.4, LOT.z)), 0x5dfff0, 14, 8], // the saucer's beam
+  [10, at(kindAt('start'), 0, 2.2, 0.8), 0xffd23f, 10, 7], // the gold gate of START
+  [11, new THREE.Vector3(ISLETS[1][0] + 0.3, 3.6, ISLETS[1][1]), 0xfff0c0, 28, 13], // the lighthouse
+  [12, new THREE.Vector3(ISLETS[4][0], 4.4, ISLETS[4][1]), 0xff7a1a, 24, 14], // the volcano's lava
+  [13, new THREE.Vector3(0, FLOAT, 0), 0x8fc4ff, 14, 12], // the globe
 ];
-for (const [i, p, color, power, reach] of FIXED) { lamps[i].position.copy(p); lamps[i].color.setHex(color); lamps[i].intensity = power; lamps[i].distance = reach; }
+for (const [i, p, color, , reach] of FIXED) { lamps[i].position.copy(p); lamps[i].color.setHex(color); lamps[i].distance = reach; }
 
 const WARM = new THREE.Color(0xffd9a0);
-// Every frame: the tokens carry lanterns in their own colour warmed toward amber (the active one burns brighter), the lava and the lighthouse flicker, and a spot follows the active token.
+// Every frame: artificial light follows the hour, the tokens carry lanterns in their own colour warmed toward amber (the active one burns brighter),
+// the lava and the lighthouse flicker, and a spot follows the active token.
 function lights(t: number) {
-  const act = tokens.find((k) => k?.active);
+  const act = tokens.find((k) => k?.active), k = sky.lampK;
+  for (const [i, , , power] of FIXED) lamps[i].intensity = power * k;
   for (let i = 0; i < 4; i++) {
-    const k = tokens[i], l = lamps[i];
-    l.intensity = k ? (k.active ? 11 : 5) : 0;
-    if (!k) continue;
-    l.position.copy(k.g.position); l.position.y += 2.6; l.position.z += 0.6;
-    l.color.set(k.color).lerp(WARM, 0.55); l.distance = 9;
+    const token = tokens[i], l = lamps[i];
+    l.intensity = token ? (token.active ? 8 : 3.5) * k : 0;
+    if (!token) continue;
+    l.position.copy(token.g.position); l.position.y += 2.6; l.position.z += 0.6;
+    l.color.set(token.color).lerp(WARM, 0.55); l.distance = 7;
   }
-  lamps[12].intensity = 40 * (1 + 0.12 * Math.sin(t * 7) * Math.sin(t * 3.1));
-  lamps[11].intensity = 55 * (0.92 + 0.08 * Math.sin(t * 2.2));
-  spot.intensity = act ? 110 : 0;
+  lamps[12].intensity *= 1 + 0.12 * Math.sin(t * 7) * Math.sin(t * 3.1);
+  lamps[11].intensity *= 0.92 + 0.08 * Math.sin(t * 2.2);
+  spot.intensity = act ? 70 * k : 0;
   if (act) {
     spot.position.copy(act.g.position).add(new THREE.Vector3(-3, 11, 4));
     spot.target.position.copy(act.g.position);
-    spot.distance = 26;
+    spot.distance = 24;
   }
 }
 
@@ -50,7 +52,7 @@ function lights(t: number) {
 //  2. light shafts at half size, marched through the sun's shadow map in the haze, plus a halo round every lamp and the spot's cone; blurred likewise;
 //  3. the composite: the occlusion on the lit scene, the sky and the haze by distance (a layer of fog hugging the sea), the shafts on top;
 //  4. tilt-shift: a gather blur that grows from a sharp band across the middle of the screen (for a close view), and with the distance from the focus;
-//  5. bloom: a threshold, then a pyramid of five dual-filter blurs;
+//  5. bloom: a threshold, then a pyramid of four dual-filter blurs;
 //  6. the end: bloom added, ACES tone map, a little saturation, vignette, a dither against banding, and the sRGB encoding. ----
 type RT = THREE.WebGLRenderTarget;
 const VERT = 'varying vec2 v; void main() { v = uv; gl_Position = vec4( position.xy, 0.0, 1.0 ); }';
@@ -71,7 +73,7 @@ export const K = {
   ao: u(0.9), aoR: u(2.2), // occlusion: how much of it shows, the radius it looks for occluders in (world units)
   haze: u(0.0025), shaft: u(0.6), // fog density at the sea and the strength of the light shafts
   band: u(0.2), blur: u(7), // tilt-shift: half the height of the sharp band (of the screen) and the widest blur (CSS pixels)
-  thr: u(1), bloom: u(0.45), // bloom: where it starts, how much is added
+  thr: u(1.15), bloom: u(0.32), // bloom: where it starts, how much is added
   exp: u(0.8), sat: u(1.15), vig: u(0.4), // exposure, saturation, vignette
 };
 
@@ -152,7 +154,7 @@ void main() {
 	}
 	for ( int i = 0; i < ${nLamp}; i ++ ) {
 		vec3 o = uL[ i ].xyz - uEye; float tc = dot( o, rd ), h2 = dot( o, o ) - tc * tc + uL[ i ].w * uL[ i ].w, h = sqrt( h2 );
-		acc += uLC[ i ] * ( ( atan( ( tm - tc ) / h ) - atan( - tc / h ) ) / h * pow( clamp( 1.0 - h2 / 49.0, 0.0, 1.0 ), 2.0 ) );
+		acc += uLC[ i ] * ( ( atan( ( tm - tc ) / h ) - atan( - tc / h ) ) / h * pow( clamp( 1.0 - h2 / 20.25, 0.0, 1.0 ), 2.0 ) );
 	}
 	gl_FragColor = vec4( acc, 1.0 );
 }`, { tD: D, tSh: SHT, uIVP: IVP, uShM: SHM, uEye: EYE, uSun: LIT, uSunC: SUNC, uSpD: SPD, uSpC: SPC, uLC: LC, uFog: FOG, uSp: SP, uL: L, uK: K.shaft });
@@ -206,7 +208,7 @@ void main() {
 	gl_FragColor = vec4( mix( c0, sum / max( ws, 1e-4 ), smoothstep( 0.0, 1.0, r0 ) ), 1.0 );
 }`, { tC: compTex, tD: D, uPx: dofPx, uNF: NF, uR: dofR, uBand: K.band, uFocus: u(LENS), uTilt: dofTilt });
 
-// Bloom: what is brighter than the threshold (with a soft knee), blurred over five levels, each half the size of the last, and added back up the pyramid
+// Bloom: what is brighter than the threshold (with a soft knee), blurred over four levels, each half the size of the last, and added back up the pyramid
 const dofTex = u<THREE.Texture | null>(null), bSrc = u<THREE.Texture | null>(null), bPx = u(new THREE.Vector2());
 const bright = fx(/* glsl */`
 uniform sampler2D tS; uniform vec2 uPx; uniform float uThr;
@@ -254,7 +256,7 @@ export function resize(w: number, h: number) {
   T = {
     main, hdr: mk(w, h), dof: mk(w, h),
     ao: [mk(w / 2, h / 2, { type: THREE.UnsignedByteType }), mk(w / 2, h / 2, { type: THREE.UnsignedByteType })], vol: [mk(w / 2, h / 2), mk(w / 2, h / 2)],
-    bloom: [2, 4, 8, 16, 32].map((k) => mk(w / k, h / k)),
+    bloom: [2, 4, 8, 16].map((k) => mk(w / k, h / k)),
   };
   D.value = main.depthTexture; sceneTex.value = main.texture;
   aoPx.value.set(2 / w, 2 / h); hPx.value.set(2 / w, 2 / h); dofPx.value.set(1 / w, 1 / h);
@@ -267,7 +269,7 @@ function pass(m: THREE.ShaderMaterial, to: RT | null, keep = false) { // keep: a
   quad.material = m; renderer.autoClear = !keep; renderer.setRenderTarget(to); renderer.render(qScene, qCam);
 }
 
-const LAMP_SOFT = 0.9, LAMP_K = 0.008, SPOT_K = 0.0016; // a lamp's halo: its softening radius (units) and how bright it is per unit of intensity; the same for the spot's cone
+const LAMP_SOFT = 0.65, LAMP_K = 0.0038, SPOT_K = 0.0009; // a lamp's halo: its softening radius (units), a 4.5-unit cutoff, and strength per unit of intensity; the spot's cone
 function uniforms() {
   IP.value.copy(hdCam.projectionMatrixInverse); IVP.value.multiplyMatrices(hdCam.matrixWorld, hdCam.projectionMatrixInverse);
   EYE.value.copy(hdCam.position); NF.value.set(hdCam.near, hdCam.far);

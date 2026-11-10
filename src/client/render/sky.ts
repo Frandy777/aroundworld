@@ -37,6 +37,7 @@ export const sky = {
   light: new THREE.Vector3(), // the way to the light that casts the shadows: the sun, or by night the moon, a full one: opposite the sun. It moves in steps (see STEP)
   lightC: new THREE.Color(), lightK: 1, // that light's colour and strength
   skyC: new THREE.Color(), skyK: 1, // the hemisphere's
+  lampK: 1, // artificial light: a hint of it by day, full strength after dusk
   zenith: new THREE.Color(), horizon: new THREE.Color(),
 };
 
@@ -55,4 +56,5 @@ export function updateSky(now = Date.now()) {
   const a = RAMP[i - 1], b = RAMP[i], t = THREE.MathUtils.clamp((alt - a[0]) / (b[0] - a[0]), 0, 1);
   mix(sky.lightC, a[1], b[1], t); mix(sky.skyC, a[3], b[3], t); mix(sky.zenith, a[5], b[5], t); mix(sky.horizon, a[6], b[6], t);
   sky.lightK = THREE.MathUtils.lerp(a[2], b[2], t); sky.skyK = THREE.MathUtils.lerp(a[4], b[4], t);
+  sky.lampK = THREE.MathUtils.lerp(1, 0.12, THREE.MathUtils.smoothstep(alt, -3, 18));
 }

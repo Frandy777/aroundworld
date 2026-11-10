@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { exhaust } from './exhaust';
 import { flight } from './flight';
 import { LOT, PAD, POS } from './layout';
-import { LAMP, hd, lamps } from './light';
+import { LAMP, glow, lamps } from './light';
 import { LAUNCH_PAD, MISSILE_LENGTH, MISSILE_SCALE, missile } from './models/missile';
 import { scene, tween } from './scene';
 
@@ -26,7 +26,7 @@ export async function strike(from: number, to: number, start = launchPoint(from)
   const material = (color: number, additive = false) => {
     const m = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, depthWrite: false,
       side: THREE.DoubleSide, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending });
-    if (additive && hd.on) m.color.multiplyScalar(3); // HD-2D: brighter than white, for the bloom
+    if (additive) glow(m);
     owned.push(m); return m;
   };
   const puffs = (count: number, color: number) => Array.from({ length: count }, (_, i) => {

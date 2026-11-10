@@ -370,6 +370,7 @@ function daylight() {
   const [skyC, groundC, skyI, sunC, sunI] = DAYLIGHT[+hd.on];
   hemi.color.set(skyC).multiply(sky.skyC); hemi.groundColor.set(groundC).multiply(sky.skyC); hemi.intensity = skyI * sky.skyK;
   sun.color.set(sunC).multiply(sky.lightC); sun.intensity = sunI * sky.lightK;
+  U.uLamp.value = sky.lampK;
   (scene.background as THREE.Color).copy(sky.horizon);
 }
 

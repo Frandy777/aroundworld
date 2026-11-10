@@ -8,6 +8,7 @@ import * as THREE from 'three';
 export const hd = { on: false };
 export const U = {
   uHd: { value: 0 }, // 1 while HD-2D is on
+  uLamp: { value: 1 }, // artificial light's share of its night strength (sky.ts)
   uSh: { value: new THREE.Vector2(439, 0.045) }, // the sun's shadow map as the soft shadows need it: the depth it spans and one texel of it, in world units (see fitShadow)
 };
 
@@ -127,11 +128,11 @@ export function lit(this: THREE.Material, sh: THREE.WebGLProgramParametersWithUn
     .replace('reflectedLight.indirectDiffuse + totalEmissiveRadiance', 'reflectedLight.indirectDiffuse + totalEmissiveRadiance + reflectedLight.directSpecular + reflectedLight.indirectSpecular');
 }
 
-/** Neon, lamps and flames are unlit (see builder.ts); in HD-2D they are also brighter than white, for the bloom to take. */
+/** Neon, lamps and flames are unlit (see builder.ts); HD-2D gives them a little daylight colour and enough HDR light to bloom after dusk. */
 export const glow = <M extends THREE.MeshBasicMaterial>(m: M) => {
   m.onBeforeCompile = (sh) => {
-    sh.uniforms.uHd = U.uHd;
-    sh.fragmentShader = `uniform float uHd;\n${sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= 1.0 + 2.5 * uHd;')}`;
+    Object.assign(sh.uniforms, { uHd: U.uHd, uLamp: U.uLamp });
+    sh.fragmentShader = `uniform float uHd, uLamp;\n${sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= 1.0 + 1.8 * uLamp * uHd;')}`;
   };
   return m;
 };

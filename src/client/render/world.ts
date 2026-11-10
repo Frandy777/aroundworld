@@ -34,7 +34,7 @@ const shore = new THREE.DataTexture(dist, GRID, GRID, THREE.RedFormat, THREE.Hal
 shore.minFilter = shore.magFilter = THREE.LinearFilter;
 shore.needsUpdate = true;
 
-const U = { uShore: { value: shore }, uPal: { value: PALETTE }, uTexel: { value: 1 / DENSITY }, uTime: { value: 0 }, uWake: { value: WAKES }, uSplash: { value: SPLASH } };
+const U = { uShore: { value: shore }, uPal: { value: PALETTE }, uTexel: { value: 1 / DENSITY }, uTime: { value: 0 }, uGlint: { value: 1 }, uWake: { value: WAKES }, uSplash: { value: SPLASH } };
 const mat = toon(0x20469a, {}, [0.22, 1, 0, 0]); // HD-2D: glossy, and no texture to take a relief from (the swell's own slopes stand in, below)
 mat.onBeforeCompile = (sh) => {
   lit.call(mat, sh);
@@ -44,7 +44,7 @@ mat.onBeforeCompile = (sh) => {
     .replace('#include <begin_vertex>', '#include <begin_vertex>\nvW = (modelMatrix * vec4(transformed, 1.)).xz;');
   sh.fragmentShader = sh.fragmentShader
     .replace('#include <common>', `#include <common>
-      varying vec2 vW; uniform sampler2D uShore; uniform vec3 uPal[7], uSplash[2]; uniform vec4 uWake[${WAKES.length}]; uniform float uTexel, uTime;
+      varying vec2 vW; uniform sampler2D uShore; uniform vec3 uPal[7], uSplash[2]; uniform vec4 uWake[${WAKES.length}]; uniform float uTexel, uTime, uGlint;
       float hash(vec2 p) { p = fract(p * vec2(0.1031, 0.1030)); p += dot(p, p.yx + 33.33); return fract((p.x + p.y) * p.x); }`)
     .replace('#include <color_fragment>', `#include <color_fragment>
       vec2 c = floor(vW / uTexel), q = (c + 0.5) * uTexel;                 // this texel and its centre, in world units
@@ -72,7 +72,7 @@ mat.onBeforeCompile = (sh) => {
         if (k >= 0. && k <= 1. && abs(length(q - uSplash[i].xy) - 0.25 - 1.6 * k) < 0.5 * fw && hash(c + 7.) > k) sea = vec3(0.9, 0.97, 1.);
       }
       diffuseColor.rgb = sea;
-      totalEmissiveRadiance += glint * uHd * vec3(1.6, 2., 2.2);          // HD-2D: a glint is the sun's, brighter than white, and blooms`)
+      totalEmissiveRadiance += glint * uHd * uGlint * vec3(1.6, 2., 2.2);  // HD-2D: the sun or moon lights a glint, so its HDR light follows the hour`)
     .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
       if (uHd > 0.5) {                                                    // HD-2D: the normal of the swell (the slope of s above, by the chain rule), for the highlights and the sky in the water
         float e = cos(dot(q, vec2(0.31, 0.23)) - t * 0.2);
@@ -197,6 +197,7 @@ export const initWorld = () => scene.add(sea, dim, globe, scenery);
 
 export function updateWorld(t: number, dt: number) {
   U.uTime.value = Math.floor(t * 4) / 4; // the sea moves in quarter-second steps
+  U.uGlint.value = sky.lightK;
   dim.material.opacity = 0.34 * sky.lightK; dim.material.color.copy(DIM).multiplyScalar(sky.skyK);
   updateScenery(t, dt);
   ball.rotation.y += dt * 0.35;
