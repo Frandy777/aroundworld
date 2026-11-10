@@ -61,13 +61,13 @@ export function enterGame() {
 }
 
 // ---- Camera ----
-export const focusTok = (pi: number, zoom = 3) => {
+export const focusTok = (pi: number, zoom = 2) => {
   const t = tokens[pi];
   if (!t) return;
   cam.follow = pi;
   focus(t.g.position.x, t.g.position.z, zoom);
 };
-const lookAt = (x: number, z: number, zoom: number | 'fit' = 3) => { cam.follow = -1; focus(x, z, zoom); };
+const lookAt = (x: number, z: number, zoom: number | 'fit' = 2) => { cam.follow = -1; focus(x, z, zoom); };
 const zoom = (k: number) => lookAt(controls.target.x, controls.target.z, THREE.MathUtils.clamp(camera.zoom * k, controls.minZoom, controls.maxZoom));
 export const CAM = {
   rotl: () => rotateView(-1), reset: () => resetView(), in: () => zoom(1.5), out: () => zoom(1 / 1.5),

@@ -46,7 +46,7 @@ function PCard({ i, on, viewing }: { i: number; on: boolean; viewing: boolean })
   const offline = room?.seats.find((x) => x.pi === i)?.online === false;
   return (
     <div className={`pcard box ${on ? 'on' : ''} ${viewing ? 'viewing' : ''} ${p.out ? 'out' : ''} ${v < p.cash ? 'gain' : v > p.cash ? 'loss' : ''}`}
-      onClick={() => { viewedPlayer.set(i); activeTab.set('assets'); focusTok(i, 2.5); }}>
+      onClick={() => { viewedPlayer.set(i); activeTab.set('assets'); focusTok(i); }}>
       <Face color={p.color} />
       <div className="nm">
         <span style={{ color: hex(p.color) }}>{p.name}</span>

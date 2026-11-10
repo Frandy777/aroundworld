@@ -102,7 +102,7 @@ camera.position.set(0, Math.sin(ELEV) * 150, Math.cos(ELEV) * 150);
 export const controls = new OrbitControls(camera); // listens to nothing until initScene connects it to the canvas
 Object.assign(controls, {
   enableDamping: true, dampingFactor: 0.12, screenSpacePanning: false,
-  maxZoom: 6, minPolarAngle: THREE.MathUtils.degToRad(22), maxPolarAngle: THREE.MathUtils.degToRad(68), // minZoom: see resize
+  maxZoom: 3, minPolarAngle: THREE.MathUtils.degToRad(22), maxPolarAngle: THREE.MathUtils.degToRad(68), // minZoom: see resize
 });
 controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
 controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
@@ -221,7 +221,7 @@ function resize() {
   lensView.splice(0, 3, buf.x, buf.y, Math.round(cr / 2 / PX));
   const wide = hd.on ? NEAR : 1; // the lens makes the board's foot wider: it needs that much more room across
   fitZoom = cr ? (VIEW_H / (52 * BOARD_K)) * Math.min((a * free.w) / wide, 1 / Math.sin(ELEV)) : Math.min(1, (a * VIEW_H) / 52 / wide) / BOARD_K;
-  controls.minZoom = 0.7 * fitZoom;
+  controls.minZoom = fitZoom;
   if (hd.on) lens();
 }
 
