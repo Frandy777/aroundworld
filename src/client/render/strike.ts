@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { exhaust } from './exhaust';
 import { flight } from './flight';
 import { LOT, PAD, POS } from './layout';
+import { LAMP, hd, lamps } from './light';
 import { LAUNCH_PAD, MISSILE_LENGTH, MISSILE_SCALE, missile } from './models/missile';
 import { scene, tween } from './scene';
 
@@ -25,6 +26,7 @@ export async function strike(from: number, to: number, start = launchPoint(from)
   const material = (color: number, additive = false) => {
     const m = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, depthWrite: false,
       side: THREE.DoubleSide, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending });
+    if (additive && hd.on) m.color.multiplyScalar(3); // HD-2D: brighter than white, for the bloom
     owned.push(m); return m;
   };
   const puffs = (count: number, color: number) => Array.from({ length: count }, (_, i) => {
@@ -51,6 +53,7 @@ export async function strike(from: number, to: number, start = launchPoint(from)
   scene.add(rocket, effects);
 
   const p = new THREE.Vector3(), v = new THREE.Vector3(), tp = new THREE.Vector3(), tv = new THREE.Vector3();
+  const fire = lamps[LAMP.strike]; fire.distance = 24; // HD-2D: the flame lights the board as it flies, and the blast flashes it
   const cloud = (meshes: typeof smoke, origin: THREE.Vector3, age: number, duration: number, spread: number) => {
     const q = THREE.MathUtils.clamp(age / duration, 0, 1);
     meshes.forEach((mesh, i) => {
@@ -96,6 +99,7 @@ export async function strike(from: number, to: number, start = launchPoint(from)
         const terminal = THREE.MathUtils.smoothstep(flightTime, plan.boost + plan.coast - 0.15, plan.boost + plan.coast + 0.2);
         const dive = THREE.MathUtils.clamp((flightTime - plan.boost - plan.coast) / plan.terminal, 0, 1);
         flame.update(time, ignition * (1 - 0.4 * sustain + 0.25 * terminal + 0.45 * dive ** 2));
+        fire.position.copy(p); fire.color.setHex(0xffa860); fire.intensity = 26 * ignition;
         aim.scale.setScalar(0.8 + 0.07 * Math.sin(time * 8));
         aimMaterial.opacity = Math.min(1, flightTime / plan.duration * 2) * (0.22 + terminal * 0.3);
         return;
@@ -105,6 +109,7 @@ export async function strike(from: number, to: number, start = launchPoint(from)
       flash.visible = flashAge < 1;
       flash.scale.setScalar(0.3 + Math.sin(flashAge * Math.PI / 2) * 1.7);
       flashMaterial.opacity = (1 - flashAge) ** 2;
+      fire.position.copy(end); fire.position.y += 1.2; fire.color.setHex(0xffd08a); fire.intensity = 150 * (1 - flashAge) ** 2 + 40 * fade ** 2;
       sparkMaterial.opacity = fade ** 2;
       sparks.forEach(({ mesh, velocity }, i) => {
         mesh.position.copy(velocity).multiplyScalar(hit);
@@ -117,6 +122,7 @@ export async function strike(from: number, to: number, start = launchPoint(from)
       ringMaterial.opacity = 0.7 * (1 - shock) ** 2;
     });
   } finally {
+    fire.intensity = 0;
     scene.remove(rocket, effects);
     flame.dispose();
     owned.forEach((m) => m.dispose());

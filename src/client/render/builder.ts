@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { lodMap, pixelTexture, texels, toon, DENSITY } from './scene';
+import { glow, type Pbr } from './light';
 import { canvas, paint, ink, inkWidth, inkHeight } from './art';
 import { SZ, SLAB } from './layout';
 
@@ -107,7 +108,8 @@ const roofGeo = memo((w: number, d: number, h: number) => {
   return g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
 });
 const NEON = new Set([0xff5de0, 0x5dfff0, 0xff3b3b, 0x3b6bff, 0xfff6b0, LAVA]); // neon, lamps, flames and lava are unlit: they glow in the shade as in the sun
-export const mat = memo((c: THREE.ColorRepresentation) => (NEON.has(c as number) ? new THREE.MeshBasicMaterial({ color: c }) : toon(c)));
+const METAL = new Map<number, Pbr>([[GOLD, [0.3, 1, 0.55, 0]], [IRON, [0.45, 1, 0.5, 0]]]); // metal throws the HD-2D light back as a highlight (a metalness short of 1: there is no sky to mirror but the hemisphere's)
+export const mat = memo((c: THREE.ColorRepresentation) => (NEON.has(c as number) ? glow(new THREE.MeshBasicMaterial({ color: c })) : toon(c, {}, METAL.get(c as number))));
 const wallMat = memo((cols: number, kind: string, c: number) => lodMap(toon(c), (L) => facade(cols, kind, L)));
 const roofMat = memo((c: number) => lodMap(toon(c), roofTex));
 // Tower prism: a quarter of a square tower, its apex at the centre. Groups: 0 the outer wall (half-width a, height h), 1 the two walls beside it, 2 the roof (rises r to the apex).

@@ -47,6 +47,9 @@ export const waitingFor = cell(-1); // the player the game is waiting for
 const FOCUS_KEY = 'autoFocus';
 export const autoFocus = cell(localStorage.getItem(FOCUS_KEY) === 'true'); // the view goes to the player whose turn begins (mine too); off until asked for
 autoFocus.sub(() => localStorage.setItem(FOCUS_KEY, String(autoFocus.get())));
+const HD_KEY = 'hd2d';
+export const hd2d = cell(localStorage.getItem(HD_KEY) === 'true'); // the HD-2D light (see render/light.ts) instead of the restrained pixel look; off until asked for
+hd2d.sub(() => localStorage.setItem(HD_KEY, String(hd2d.get())));
 
 // ---- Toasts and floating numbers: they remove themselves ----
 export interface Toast { id: number; m: Msg; tone: Tone }

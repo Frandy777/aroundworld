@@ -4,11 +4,11 @@ import type { GameState, Owned } from '../shared/types';
 import { addToken, clearTokens, initActors, placeAt, setActive, tokens, updateActors } from './render/actors';
 import { createBoard } from './render/board';
 import { POS } from './render/layout';
-import { camera, controls, finishTweens, focus, frame, initScene, overview, pick, render, renderer, resetView, rotateView, toScreen, updateCamera, updateTweens } from './render/scene';
+import { camera, controls, finishTweens, focus, frame, initScene, overview, pick, render, renderer, resetView, rotateView, setLighting, toScreen, updateCamera, updateTweens } from './render/scene';
 import { strike } from './render/strike';
 import { FLOAT, initWorld, updateWorld } from './render/world';
 import { SEED, SEED_AT } from './seed';
-import { G, activeTab, hudLive, selectedTile, tip } from './store';
+import { G, activeTab, hd2d, hudLive, selectedTile, tip } from './store';
 
 // The 3D side: the board, the tokens and the camera. The frame loop runs for the whole life of the page (or until a hot update, see initStage).
 let board: ReturnType<typeof createBoard>;
@@ -118,6 +118,8 @@ export function initStage() {
   const undo: (() => void)[] = [], dispose = () => undo.splice(0).reverse().forEach((f) => f()); // last made, first undone, once
   try {
     undo.push(initScene());
+    undo.push(hd2d.sub(() => void setLighting(hd2d.get())));
+    void setLighting(hd2d.get()); // the look of the light the player chose (HD-2D loads when it is first wanted)
     initWorld(); initActors();
     board = createBoard();
     if (G.S) { showState(G.S); enterGame(); } else enterDemo();

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { hd, lamps, lit, setLamps, spot, U, type Pbr } from './light';
 
 // Board scale: a tile cell is 3 * BOARD_K world units. Buildings, props, tokens and text keep their size; only the tile (and with it the camera
 // limits, zoom range, sun and the centre globe) grows.
@@ -37,17 +38,19 @@ export const lodMap = <M extends THREE.Material & { map: THREE.Texture | null }>
 };
 
 // ---- Pixel pipeline: the scene renders at 1/PX of the canvas size and CSS upscales it with nearest-neighbour, so an art pixel is PX = 2 CSS px at every zoom: the
-// same grid as the UI frames. A buffer pixel bigger than a texel would average texels away, so a level is shown once its texels are a whole buffer pixel tall ----
-const PX = 2;
+// same grid as the UI frames. A buffer pixel bigger than a texel would average texels away, so a level is shown once its texels are a whole buffer pixel tall.
+// (HD-2D draws at the screen's own sharpness instead: PX is then below 1, see resize. The lettering and the cursors stay sized by the art pixel of 2 CSS px, `artH`.) ----
+let PX = 2;
 const VIEW_H = 50; // world units on screen vertically at zoom 1
-const STEP = [PX / 2, PX]; // CSS px height of a near texel (a mid one is 2x that, a far one 4x) where the level goes far -> mid -> near
-const texelPx = () => (rt.height * PX * camera.zoom * Math.sin(ELEV)) / (VIEW_H * DENSITY);
-export const pxUnit = (zoom = camera.zoom) => VIEW_H / (zoom * rt.height); // world units per buffer pixel, at the view's zoom or at another
+const cssH = () => (hd.on ? renderer.domElement.clientHeight : rt.height * PX); // the canvas's height, CSS px
+export const artH = () => (hd.on ? renderer.domElement.clientHeight / 2 : rt.height); // ... and in art pixels: buffer pixels in the restrained look, pairs of CSS px in HD-2D
+const texelPx = () => (cssH() * camera.zoom * Math.sin(ELEV)) / (VIEW_H * DENSITY);
+export const pxUnit = (zoom = camera.zoom) => VIEW_H / (zoom * artH()); // world units per art pixel, at the view's zoom or at another
 // Up as soon as a threshold is reached, down only 8% below it, so a zoom resting on a threshold doesn't flicker between two designs.
 const levelNow = () => {
-  const t = texelPx();
+  const t = texelPx(), step = [PX / 2, PX]; // CSS px height of a near texel (a mid one is 2x that, a far one 4x) where the level goes far -> mid -> near
   let L = 0;
-  while (L < STEP.length && t >= STEP[L] * (L < lod.n ? 0.92 : 1)) L++;
+  while (L < step.length && t >= step[L] * (L < lod.n ? 0.92 : 1)) L++;
   return L;
 };
 
@@ -69,7 +72,13 @@ scene.background = new THREE.Color(0x14213d);
 const GRAD = new THREE.DataTexture(new Uint8Array([66, 90, 118, 150, 188, 224, 255]), 7, 1, THREE.RedFormat);
 GRAD.minFilter = GRAD.magFilter = THREE.NearestFilter;
 GRAD.needsUpdate = true;
-export const toon = (color: THREE.ColorRepresentation, extra: THREE.MeshToonMaterialParameters = {}) => new THREE.MeshToonMaterial({ color, gradientMap: GRAD, ...extra });
+// `pbr`: how the material answers the HD-2D light (see light.ts); the default is a matte stone.
+export const toon = (color: THREE.ColorRepresentation, extra: THREE.MeshToonMaterialParameters = {}, pbr?: Pbr) => {
+  const m = new THREE.MeshToonMaterial({ color, gradientMap: GRAD, ...extra });
+  m.onBeforeCompile = lit;
+  if (pbr) m.userData.pbr = pbr;
+  return m;
+};
 
 // Crisp texels at every zoom: magnified ones stay square, shrunk ones snap to the nearest mip level and texel (blending them smeared the pixel art).
 export const pixelTexture = (src: HTMLCanvasElement, repeat?: number) => {
@@ -96,6 +105,28 @@ Object.assign(controls, {
 });
 controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
 controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
+
+// HD-2D looks through a perspective lens, so the board has depth: far things smaller, the sea running off to a horizon. It is the view of the orthographic camera from farther
+// back, with the field of view that shows the same height at the target: where it looks, the size at the target and the way a pan moves are unchanged, so the controls, the
+// focus and the sun's frame all keep working on the orthographic camera, and the lens follows it each frame.
+export const hdCam = new THREE.PerspectiveCamera();
+export const LENS = 300; // its distance from the target
+// The lens makes the board's near edge bigger than the orthographic view does (by NEAR, 1 at the target) and its far edge smaller (by FAR): the whole board looks pushed down the screen
+// by DROP (world units on screen), and is NEAR times wider at its foot. `lens` takes the drop back, and the whole-board zoom (fitZoom) makes room for the width.
+const EDGE = 24 * BOARD_K, NEAR = LENS / (LENS - EDGE * Math.cos(ELEV)), FAR = LENS / (LENS + EDGE * Math.cos(ELEV)), DROP = (EDGE * Math.sin(ELEV) * (NEAR - FAR)) / 2;
+/** How far the view has come in from the whole board: 0 at its zoom (or farther out), 1 from twice it on. The drop is taken back for the whole board (a close view keeps its target in the middle),
+ * and HD-2D's tilt-shift is for a close view (the whole board is read at a glance, its outer rows are at the top and bottom of the screen). */
+export const zoomed = () => THREE.MathUtils.smoothstep(camera.zoom / fitZoom, 1, 2);
+const lensView = [1, 1, 0]; // the buffer's size and the view's offset in it (see resize)
+function lens() {
+  const t = controls.target;
+  hdCam.position.copy(camera.position).sub(t).setLength(LENS).add(t);
+  hdCam.quaternion.copy(camera.quaternion);
+  Object.assign(hdCam, { fov: THREE.MathUtils.radToDeg(2 * Math.atan(VIEW_H / 2 / LENS)), zoom: camera.zoom, aspect: (camera.right - camera.left) / (camera.top - camera.bottom), near: 40, far: LENS + 900 });
+  const drop = (DROP * (1 - zoomed()) * lensView[1] * camera.zoom) / VIEW_H; // in buffer pixels: the whole board sits where the orthographic view has it, a close view keeps its target in the middle
+  hdCam.setViewOffset(lensView[0], lensView[1], lensView[2], Math.round(drop), lensView[0], lensView[1]);
+  hdCam.updateMatrixWorld();
+}
 
 // ---- Ink pass: draw to a colour+depth target, then work on the depth alone. The view is orthographic, so depth is linear and a flat face is a plane in it:
 // - a pixel right behind a nearer one is the silhouette: inked in a dark shade of the nearer colour (outlines);
@@ -153,6 +184,7 @@ function snap() {
   lim.value = Math.max(0.72, 1.25 * u * (t + 1 / t));
 }
 export function render() {
+  if (hd.on && hdMod) return hdMod.render();
   snap();
   renderer.setRenderTarget(rt);
   renderer.render(scene, camera);
@@ -174,18 +206,22 @@ const css = getComputedStyle(document.documentElement);
 function resize() {
   const cv = renderer.domElement, w = cv.clientWidth, h = cv.clientHeight;
   if (!w || !h) return; // squeezed out of the page: it keeps the size it had
+  PX = hd.on ? 1 / Math.max(1, Math.min(devicePixelRatio, Math.sqrt(3.2e6 / (w * h)))) : 2; // HD-2D: the screen's own pixels, as many as the passes can afford (about 3.2 million)
   renderer.setPixelRatio(1 / PX);
   renderer.setSize(w, h, false); // the page sizes the canvas (see style.css): the window, or what the panels leave of it
   const buf = renderer.getDrawingBufferSize(new THREE.Vector2());
-  rt.setSize(buf.x, buf.y);
+  if (hd.on) { rt.setSize(1, 1); hdMod?.resize(buf.x, buf.y); } else rt.setSize(buf.x, buf.y);
   texel.set(1 / buf.x, 1 / buf.y);
   const a = buf.x / buf.y; // the buffer's aspect, not the canvas's (it is rounded down): a world unit is then as many pixels across as down, which the pixel-exact lettering relies on
   Object.assign(camera, { left: -VIEW_H * a / 2, right: VIEW_H * a / 2, top: VIEW_H / 2, bottom: -VIEW_H / 2 });
   const cr = framed ? parseFloat(css.getPropertyValue('--cr')) || 0 : 0; // how far the column reaches in, CSS px
   free.w = 1 - cr / w;
   camera.setViewOffset(buf.x, buf.y, Math.round(cr / 2 / PX), 0, buf.x, buf.y); // the canvas's middle moves left by half of what is covered, in whole buffer pixels (see snap)
-  fitZoom = cr ? (VIEW_H / (52 * BOARD_K)) * Math.min(a * free.w, 1 / Math.sin(ELEV)) : Math.min(1, (a * VIEW_H) / 52) / BOARD_K;
+  lensView.splice(0, 3, buf.x, buf.y, Math.round(cr / 2 / PX));
+  const wide = hd.on ? NEAR : 1; // the lens makes the board's foot wider: it needs that much more room across
+  fitZoom = cr ? (VIEW_H / (52 * BOARD_K)) * Math.min((a * free.w) / wide, 1 / Math.sin(ELEV)) : Math.min(1, (a * VIEW_H) / 52 / wide) / BOARD_K;
   controls.minZoom = 0.7 * fitZoom;
+  if (hd.on) lens();
 }
 
 // Smooth "go look at X" camera goal; any user drag/zoom cancels it. 'fit' is the whole board, whatever the canvas and the panels are: the view follows it as they change.
@@ -205,6 +241,7 @@ export function updateCamera(dt: number) {
   controls.update();
   lod.n = levelNow(); // when the texel size crosses a threshold, the other level's art is drawn from this frame on
   fitShadow();
+  if (hd.on) lens();
 }
 
 // The title's view: the camera looks at a point `lift` above the ground (the globe), and the first focus brings it back down.
@@ -271,13 +308,13 @@ const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 export function pick(x: number, y: number, objects: THREE.Object3D[]) {
   const r = renderer.domElement.getBoundingClientRect();
   ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
-  ray.setFromCamera(ndc, camera);
+  ray.setFromCamera(ndc, hd.on ? hdCam : camera);
   const hit = ray.intersectObjects(objects, false)[0]?.object;
   return hit ? objects.indexOf(hit) : -1;
 }
 /** Where a world point is on the canvas, as a fraction of it across and down. */
 export function toScreen(v: THREE.Vector3): [number, number] {
-  const p = v.clone().project(camera);
+  const p = v.clone().project(hd.on ? hdCam : camera);
   return [(p.x + 1) / 2, (1 - p.y) / 2];
 }
 
@@ -288,7 +325,7 @@ const sky = new THREE.HemisphereLight(0xd8ecff, 0x56648a, 1.6);
 // view each visible face lands on its own shading band: top, left, front (square to the light, mid-band) and right.
 const SUN_SIN = Math.sin(THREE.MathUtils.degToRad(52));
 const SUN = new THREE.Vector3(-Math.sqrt(1 - SUN_SIN ** 2), SUN_SIN, 0).multiplyScalar(100 * BOARD_K); // offset from the view target
-const sun = new THREE.DirectionalLight(0xfff0d0, 2.4);
+export const sun = new THREE.DirectionalLight(0xfff0d0, 2.4);
 sun.castShadow = true;
 sun.shadow.mapSize.set(4096, 4096);
 Object.assign(sun.shadow.camera, { near: 1, far: 220 * BOARD_K });
@@ -302,7 +339,7 @@ const SUN_X = new THREE.Vector3(SUN.z, 0, -SUN.x).normalize(), SUN_Y = SUN.clone
 let shadowScale = 0, shadowX = 0, shadowY = 0; // the frustum's size and its texel on the lattice, as the shadow map was last drawn for them
 function fitShadow() {
   const t = controls.target, off = camera.position.clone().sub(t), half = 2048 / DENSITY;
-  const reach = Math.hypot(camera.right - camera.left, ((camera.top - camera.bottom) * off.length()) / off.y) / (2 * camera.zoom); // radius of the visible ground
+  const reach = (Math.hypot(camera.right - camera.left, ((camera.top - camera.bottom) * off.length()) / off.y) / (2 * camera.zoom)) * (hd.on ? 1.3 : 1); // radius of the visible ground (the lens sees more of it far up the screen)
   const s = reach > half ? 2 : 1, tx = s / DENSITY, ty = tx * SUN_SIN, x = t.dot(SUN_X), y = t.dot(SUN_Y), i = Math.round(x / tx), j = Math.round(y / ty);
   if (s !== shadowScale || i !== shadowX || j !== shadowY) { // resized, or on another texel: the map is drawn again (within a texel, or along the light, it would come out the same)
     if (s !== shadowScale) {
@@ -312,8 +349,27 @@ function fitShadow() {
     [shadowScale, shadowX, shadowY] = [s, i, j];
     dirtyShadow();
   }
+  U.uSh.value.set(sun.shadow.camera.far - sun.shadow.camera.near, tx); // for the soft shadows (HD-2D)
   sun.target.position.copy(t).addScaledVector(SUN_X, i * tx - x).addScaledVector(SUN_Y, j * ty - y);
   sun.position.copy(sun.target.position).add(SUN);
+}
+
+// ---- The look of the light: the restrained pixel look above, or HD-2D (light.ts for the materials and the lamps, hd2d.ts for the passes, which loads the first time it is asked for) ----
+let hdMod: typeof import('./hd2d') | null = null, wanted = false;
+function look(on: boolean) {
+  hd.on = on; U.uHd.value = +on;
+  setLamps(on);
+  sky.color.set(on ? 0xa9c4ff : 0xd8ecff); sky.groundColor.set(on ? 0x6b5a58 : 0x56648a); sky.intensity = on ? 1.1 : 1.6; // HD-2D: a cool sky over a warm bounce, a low warm sun
+  sun.color.set(on ? 0xffe0b0 : 0xfff0d0); sun.intensity = on ? 3.4 : 2.4;
+  renderer.domElement.style.imageRendering = on ? 'auto' : ''; // the restrained look is magnified with nearest-neighbour (see style.css)
+  resize(); // the buffer takes its other size
+  dirtyShadow();
+  if (!on) hdMod?.release();
+}
+export async function setLighting(on: boolean) {
+  wanted = on;
+  if (on) hdMod ??= await import('./hd2d');
+  if (wanted === on && hd.on !== on) look(on);
 }
 
 // ---- Life cycle: what the module does to the page is done here, not on import, and the function it returns undoes it (the page keeps the renderer, see above) ----
@@ -327,7 +383,7 @@ function disposeTree(root: THREE.Object3D) {
 }
 export function initScene() {
   controls.connect(renderer.domElement);
-  scene.add(sky, sun, sun.target);
+  scene.add(sky, sun, sun.target, ...lamps, spot, spot.target);
   renderer.domElement.style.width = renderer.domElement.style.height = ''; // the page sizes the canvas (see resize): drop a size that an older hot update gave it
   const fit = new ResizeObserver(() => { resize(); render(); }); // a resized canvas is blank until it is drawn again, and the next frame may not be this one
   fit.observe(renderer.domElement);
@@ -338,6 +394,7 @@ export function initScene() {
     finishTweens();
     goal = null;
     later.length = 0;
+    look(false); // the page starts again from the restrained look (the stage asks for HD-2D again if it is wanted)
     disposeTree(scene);
     scene.clear();
     for (const o of [rt, post.geometry, post.material, sun.shadow]) o.dispose();

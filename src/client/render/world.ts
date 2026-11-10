@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { scene, toon, lodMap, pixelTexture, texels, lod, DENSITY, BOARD_K } from './scene';
+import { lit, soft } from './light';
 import { canvas } from './art';
 import { EARTH } from './earth';
 import { FOOT, TOP, SLAB, SZ } from './layout';
@@ -33,8 +34,9 @@ shore.minFilter = shore.magFilter = THREE.LinearFilter;
 shore.needsUpdate = true;
 
 const U = { uShore: { value: shore }, uPal: { value: PALETTE }, uTexel: { value: 1 / DENSITY }, uTime: { value: 0 }, uWake: { value: WAKES }, uSplash: { value: SPLASH } };
-const mat = toon(0x20469a);
+const mat = toon(0x20469a, {}, [0.22, 1, 0, 0]); // HD-2D: glossy, and no texture to take a relief from (the swell's own slopes stand in, below)
 mat.onBeforeCompile = (sh) => {
+  lit.call(mat, sh);
   Object.assign(sh.uniforms, U);
   sh.vertexShader = sh.vertexShader
     .replace('#include <common>', '#include <common>\nvarying vec2 vW;')
@@ -53,7 +55,8 @@ mat.onBeforeCompile = (sh) => {
       float shallow = step(d, 1.2) + step(d, 0.75) + step(d, 0.38);        // 0 deep .. 3 right at the shore
       vec3 sea = uPal[int(depth + shallow)];
       float run = max(1., floor(0.14 / uTexel + 0.5));                    // a glint is a dash of texels along x, about as long in the world on every level
-      if (depth > 2.5 && d0 > 0.5 && hash(vec2(floor((c.x + 9. * hash(vec2(c.y, 1.))) / run), c.y) + floor(t * 2.)) > 0.992) sea = vec3(0.62, 0.8, 1.); // glints twinkle on the crests
+      float glint = 0.;
+      if (depth > 2.5 && d0 > 0.5 && hash(vec2(floor((c.x + 9. * hash(vec2(c.y, 1.))) / run), c.y) + floor(t * 2.)) > 0.992) { sea = vec3(0.62, 0.8, 1.); glint = 1.; } // glints twinkle on the crests
       float ph = fract(t * 0.18 + 0.15 * sin(dot(q, vec2(0.21, 0.17))));   // a ripple leaves the shore every ~5.5 s, each stretch of it on its own beat,
       if (abs(d0 - 0.15 - 0.6 * ph) < 0.5 * max(0.045, uTexel) && hash(c + 5.) > ph) sea = vec3(0.45, 0.75, 0.9); // a texel wide and breaking up as it goes
       float fw = max(0.09, uTexel);                                       // the foam's width: two near texels, a whole texel on the coarser levels
@@ -67,7 +70,15 @@ mat.onBeforeCompile = (sh) => {
         float k = uSplash[i].z;
         if (k >= 0. && k <= 1. && abs(length(q - uSplash[i].xy) - 0.25 - 1.6 * k) < 0.5 * fw && hash(c + 7.) > k) sea = vec3(0.9, 0.97, 1.);
       }
-      diffuseColor.rgb = sea;`);
+      diffuseColor.rgb = sea;
+      totalEmissiveRadiance += glint * uHd * vec3(1.6, 2., 2.2);          // HD-2D: a glint is the sun's, brighter than white, and blooms`)
+    .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+      if (uHd > 0.5) {                                                    // HD-2D: the normal of the swell (the slope of s above, by the chain rule), for the highlights and the sky in the water
+        float e = cos(dot(q, vec2(0.31, 0.23)) - t * 0.2);
+        vec2 g = cos(q.y * 1.05 + warp + t * 0.6) * vec2(0.689 * cos(q.x * 0.53 + t * 0.3) + 0.279 * e, 1.05 + 0.207 * e)
+          + 0.4 * cos(dot(q, vec2(1.9, 1.3)) + t * 0.9) * vec2(1.9, 1.3) + 0.4 * cos(dot(q, vec2(0.09, 0.06)) + t * 0.05) * vec2(0.09, 0.06);
+        normal = normalize((viewMatrix * vec4(normalize(vec3(-0.07 * g.x, 1., -0.07 * g.y)), 0.)).xyz);
+      }`);
 };
 // three.js names a compiled program by the text of onBeforeCompile, which says nothing of the values the shader bakes in (SHORE, the number of wakes). A hot update keeps the renderer, and so its
 // programs: without these in the key, a changed value would be handed the program compiled for the old one, and the sea would be drawn at the wrong scale.
@@ -77,7 +88,7 @@ sea.rotation.x = -Math.PI / 2;
 sea.position.y = -0.8;
 mat.onBeforeRender = () => (U.uTexel.value = 2 ** (2 - lod.n) / DENSITY); // a water pixel is a texel of the level in view
 // A shadow on water is one tone darker, not black: the sea itself is lit flat, and a see-through plane just above it takes the shadow map alone
-const dim = new THREE.Mesh(sea.geometry, new THREE.ShadowMaterial({ color: 0x0a1a5c, opacity: 0.34 }));
+const dim = new THREE.Mesh(sea.geometry, soft(new THREE.ShadowMaterial({ color: 0x0a1a5c, opacity: 0.34 })));
 dim.rotation.x = sea.rotation.x;
 dim.position.y = sea.position.y + 0.01;
 dim.receiveShadow = true;

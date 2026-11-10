@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { scene, renderer, camera, controls, lod, toon, lodMap, pixelTexture, texels, dirtyShadow, pxUnit, fitZoom, ELEV, DENSITY } from './scene';
+import { scene, artH, camera, controls, lod, toon, lodMap, pixelTexture, texels, dirtyShadow, pxUnit, fitZoom, ELEV, DENSITY } from './scene';
 import { TILES, type Tile } from '../../shared/data';
 import { canvas, codePixels, shade } from './art';
 import { CARD_SIZE, codeOf, drawCard, drawGround, drawPad } from './labels';
@@ -155,8 +155,8 @@ export function createBoard() {
         if (popping) { o.pop = Math.min(1, o.pop + dt / 0.45); squash(o); }
         if (popping || Math.abs(rise) > 1e-3) dirtyShadow(); // until it has settled (an exponential never quite arrives: 1e-3 is a fiftieth of a shadow texel)
       });
-      // The cursors breathe: 0, 1, 2, 1 buffer pixels up the screen, a step every third of a second (px: one pixel up the screen, as a height)
-      const px = (camera.top - camera.bottom) / (camera.zoom * renderer.domElement.height * Math.sin(controls.getPolarAngle()));
+      // The cursors breathe: 0, 1, 2, 1 art pixels up the screen, a step every third of a second (px: one pixel up the screen, as a height)
+      const px = (camera.top - camera.bottom) / (camera.zoom * artH() * Math.sin(controls.getPolarAngle()));
       const hop = [0, 1, 2, 1][Math.floor(t * 3) % 4] * px;
       place(hoverCursor, hov === sel ? -1 : hov, hop); place(selCursor, sel, hop);
     },
