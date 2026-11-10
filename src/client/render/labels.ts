@@ -32,12 +32,15 @@ const GOLD = ['#fff6b0', '#ffd23f', '#b36a14'];
 const tone = (t: Tile): [number, boolean] => { const col = t.type === 'invest' ? ACCENT[t.kind] : t.color; return [col, t.type !== 'public' && lum(col) > 0.55]; }; // a card's band colour, and whether it takes dark ink (light bands) or white (dark ones)
 export const codeOf = (t: Tile): [string, number] => [CODE[t.name], tone(t)[1] ? 0x0b0e24 : 0xffffff]; // a card's code and the ink it is carved in: dark on a light band, white on a dark one
 const filler = (g: Ctx) => (c: string, x: number, y: number, w: number, h: number) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
-const edge = (fill: Fill, w: number, h: number, bevel = true, ring = PAL.o) => { // bevel + ink edge
-  if (bevel) {
+// The ink edge: one texel round a texture, its colour per level. A coarse level's texel is 1 - 2 buffer pixels wide, and where a slab meets the sea the ink pass (see scene) draws a pixel of its own just outside it: with a solid
+// edge as well that was a band of black 2 - 3 pixels thick round every tile, and a hard black line round every plot and card. So the coarse levels draw it half see-through, a dark tone of the colour under it, and the near level keeps it solid.
+const RING = [PAL.o + '80', PAL.o + '80', PAL.o];
+const edge = (fill: Fill, w: number, h: number, L: number, ring = RING[L]) => { // bevel (the finer levels) + ink edge
+  if (L) {
     fill('rgba(255,255,255,.45)', 1, 1, w - 2, 1); fill('rgba(255,255,255,.45)', 1, 1, 1, h - 2);
     fill('rgba(0,0,0,.25)', 1, h - 2, w - 2, 1); fill('rgba(0,0,0,.25)', w - 2, 1, 1, h - 2);
   }
-  for (const [x, y, bw, bh] of [[0, 0, w, 1], [0, h - 1, w, 1], [0, 0, 1, h], [w - 1, 0, 1, h]]) fill(ring, x, y, bw, bh);
+  for (const [x, y, bw, bh] of [[0, 0, w, 1], [0, h - 1, w, 1], [0, 1, 1, h - 2], [w - 1, 1, 1, h - 2]]) fill(ring, x, y, bw, bh); // the sides stop short of the corners: a see-through edge laid twice there would be darker
 };
 
 // Signature floor of each public tile, painted over its ground: f(colour, x, y, w, h, s) fills texels. s(n, min) is a near-level length n on this level's grid.
@@ -82,7 +85,7 @@ export function drawCard(g: Ctx, t: Tile, L: number) {
     for (const [x, y, w, h] of [[1, 1, W - 2, th], [1, H - 1 - th, W - 2, th], [1, 1, th, H - 2], [W - 1 - th, 1, th, H - 2]]) fill(GOLD[1], x, y, w, h);
     fill(GOLD[0], 1, 1, W - 2, 1); fill(GOLD[2], 1, H - 2, W - 2, 1);
   }
-  edge(fill, W, H, L > 0, sp && !L ? GOLD[1] : PAL.o);
+  edge(fill, W, H, L, sp && !L ? GOLD[1] : RING[L]);
 }
 
 // Pad: the carpet under a building, in the owner's colour (grey when vacant or mortgaged). Bevel, lit top-left band and (near) the card's dither, so it reads as a solid colour block at any zoom.
@@ -92,7 +95,7 @@ export function drawPad(g: Ctx, color: number, w: number, h: number, L: number) 
   fill(hex(color), m, m, w - 2 * m, h - 2 * m);
   fill(lit, m, m, w - 2 * m, 1); fill(lit, m, m, 1, h - 2 * m);
   if (L === 2) for (let y = 5; y < h - 5; y++) for (let x = 5 + (y & 1); x < w - 5; x += 2) fill('rgba(255,255,255,.08)', x, y, 1, 1);
-  edge(fill, w, h, L > 0);
+  edge(fill, w, h, L);
 }
 
 // Ground: city tiles are paved with 4 x 4 square slabs in a soft tint of the region colour, joined by hairlines. Flat and quiet on purpose: nothing like
@@ -112,5 +115,5 @@ export function drawGround(g: Ctx, type: string, kind: string, color: number, L:
       fill(GOLD[0], m, m, G - 2 * m, 1); fill(GOLD[2], m, G - m - 1, G - 2 * m, 1);
     }
   }
-  edge(fill, G, G, L > 0);
+  edge(fill, G, G, L);
 }

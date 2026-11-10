@@ -104,12 +104,12 @@ controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
 //   `unit` (world units per pixel) turns the depth difference into a number of pixels, so the same line is drawn at every zoom. ----
 const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthTexture: new THREE.DepthTexture(1, 1) });
 rt.texture.minFilter = rt.texture.magFilter = THREE.NearestFilter;
-const texel = new THREE.Vector2(), unit = { value: 0.07 }, lim = { value: 0.72 };
+const texel = new THREE.Vector2(), unit = { value: 0.07 }, lim = { value: 0.72 }, ramp = { value: 0 };
 const post = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
-  uniforms: { tc: { value: rt.texture }, td: { value: rt.depthTexture }, texel: { value: texel }, unit, lim, span: { value: camera.far - camera.near } },
+  uniforms: { tc: { value: rt.texture }, td: { value: rt.depthTexture }, texel: { value: texel }, unit, lim, ramp, span: { value: camera.far - camera.near } },
   vertexShader: 'varying vec2 v; void main() { v = uv; gl_Position = vec4(position.xy, 0., 1.); }',
   fragmentShader: `
-    uniform sampler2D tc, td; uniform vec2 texel; uniform float unit, lim, span; varying vec2 v;
+    uniform sampler2D tc, td; uniform vec2 texel; uniform float unit, lim, ramp, span; varying vec2 v;
     void main() {
       vec2 n[4] = vec2[4](vec2(1, 0), vec2(-1, 0), vec2(0, 1), vec2(0, -1));
       vec3 c = texture2D(tc, v).rgb;
@@ -119,8 +119,9 @@ const post = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMater
         vec2 u = v + n[i] * texel;
         float d = texture2D(td, u).x * span - z; // > 0: the neighbour is farther
         sum += d;
-        if (-d > top) { top = -d; c = texture2D(tc, u).rgb * 0.07 + vec3(0.003, 0.006, 0.02); }
-        rim = rim || abs(d) > lim;
+        float s = d - n[i].y * ramp; // the step with the ramp of level ground taken out (up the screen it is ramp deeper a pixel, down it as much nearer): 0 on the ground, a ledge's own depth at its edge
+        if (-s > top) { top = -s; c = texture2D(tc, u).rgb * 0.07 + vec3(0.003, 0.006, 0.02); }
+        rim = rim || abs(s) > lim;
       }
       float k = rim ? 0. : sum / unit; // the kink in pixels of depth: ~2 for a wall against the ground or a roof ridge, 0 on a flat face
       gl_FragColor = vec4(k > 0.9 ? c * 1.32 + 0.035 : k < -0.9 ? c * 0.62 : c, 1.);
@@ -143,9 +144,13 @@ function snap() {
   camera.position.add(snapped.set(m[0] * da + m[4] * db, m[1] * da + m[5] * db, m[2] * da + m[6] * db));
   camera.updateMatrixWorld();
   unit.value = u;
-  // Flat ground is a ramp in depth: up the screen it steps u * tan(polar angle) deeper per pixel. Far out and low down (the farthest zoom at the lowest tilt) that passes 0.72, and
-  // every pixel of the ground would be taken for the silhouette of the one below it and inked dark. A silhouette must then step a quarter deeper than the ground does.
-  lim.value = Math.max(0.72, 1.25 * u * Math.tan(controls.getPolarAngle()));
+  // Flat ground is a ramp in depth: up the screen it steps u * tan(polar angle) deeper per pixel. The shader takes that ramp out of every step it measures, so a ledge is its own depth (its height over sin(tilt)) at any
+  // zoom: a plot's 0.3 used to pass 0.72 once a pixel had grown big enough for the ramp to make up the rest, and was inked as a silhouette. What is left to mistake is the steepest face a pixel can run along, a wall: it is
+  // nearer by u / tan(polar angle) a pixel up, which beside the ground's ramp is u * (tan + 1 / tan) off level. Far out and tilted far either way (the farthest zoom at the lowest tilt, or from the highest) that passes
+  // 0.72, and every pixel of a wall would be taken for the silhouette of the one above it and inked dark. A silhouette must then step a quarter deeper than that.
+  const t = Math.tan(controls.getPolarAngle());
+  ramp.value = u * t;
+  lim.value = Math.max(0.72, 1.25 * u * (t + 1 / t));
 }
 export function render() {
   snap();
