@@ -3,6 +3,7 @@ import { TILES, maxLevel } from '../../shared/data';
 import { command } from '../../shared/state';
 import type { Cmd, NewsCard, Notice, Prompt } from '../../shared/types';
 import { hold } from '../asks';
+import { clock, wallHour } from '../render/sky';
 import { G, actionBtn, selectedTile, session, useCell } from '../store';
 import { openAlert, openAsk, openNews, openNotice } from './open';
 
@@ -36,14 +37,22 @@ function preview(text: string) {
 }
 
 const Field = ({ label, children }: { label: string; children: ReactNode }) => <div className="field"><label>{label}</label>{children}</div>;
+const mod24 = (h: number) => ((h % 24) + 24) % 24;
+const hhmm = (h: number) => new Date(h * 36e5).toISOString().slice(11, 16); // hours since midnight, as a time of day
 
 export function Debug() {
   const room = useCell(session).room, run = useCell(actionBtn)?.reply, sel = useCell(selectedTile); // run: there while the roll question is open
   const [open, setOpen] = useState(false), [who, setWho] = useState(0), [draws, setDraws] = useState('3,4'), [cash, setCash] = useState('1000');
   const [tile, setTile] = useState(0), [lv, setLv] = useState(0), [mort, setMort] = useState(false), [kind, setKind] = useState('notice'), [json, setJson] = useState(() => sample('notice'));
   useEffect(() => { if (sel >= 0) setTile(sel); }, [sel]); // a tile clicked on the board is the one aimed at
+  const [day, setDay] = useState<typeof clock>({ shift: 0, stop: null }), [wall, setWall] = useState(wallHour); // the sky's clock as this panel has it set, and the wall clock's hour
+  useEffect(() => { Object.assign(clock, day); return () => void Object.assign(clock, { shift: 0, stop: null }); }, [day]); // the sky takes its hour from here, until LIVE or the end of the game
+  useEffect(() => { if (!open) return; setWall(wallHour()); const id = setInterval(() => setWall(wallHour()), 250); return () => clearInterval(id); }, [open]); // the hour goes on, and the slider with it
   const S = G.S;
   if (!room?.dev || !S) return null;
+  const hour = day.stop ?? (wall + day.shift) % 24; // the sky's hour: what the slider shows
+  const seek = (h: number) => setDay(day.stop === null ? { shift: mod24(h - wall), stop: null } : { ...day, stop: h }); // a running clock goes on from the hour dragged to; a stopped one stays there
+  const stop = () => setDay(day.stop === null ? { ...day, stop: hour } : { shift: mod24(day.stop - wall), stop: null });
   const aim = TILES[tile], cap = maxLevel(aim), level = Math.min(lv, cap), mortgaged = mort && aim.mort > 0; // the server takes any level and clamps it; the panel only offers what the tile has: levels up to its own, a mortgage if it has a value
   const btn = (label: string, c: Cmd, cls = '') => <button className={`btn sm ${cls}`} disabled={!run || !command(S, c)} onClick={() => run?.(c)}>{label}</button>;
   return (
@@ -51,6 +60,13 @@ export function Debug() {
       <button className="btn sm" onClick={() => setOpen(!open)}>DEV</button>
       {open && (
         <div className="box"><div className="bd">
+          <Field label={`TIME OF DAY ${hhmm(hour)}`}>
+            <input type="range" min={0} max={24} step="any" value={hour} onChange={(e) => seek(+e.target.value)} />
+            <div className="seg">
+              <button className={day.stop !== null ? 'on' : ''} onClick={stop}>PAUSE</button>
+              <button className={day.stop === null && !day.shift ? 'on' : ''} onClick={() => setDay({ shift: 0, stop: null })}>LIVE</button>
+            </div>
+          </Field>
           <div className="note">{run ? 'Commands run before the roll.' : 'Commands work while ROLL DICE is up.'}</div>
           <Field label="PLAYER"><div className="seg">{S.players.map((p, i) => <button key={i} className={who === i ? 'on' : ''} disabled={!!p.out} onClick={() => setWho(i)}>{p.name}</button>)}</div></Field>
           <Field label="NEXT DRAWS (dice, news card #...)">

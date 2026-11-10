@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { hd, lamps, lit, setLamps, spot, U, type Pbr } from './light';
+import { sky, updateSky } from './sky';
 
 // Board scale: a tile cell is 3 * BOARD_K world units. Buildings, props, tokens and text keep their size; only the tile (and with it the camera
 // limits, zoom range, sun and the centre globe) grows.
@@ -240,6 +241,7 @@ export function updateCamera(dt: number) {
   }
   controls.update();
   lod.n = levelNow(); // when the texel size crosses a threshold, the other level's art is drawn from this frame on
+  daylight();
   fitShadow();
   if (hd.on) lens();
 }
@@ -319,13 +321,13 @@ export function toScreen(v: THREE.Vector3): [number, number] {
 }
 
 // ---- Lights ----
-const sky = new THREE.HemisphereLight(0xd8ecff, 0x56648a, 1.6);
-// The sun stands to the west (the default view's left), fixed in the world like the tiles: the camera turns round it, so each side shows its own light and shadow.
-// It is exactly sideways, so the shadow map's texels line up with the ground's: a shadow is a block of whole ground texels, not a ragged diagonal. In the default
-// view each visible face lands on its own shading band: top, left, front (square to the light, mid-band) and right.
-const SUN_SIN = Math.sin(THREE.MathUtils.degToRad(52));
-const SUN = new THREE.Vector3(-Math.sqrt(1 - SUN_SIN ** 2), SUN_SIN, 0).multiplyScalar(100 * BOARD_K); // offset from the view target
-export const sun = new THREE.DirectionalLight(0xfff0d0, 2.4);
+const hemi = new THREE.HemisphereLight(); // the light of the sky
+// Full daylight in each look, restrained then HD-2D: the hemisphere's sky colour, ground colour and intensity, the sun's colour and intensity (HD-2D: a cool sky over a warm bounce, a low warm sun).
+// The light of the hour (sky.ts) is a share of it, so at midday each look is what it always was.
+const DAYLIGHT = [[0xd8ecff, 0x56648a, 1.6, 0xfff0d0, 2.4], [0xa9c4ff, 0x6b5a58, 1.1, 0xffe0b0, 3.4]];
+// The sun stands where the clock puts it (sky.ts), fixed in the world like the tiles: the camera turns round it, so each side shows its own light and shadow. By night this light is the moon's.
+const SUN_AT = 100 * BOARD_K; // how far it stands from the view target
+export const sun = new THREE.DirectionalLight();
 sun.castShadow = true;
 sun.shadow.mapSize.set(4096, 4096);
 Object.assign(sun.shadow.camera, { near: 1, far: 220 * BOARD_K });
@@ -334,16 +336,24 @@ sun.shadow.normalBias = 0.04; // walls facing the camera lie along the light's r
 
 // Shadow texels match ground texels: 4096 of them span ~190 x 150 world units, so the shadow frustum follows the view target (snapped to whole shadow
 // texels, so shadows never crawl) and only doubles when the visible ground would spill over its edge (far zoomed out, where a shadow texel is a
-// fraction of a screen pixel anyway).
-const SUN_X = new THREE.Vector3(SUN.z, 0, -SUN.x).normalize(), SUN_Y = SUN.clone().normalize().cross(SUN_X); // the sun's light-space axes
-let shadowScale = 0, shadowX = 0, shadowY = 0; // the frustum's size and its texel on the lattice, as the shadow map was last drawn for them
+// fraction of a screen pixel anyway). The frustum is as tall, in the light's own view, as the ground it covers is deep times the sine of the light's elevation: that is what makes a texel square
+// on the ground. It is not made lower than LOW of its width, or a tower would stand out of it when the sun is low.
+const LOW = 0.3;
+const SUN_X = new THREE.Vector3(), SUN_Y = new THREE.Vector3(), drawn = new THREE.Vector3(); // the light's axes (across it along the horizon, and up its view), and the light as the shadow map was last drawn for it
+let shadowScale = 0, shadowX = 0, shadowY = 0, shadowH = 1; // the frustum's size and its texel on the lattice, as the shadow map was last drawn for them, and its height as a share of its width
 function fitShadow() {
+  const L = sky.light, turned = !L.equals(drawn); // the sun has moved a step: the light's axes turn with it, and the map is drawn again
+  if (turned) {
+    drawn.copy(L);
+    SUN_X.set(L.z, 0, -L.x).normalize(); SUN_Y.crossVectors(L, SUN_X);
+    shadowH = Math.max(L.y, LOW);
+  }
   const t = controls.target, off = camera.position.clone().sub(t), half = 2048 / DENSITY;
   const reach = (Math.hypot(camera.right - camera.left, ((camera.top - camera.bottom) * off.length()) / off.y) / (2 * camera.zoom)) * (hd.on ? 1.3 : 1); // radius of the visible ground (the lens sees more of it far up the screen)
-  const s = reach > half ? 2 : 1, tx = s / DENSITY, ty = tx * SUN_SIN, x = t.dot(SUN_X), y = t.dot(SUN_Y), i = Math.round(x / tx), j = Math.round(y / ty);
-  if (s !== shadowScale || i !== shadowX || j !== shadowY) { // resized, or on another texel: the map is drawn again (within a texel, or along the light, it would come out the same)
-    if (s !== shadowScale) {
-      Object.assign(sun.shadow.camera, { left: -half * s, right: half * s, top: half * s * SUN_SIN, bottom: -half * s * SUN_SIN });
+  const s = reach > half ? 2 : 1, tx = s / DENSITY, ty = tx * shadowH, x = t.dot(SUN_X), y = t.dot(SUN_Y), i = Math.round(x / tx), j = Math.round(y / ty);
+  if (turned || s !== shadowScale || i !== shadowX || j !== shadowY) { // turned, resized, or on another texel: the map is drawn again (within a texel, or along the light, it would come out the same)
+    if (turned || s !== shadowScale) {
+      Object.assign(sun.shadow.camera, { left: -half * s, right: half * s, top: half * s * shadowH, bottom: -half * s * shadowH });
       sun.shadow.camera.updateProjectionMatrix();
     }
     [shadowScale, shadowX, shadowY] = [s, i, j];
@@ -351,7 +361,16 @@ function fitShadow() {
   }
   U.uSh.value.set(sun.shadow.camera.far - sun.shadow.camera.near, tx); // for the soft shadows (HD-2D)
   sun.target.position.copy(t).addScaledVector(SUN_X, i * tx - x).addScaledVector(SUN_Y, j * ty - y);
-  sun.position.copy(sun.target.position).add(SUN);
+  sun.position.copy(sun.target.position).addScaledVector(L, SUN_AT);
+}
+
+// The light of the hour: the sky of sky.ts, as a share of the look's full daylight
+function daylight() {
+  updateSky();
+  const [skyC, groundC, skyI, sunC, sunI] = DAYLIGHT[+hd.on];
+  hemi.color.set(skyC).multiply(sky.skyC); hemi.groundColor.set(groundC).multiply(sky.skyC); hemi.intensity = skyI * sky.skyK;
+  sun.color.set(sunC).multiply(sky.lightC); sun.intensity = sunI * sky.lightK;
+  (scene.background as THREE.Color).copy(sky.horizon);
 }
 
 // ---- The look of the light: the restrained pixel look above, or HD-2D (light.ts for the materials and the lamps, hd2d.ts for the passes, which loads the first time it is asked for) ----
@@ -359,8 +378,6 @@ let hdMod: typeof import('./hd2d') | null = null, wanted = false;
 function look(on: boolean) {
   hd.on = on; U.uHd.value = +on;
   setLamps(on);
-  sky.color.set(on ? 0xa9c4ff : 0xd8ecff); sky.groundColor.set(on ? 0x6b5a58 : 0x56648a); sky.intensity = on ? 1.1 : 1.6; // HD-2D: a cool sky over a warm bounce, a low warm sun
-  sun.color.set(on ? 0xffe0b0 : 0xfff0d0); sun.intensity = on ? 3.4 : 2.4;
   renderer.domElement.style.imageRendering = on ? 'auto' : ''; // the restrained look is magnified with nearest-neighbour (see style.css)
   resize(); // the buffer takes its other size
   dirtyShadow();
@@ -383,7 +400,8 @@ function disposeTree(root: THREE.Object3D) {
 }
 export function initScene() {
   controls.connect(renderer.domElement);
-  scene.add(sky, sun, sun.target, ...lamps, spot, spot.target);
+  scene.add(hemi, sun, sun.target, ...lamps, spot, spot.target);
+  daylight();
   renderer.domElement.style.width = renderer.domElement.style.height = ''; // the page sizes the canvas (see resize): drop a size that an older hot update gave it
   const fit = new ResizeObserver(() => { resize(); render(); }); // a resized canvas is blank until it is drawn again, and the next frame may not be this one
   fit.observe(renderer.domElement);

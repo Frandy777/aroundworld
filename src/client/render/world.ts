@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { scene, toon, lodMap, pixelTexture, texels, lod, DENSITY, BOARD_K } from './scene';
 import { lit, soft } from './light';
+import { sky } from './sky';
 import { canvas } from './art';
 import { EARTH } from './earth';
 import { FOOT, TOP, SLAB, SZ } from './layout';
@@ -87,8 +88,9 @@ const sea = new THREE.Mesh(new THREE.PlaneGeometry(SEA, SEA), mat);
 sea.rotation.x = -Math.PI / 2;
 sea.position.y = -0.8;
 mat.onBeforeRender = () => (U.uTexel.value = 2 ** (2 - lod.n) / DENSITY); // a water pixel is a texel of the level in view
-// A shadow on water is one tone darker, not black: the sea itself is lit flat, and a see-through plane just above it takes the shadow map alone
-const dim = new THREE.Mesh(sea.geometry, soft(new THREE.ShadowMaterial({ color: 0x0a1a5c, opacity: 0.34 })));
+// A shadow on water is one tone darker, not black: the sea itself is lit flat, and a see-through plane just above it takes the shadow map alone. It is as dark as the light is strong, and as dark a blue as the sky is bright (see updateWorld)
+const DIM = new THREE.Color(0x0a1a5c);
+const dim = new THREE.Mesh(sea.geometry, soft(new THREE.ShadowMaterial({ color: DIM, opacity: 0.34 })));
 dim.rotation.x = sea.rotation.x;
 dim.position.y = sea.position.y + 0.01;
 dim.receiveShadow = true;
@@ -195,6 +197,7 @@ export const initWorld = () => scene.add(sea, dim, globe, scenery);
 
 export function updateWorld(t: number, dt: number) {
   U.uTime.value = Math.floor(t * 4) / 4; // the sea moves in quarter-second steps
+  dim.material.opacity = 0.34 * sky.lightK; dim.material.color.copy(DIM).multiplyScalar(sky.skyK);
   updateScenery(t, dt);
   ball.rotation.y += dt * 0.35;
   ball.position.y = FLOAT + Math.sin(t * 1.2) * 0.4;
