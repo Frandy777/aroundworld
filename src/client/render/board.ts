@@ -7,6 +7,7 @@ import { CARD_SIZE, codeOf, drawCard, drawGround, drawPad } from './labels';
 import { CARD, LOT, PAD, POS, S, SLAB, SZ, TOP } from './layout';
 import { bake, memo, sideTex } from './builder';
 import { buildProps, building, flag, level, sign } from './models';
+import { MISSILE_NAME } from './models/missile';
 
 const VACANT = 0xb9b2a0; // the plot of a tile nobody owns
 
@@ -66,12 +67,15 @@ export function createBoard() {
     const props = new THREE.Group(), bld = new THREE.Group();
     props.position.set(LOT.x, TOP + (pad ? PAD.h : 0), LOT.z); bld.position.copy(props.position);
     buildProps(props, t);
+    const rocket = props.getObjectByName(MISSILE_NAME) as THREE.Group | undefined;
+    if (rocket) { rocket.removeFromParent(); bake(rocket); }
     bake(props);
+    if (rocket) props.add(rocket); // kept out of the static batch so a strike can hide the missile that leaves the pad
     g.add(slab, card, letters, props, bld);
     if (pad) g.add(pad);
     root.add(g);
     if (pad) { sign(bld); bake(bld); }
-    return { g, slab, card, letters, props, side, tint: [ground, card.material], pad, bld, key: '', pop: 1 };
+    return { g, slab, card, letters, props, rocket, side, tint: [ground, card.material], pad, bld, key: '', pop: 1 };
   });
   type Plot = (typeof tiles)[number];
   // A new owner or a new level: the building rises from the plot, squashed wide and flat first, with a little overshoot (ease out back)
@@ -106,6 +110,18 @@ export function createBoard() {
   let hov = -1, sel = -1;
   return {
     slabs: tiles.map((o) => o.slab), setOwner, // what the pointer picks: each tile's base, a plain box
+    launcher(i: number, visible: boolean) {
+      const rocket = tiles[i].rocket;
+      if (!rocket) return undefined;
+      rocket.updateWorldMatrix(true, false);
+      const point = rocket.getWorldPosition(new THREE.Vector3());
+      rocket.visible = visible; dirtyShadow();
+      return point;
+    },
+    impact(i: number) {
+      const g = tiles[i].g; g.updateWorldMatrix(true, false);
+      return g.localToWorld(new THREE.Vector3(LOT.x, TOP + PAD.h + 0.35, LOT.z));
+    },
     // The carved codes, once the camera has moved and before render(). Their size is the view's at the 'fit' zoom: a font pixel is a buffer pixel (or the widest that 3 letters fit on a card), and a row is
     // stretched by 1 / sin(ELEV), since the card lies back by that much: the rows come out a pixel high at the default tilt. A stroke is one pixel wide, so it needs a pixel to itself: where the zoom has gone
     // out past that a column falls between two pixel centres and is lost, and the code is not drawn. The relief is a 25th of a font pixel while the view is far, since more and the ink pass takes the

@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { START_CASH, TILES, type Tile } from '../../shared/data';
+import { START_CASH, TILES, maxLevel, type Tile } from '../../shared/data';
 import { READ } from '../../shared/protocol';
 import { canPick } from '../../shared/state';
 import type { CasinoView, NewsCard as News, Notice, OrderPass, Player, Prompt, RankRow } from '../../shared/types';
 import { reply } from '../asks';
 import { pace } from '../render/scene';
 import { state, useCell, G, type Cell } from '../store';
-import { Blocks, Die, Face, Flag, Icon, Rich, hex, money, tileHead } from './bits';
+import { Blocks, Die, Face, Flag, Icon, Pips, Rich, hex, money, tileHead } from './bits';
 import { TileBody } from './tile';
 
 const d6 = () => 1 + Math.floor(Math.random() * 6);
@@ -156,7 +156,7 @@ export function PickCard({ id, p }: { id: number; p: Of<'pick'> }) {
             <span className="check" />
             {t && <><span className="sw" style={{ background: hex(t.color) }} /><Flag name={t.name} /><span className="grow">{t.name}</span></>}
             {who && <><Face color={who.color} /><span className="grow">{who.name}</span></>}
-            <b>{x.amt !== undefined ? money(x.amt) : x.note}</b>
+            {x.own ? <><Rich m={[{ p: x.own.p }]} /><Pips n={x.own.lv} max={maxLevel(TILES[x.i])} /></> : <b>{x.amt !== undefined ? money(x.amt) : x.note}</b>}
           </div>
         );
       })}</div>

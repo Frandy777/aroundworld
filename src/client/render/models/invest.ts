@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { box, cyl, final, floor, hip, plaque, GOLD, IRON, INK, type Prop } from '../builder';
+import { LAUNCH_PAD, MISSILE_LENGTH, MISSILE_NAME, MISSILE_SCALE, missile } from './missile';
 
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
@@ -120,30 +121,43 @@ export const INVEST_PROPS: Record<string, Prop[]> = {
       [[0.56, 0.4], [0.4, 0.3], [0.22, 0.18]].forEach(([w, d], i) => box(g, w, 0.1, d, 0xd8c08a, 0.82, 0.08 + i * 0.1, 0.45)); // sand heap
     }),
   ],
-  military: [ // a base: a two-storey command block under a radome and a roof star, a watchtower, a helicopter on its pad and a tank behind sandbags
+  military: [ // a missile launch complex: the rocket and its service gantry dominate the pad, with a flame trench, fuel tanks, radar and a low control bunker
     final((g) => {
-      const [bx, bz, wx, wz, hx, hz, tx, tz] = [-0.33, -0.42, 0.82, -0.5, 0.66, 0.5, -0.55, 0.5];                          // centres: command block, watchtower, helipad, tank
-      const OD = 0x5b6b3a, DARK = 0x3a4528, TAN = 0xc9b68a, STEEL = 0x7b86a0, WALL = 0xb7bd96, GLASS = 0x7db6ff;
-      box(g, 2.2, 0.08, 1.9, 0xa9a48f, 0, 0, 0);                                                                           // site ground
-      floor(g, 3, 2, 'door', WALL, 0.08, bx, bz); floor(g, 3, 2, 'win', WALL, 0.98, bx, bz); box(g, 1.54, 0.1, 1.04, DARK, bx, 1.88, bz); // command block, its roof
-      for (const [w, d, x, z] of [[1.54, 0.08, 0, 0.48], [1.54, 0.08, 0, -0.48], [0.08, 0.88, -0.73, 0], [0.08, 0.88, 0.73, 0]]) box(g, w, 0.14, d, OD, bx + x, 1.98, bz + z); // parapet
-      cyl(g, 0.34, 0.08, STEEL, bx + 0.35, 1.98, bz); [0.3, 0.29, 0.26, 0.21, 0.13].forEach((r, i) => cyl(g, r, 0.1, i & 1 ? 0xdfe6f2 : 0xf4f6fa, bx + 0.35, 2.06 + i * 0.1, bz)); // radome: a stepped ball
-      ['...#...', '..###..', '#######', '.#####.', '..###..', '.##.##.', '.#...#.'].forEach((row, r) => { for (const m of row.matchAll(/#+/g)) box(g, 0.08 * m[0].length, 0.01, 0.08, 0xffffff, bx - 0.35 + 0.08 * (m.index + m[0].length / 2 - 3.5), 1.98, bz + 0.05 + 0.08 * (r - 3)); }); // roof star
-      box(g, 0.06, 0.9, 0.06, INK, bx - 0.6, 1.98, bz - 0.25); box(g, 0.12, 0.12, 0.12, 0xff3b3b, bx - 0.6, 2.88, bz - 0.25);   // mast, beacon
-      for (const x of [-0.2, 0.2]) for (const z of [-0.2, 0.2]) box(g, 0.07, 1.2, 0.07, STEEL, wx + x, 0.08, wz + z);          // watchtower: legs
-      for (const y of [0.4, 0.75, 1.1]) { box(g, 0.47, 0.04, 0.04, STEEL, wx, y, wz + 0.2); for (const x of [-0.2, 0.2]) box(g, 0.04, 0.04, 0.47, STEEL, wx + x, y, wz); } // braces
-      box(g, 0.64, 0.06, 0.64, DARK, wx, 1.28, wz); box(g, 0.5, 0.32, 0.5, OD, wx, 1.34, wz); box(g, 0.4, 0.12, 0.02, GLASS, wx, 1.44, wz + 0.25); // deck, cabin, window
-      box(g, 0.7, 0.06, 0.7, DARK, wx, 1.66, wz); box(g, 0.16, 0.12, 0.16, 0xfff6b0, wx + 0.15, 1.72, wz + 0.05);               // roof, searchlight
-      box(g, 0.8, 0.03, 0.7, 0xb4b9c8, hx, 0.08, hz); for (const x of [-0.2, 0.2]) box(g, 0.06, 0.01, 0.46, GOLD, hx + x, 0.11, hz); box(g, 0.34, 0.01, 0.06, GOLD, hx, 0.11, hz); // pad, its H
-      for (const z of [-0.15, 0.15]) { box(g, 0.5, 0.03, 0.04, INK, hx, 0.11, hz + z); for (const x of [-0.14, 0.14]) box(g, 0.03, 0.1, 0.03, INK, hx + x, 0.11, hz + z); } // helicopter: skids, struts
-      box(g, 0.5, 0.22, 0.3, OD, hx, 0.2, hz); box(g, 0.1, 0.16, 0.22, GLASS, hx + 0.24, 0.24, hz); box(g, 0.16, 0.1, 0.02, 0x1a2250, hx + 0.02, 0.3, hz + 0.15); // fuselage, nose glass, window
-      box(g, 0.36, 0.08, 0.08, OD, hx - 0.43, 0.31, hz); box(g, 0.05, 0.22, 0.05, DARK, hx - 0.58, 0.31, hz);                  // tail boom, fin
-      box(g, 0.07, 0.1, 0.07, INK, hx - 0.02, 0.42, hz); box(g, 0.9, 0.02, 0.08, INK, hx - 0.02, 0.52, hz);                       // rotor mast, one blade at rest
-      for (const z of [-0.2, 0.2]) box(g, 0.74, 0.2, 0.12, INK, tx, 0.08, tz + z);                                            // tank: tracks
-      for (const x of [-0.24, -0.08, 0.08, 0.24]) box(g, 0.11, 0.11, 0.02, 0x4a4f6e, tx + x, 0.13, tz + 0.26);                // road wheels
-      box(g, 0.66, 0.16, 0.46, OD, tx, 0.2, tz); box(g, 0.36, 0.15, 0.32, DARK, tx - 0.04, 0.36, tz);                         // hull, turret
-      box(g, 0.3, 0.06, 0.06, INK, tx + 0.29, 0.41, tz); box(g, 0.1, 0.05, 0.1, OD, tx - 0.1, 0.51, tz - 0.05);               // gun, hatch
-      for (const [n, y, x] of [[3, 0.08, -0.3], [2, 0.18, -0.15]]) for (let i = 0; i < n; i++) box(g, 0.3, 0.1, 0.14, (i + n) & 1 ? 0xb8a578 : TAN, tx + x + i * 0.3, y, 0.85); // sandbags, two courses
+      const { x: px, y: py, z: pz } = LAUNCH_PAD, gx = px - 0.64, gz = pz - 0.25;
+      const OD = 0x5b6b3a, DARK = 0x3a4528, STEEL = 0x7b86a0, LIGHT = 0xcfd6e6, WALL = 0xb7bd96, GLASS = 0x7db6ff, RED = 0xd9423e;
+      const strut = (a: [number, number, number], b: [number, number, number]) => {
+        const d = new THREE.Vector3(...b).sub(new THREE.Vector3(...a)), m = box(g, 0.045, d.length(), 0.045, STEEL);
+        m.position.set(...a).addScaledVector(d, 0.5); m.quaternion.setFromUnitVectors(Y_AXIS, d.normalize());
+      };
+      box(g, 2.3, 0.08, 1.95, 0xa9a48f);                                                                                  // hardened site
+      box(g, 0.54, 0.035, 1.18, INK, px, 0.08, pz + 0.5); box(g, 0.34, 0.02, 0.92, 0x4a4f6e, px, 0.115, pz + 0.58); // flame trench and its scorched channel
+      cyl(g, 0.82, 0.12, 0x8a8fa3, px, 0.08, pz); cyl(g, 0.7, 0.12, LIGHT, px, 0.2, pz);                              // circular launch pad, two concrete courses
+      for (const x of [-0.34, 0.34]) for (const z of [-0.34, 0.34]) box(g, 0.12, 0.16, 0.12, DARK, px + x, 0.32, pz + z);
+      cyl(g, 0.5, 0.12, OD, px, 0.36, pz); cyl(g, 0.34, 0.04, INK, px, 0.44, pz);                                     // launch mount and exhaust well
+      for (const x of [-0.23, 0.23]) for (const z of [-0.23, 0.23]) box(g, 0.07, 3.08, 0.07, STEEL, gx + x, 0.16, gz + z); // service gantry
+      for (let y = 0.38; y < 3.05; y += 0.53) {
+        box(g, 0.54, 0.05, 0.05, LIGHT, gx, y, gz + 0.23); box(g, 0.05, 0.05, 0.54, LIGHT, gx + 0.23, y, gz);
+        strut([gx - 0.23, y, gz + 0.23], [gx + 0.23, y + 0.48, gz + 0.23]); strut([gx + 0.23, y, gz - 0.23], [gx + 0.23, y + 0.48, gz + 0.23]);
+      }
+      for (const y of [0.82, 1.62, 2.42, 3.18]) {
+        box(g, 0.64, 0.07, 0.62, DARK, gx, y, gz); box(g, 0.64, 0.08, 0.04, GOLD, gx, y + 0.07, gz + 0.29);
+      }
+      for (const y of [1.32, 2.12]) {                                                                                   // hinged service arms holding the rocket
+        box(g, 0.55, 0.09, 0.13, OD, (gx + px) / 2 + 0.12, y, pz); box(g, 0.12, 0.18, 0.24, DARK, px - 0.25, y - 0.04, pz);
+      }
+      box(g, 0.05, 0.48, 0.05, INK, gx, 3.25, gz); box(g, 0.1, 0.1, 0.1, 0xff3b3b, gx, 3.73, gz);                    // lightning mast and warning lamp
+      const rocket = new THREE.Group(); rocket.name = MISSILE_NAME;
+      rocket.position.set(px, py + MISSILE_LENGTH * MISSILE_SCALE, pz); rocket.scale.setScalar(MISSILE_SCALE); missile(rocket); g.add(rocket);
+      for (const z of [-0.64, -0.25]) {                                                                                 // propellant tanks, deliberately secondary
+        cyl(g, 0.16, 0.52, LIGHT, 0.35, 0.08, z); cyl(g, 0.165, 0.1, RED, 0.35, 0.28, z); cyl(g, 0.12, 0.06, STEEL, 0.35, 0.6, z);
+      }
+      box(g, 0.52, 0.42, 0.62, WALL, 0.82, 0.08, -0.58); box(g, 0.58, 0.07, 0.68, DARK, 0.82, 0.5, -0.58);           // low blast-proof control bunker
+      box(g, 0.34, 0.09, 0.025, GLASS, 0.82, 0.32, -0.26); box(g, 0.12, 0.24, 0.03, DARK, 0.82, 0.08, -0.25);
+      box(g, 0.07, 0.68, 0.07, STEEL, 0.8, 0.08, 0.43);                                                                // radar pedestal
+      const dish = cyl(g, 0.28, 0.06, LIGHT, 0.8, 0.75, 0.43); dish.rotation.x = -0.65;
+      box(g, 0.04, 0.34, 0.04, DARK, 0.8, 0.72, 0.49).rotation.x = -0.65; box(g, 0.08, 0.08, 0.08, RED, 0.8, 1.04, 0.32);
+      for (let i = 0; i < 7; i++) box(g, 0.24, 0.08, 0.12, i & 1 ? INK : GOLD, -0.99 + i * 0.33, 0.08, 0.84);         // hazard kerb
+      for (const z of [0.38, 0.61]) box(g, 0.32, 0.012, 0.045, GOLD, px, 0.12, z);
     }),
   ],
   choke: [ // a harbour mouth: twin lighthouses (port red, starboard green) at the back, a gas carrier held in the channel by the red-and-white boom, its toll booth and stop signal on the quays

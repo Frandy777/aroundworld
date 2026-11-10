@@ -467,12 +467,13 @@ export class Game {
 
   // The owner of a working Military Base may pay $500 to bring any built city (anybody's) down one level.
   private async strike(pi: number, i: number) {
-    const S = this.S, p = S.players[pi], items = Object.keys(S.own).map(Number).filter((k) => S.own[k].lv > 0).map((k) => ({ i: k, note: `Lv ${S.own[k].lv}` }));
+    const S = this.S, p = S.players[pi], items = Object.keys(S.own).map(Number).filter((k) => S.own[k].lv > 0).map((k) => ({ i: k, own: S.own[k] }));
     if (p.cash < 500 || !items.length) return;
     const sel = (await this.ask(pi, { k: 'pick', of: 'tile', title: 'MILITARY BASE', sub: [`${p.name} \u00B7 optional`], tone: TILES[i].color,
       hint: 'Pay $500 to bring any city down by 1 level.', items, rule: { k: 'one', msg: 'Pick a city' }, label: 'LOWER FOR $500', skip: 'SKIP' })) as number[] | null;
     if (!sel || !(await this.pay(pi, 500, m`strike on ${T(sel[0], true)}`))) return;
     this.toast(m`${p.name} paid $500: ${T(sel[0])} is lowered`, 'bad');
+    this.emit({ t: 'strike', from: i, to: sel[0] });
     this.lower(sel[0]);
   }
 

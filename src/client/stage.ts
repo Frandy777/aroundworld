@@ -5,6 +5,7 @@ import { addToken, clearTokens, initActors, placeAt, setActive, tokens, updateAc
 import { createBoard } from './render/board';
 import { POS } from './render/layout';
 import { camera, controls, finishTweens, focus, frame, initScene, overview, pick, render, renderer, resetView, rotateView, toScreen, updateCamera, updateTweens } from './render/scene';
+import { strike } from './render/strike';
 import { FLOAT, initWorld, updateWorld } from './render/world';
 import { SEED, SEED_AT } from './seed';
 import { G, activeTab, hudLive, selectedTile, tip } from './store';
@@ -15,6 +16,11 @@ export const cam = { follow: -1 }; // the player the camera tracks (-1: free)
 
 // ---- The board and its tokens ----
 export const setOwner = (i: number, o: Owned | null, S: GameState) => board.setOwner(i, o && { color: S.players[o.p].color, lv: o.lv, m: o.m });
+export async function playStrike(from: number, to: number) {
+  const start = board.launcher(from, false);
+  try { await strike(from, to, start, board.impact(to)); }
+  finally { board.launcher(from, true); }
+}
 const eachLot = (f: (i: number) => void) => TILES.forEach((t) => t.type !== 'public' && f(t.i));
 
 /** The board and tokens as the state has them (a new game, or a snapshot). */

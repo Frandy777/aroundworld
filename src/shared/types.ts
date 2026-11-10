@@ -51,7 +51,7 @@ export interface CasinoView {
 }
 
 // ---- Prompts: a decision asked of one player ----
-export interface PickItem { i: number; amt?: number; note?: string } // a tile (or a player) index, with a sum or a word on the right
+export interface PickItem { i: number; amt?: number; note?: string; own?: Owned } // a tile (or a player) index, with a sum, a word, or who owns the tile and at what level, on the right
 export type PickRule =
   | { k: 'redeem'; cash: number } // pay for what you pick, from `cash`
   | { k: 'raise'; cash: number; need: number } // raise enough to cover `need`
@@ -80,6 +80,7 @@ export type Ev =
   | { t: 'step'; s: Step | null }
   | { t: 'dice'; a: number; b: number }
   | { t: 'move'; pi: number; to: number; how: 'hop' | 'jump' }
+  | { t: 'strike'; from: number; to: number } // a military launch: the impact precedes the target's `own` downgrade
   | { t: 'cash'; pi: number; d: number }
   | { t: 'own'; i: number; o: Owned | null }
   | { t: 'flag'; pi: number; k: Flag; v: boolean }

@@ -5,7 +5,7 @@ import { send } from './net';
 import { clearDice, hideDice, hop, jump, placeAt, removeToken, rollDice, setActive, tokens } from './render/actors';
 import { POS } from './render/layout';
 import { finishTweens, pace, wait } from './render/scene';
-import { enterDemo, enterGame, focusTok, selectTile, setOwner, showState, tokenSpot } from './stage';
+import { enterDemo, enterGame, focusTok, playStrike, selectTile, setOwner, showState, tokenSpot } from './stage';
 import { G, actionBtn, activeTab, autoFocus, bump, bumpAssets, cashEls, clearCards, floatText, floats, hudLive, lastRoll, selectedTile, session, tip, toast, toasts, viewedPlayer, waitingFor, type Button, type Open } from './store';
 import { openAsk, openCasino, openNews, openNotice, openOrder, openResults } from './ui/open';
 import { money } from './ui/bits';
@@ -175,6 +175,7 @@ async function play(ev: Ev) {
       bump();
       return;
     }
+    case 'strike': if (!quiet()) await live(playStrike(ev.from, ev.to)); return;
     case 'cash': {
       apply(S, ev);
       if (!quiet()) {
