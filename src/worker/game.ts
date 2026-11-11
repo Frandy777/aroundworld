@@ -6,6 +6,7 @@ import { NEWS } from './news';
 
 const N = TILE_COUNT;
 const JAIL = kindAt('jail');
+const TAXES = TILES.flatMap((t, i) => (t.kind === 'tax' ? [i] : [])); // two bureaus: the first counts holdings, the second taxes wealth
 const JERU = tileAt('Jerusalem');
 const VEGAS = tileAt('Las Vegas');
 const ASK_MS = 60_000; // how long a player has to decide before the default answer is taken
@@ -593,7 +594,9 @@ export class Game {
         this.give(pi, inv * 500, `${t.name} dividend`);
         break;
       case 'tax': {
-        const amt = cities * 300 + inv * 500;
+        const amt = t.i === TAXES[1]
+          ? Math.round((p.cash * 0.03 + (p.dep?.amt ?? 0) * 0.05) / 10) * 10
+          : cities * 30 + inv * 50;
         if (!amt) { this.toast(`${t.name}: nothing to tax`); break; }
         this.toast(m`${t.name}: -${money(amt)}`, 'bad');
         await this.pay(pi, amt, t.name);

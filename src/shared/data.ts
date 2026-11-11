@@ -65,7 +65,7 @@ export const PUBLIC: Record<PublicKind, { color: number; fx: string }> = {
   jail: { color: 0x8a8fa3, fx: 'Jailed players are sent here and skip their next turn. Stopping here does not jail you. Jailed players collect no fees.' },
   gojail: { color: 0xd9423e, fx: 'Stop here and you are sent to Jail.' },
   exchange: { color: 0x2d7d6f, fx: 'Stop here to collect (investments owned) × $500 from the bank.' },
-  tax: { color: 0x7a5c3e, fx: 'Pay the bank (cities owned × $300) + (investments owned × $500).' },
+  tax: { color: 0x7a5c3e, fx: 'Pay the bank a tax. The first bureau charges (properties owned × $30) + (investments owned × $50); the second takes 3% of cash + 5% of any fixed deposit.' },
   casino: { color: 0xb02a6b, fx: 'Try your luck with the dice. Beware of jail!' },
   club: { color: 0x6a3fb5, fx: 'Pay $100 and stay here for one turn (effect does not repeat).' },
   bank: { color: 0x3b7bd9, fx: 'Stop here to mortgage properties for their full lot value, or to place a fixed deposit.' },
