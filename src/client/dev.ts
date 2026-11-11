@@ -8,7 +8,7 @@ import { U, hd } from './render/light';
 import { camera, controls, dirtyShadow, finishTweens, fitZoom, hdCam, jumpTo, lod, renderer, scene, setLighting, viewAngles } from './render/scene';
 import { clock, sky, wallHour } from './render/sky';
 import { FLOAT } from './render/world';
-import { cam, loop, playStrike, selectTile } from './stage';
+import { cam, isolateTile, loop, playStrike, rebuildTile, selectTile, setLot } from './stage';
 import { G, actionBtn, hd2d, session, stageOnly } from './store';
 
 // ---- Dev bridge (development builds only, loaded from main.tsx) ----
@@ -145,6 +145,11 @@ export function initDev() {
       loop.draw();
     },
     step: async (dt: number) => { loop.step(dt); await nextFrame(); },
+    scrub: async (t: number) => { loop.scrub(t); await nextFrame(); }, // the world clock to t outright: `tick`-driven models pose there exactly
+    // A lot's look, with no room and no turn: { p: player | -1 vacant, lv, m: mortgaged, sign: false hides the SALE board on a vacant lot }
+    setLot: async (i: number, o: { p?: number; lv?: number; m?: boolean; sign?: boolean } | null) => { setLot(i, o); loop.draw(); await nextFrame(); },
+    rebuild: async (i: number) => { rebuildTile(i); loop.draw(); await nextFrame(); }, // re-draw a tile's props from its model file, state untouched
+    isolate: async (i: number | null) => { isolateTile(i); loop.draw(); await nextFrame(); }, // one tile alone over its plot outline (null: the whole board again)
     overview: () => setView({ x: 0, z: 0, lift: FLOAT, zoom: 1.1, elev: THREE.MathUtils.radToDeg(52 * Math.PI / 180), az: 0 }),
     strike: async (from = 6, to = 28, atTime?: number) => {
       if (atTime === undefined) { await playStrike(from, to); return; }

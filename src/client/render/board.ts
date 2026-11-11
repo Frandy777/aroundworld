@@ -6,8 +6,8 @@ import { TILES, type Tile } from '../../shared/data';
 import { canvas, codePixels, shade } from './art';
 import { CARD_SIZE, codeOf, drawCard, drawGround, drawPad } from './labels';
 import { CARD, LOT, PAD, POS, S, SLAB, SZ, TOP } from './layout';
-import { bake, memo, sideTex } from './builder';
-import { buildProps, building, flag, level, sign } from './models';
+import { bake, freeBaked, memo, sideTex } from './builder';
+import { buildProps, building, flag, level, modelKey, setModelHandler, sign } from './models';
 import { MISSILE_NAME } from './models/missile';
 
 const VACANT = 0xb9b2a0; // the plot of a tile nobody owns
@@ -82,29 +82,59 @@ export function createBoard() {
     if (pad) { sign(bld); bake(bld); }
     return { g, slab, card, letters, props, rocket, side, tint: [ground, card.material], pad, bld, key: '', pop: 1 };
   });
-  const live = tiles.flatMap((o) => { const l: THREE.Object3D[] = []; o.props.traverse((c) => c.userData.tick && l.push(c)); return l; }); // the props that move (a model's groups with a `tick`, kept by bake at any depth): driven by the clock every frame
+  // the props that move (a model's groups with a `tick`, kept by bake at any depth): driven by the clock every frame, listed per tile so a rebuild swaps in its new nodes
+  const liveOf = (props: THREE.Group) => { const l: THREE.Object3D[] = []; props.traverse((c) => c.userData.tick && l.push(c)); return l; };
+  const live = tiles.map((o) => liveOf(o.props));
   type Plot = (typeof tiles)[number];
   // A new owner or a new level: the building rises from the plot, squashed wide and flat first, with a little overshoot (ease out back)
   const squash = (o: Plot) => { const e = 1 + 2.70158 * (o.pop - 1) ** 3 + 1.70158 * (o.pop - 1) ** 2; o.bld.scale.set(1 + (1 - e) * 0.3, Math.max(e, 0.01), 1 + (1 - e) * 0.3); };
 
-  function setOwner(i: number, st: { color: number; lv: number; m: boolean } | null) {
+  function setOwner(i: number, st: { color: number; lv: number; m: boolean } | null, opts?: { sign?: boolean }) {
     const t = TILES[i], o = tiles[i];
     if (t.type === 'public') return;
     const key = st ? `${st.color}|${st.lv}` : ''; // mortgaging or redeeming changes neither
     if (st && key !== o.key) { o.pop = 0; squash(o); }
     o.key = key;
-    o.bld.children.forEach((m) => (m as THREE.Mesh).geometry.dispose()); // the baked meshes own their geometry: free it
+    freeBaked(o.bld); // the baked meshes own their geometry: free it
     o.bld.clear();
     o.tint.forEach((m) => m.color.set(st?.m ? 0x808080 : 0xffffff));
     o.letters.material = inkMat(codeOf(t)[1], !!st?.m);
     const col = st?.m ? 0x555555 : st?.color ?? VACANT;
     o.pad!.material = padMats(col);
-    if (!st) sign(o.bld);
+    if (!st) { if (opts?.sign !== false) sign(o.bld); }
     else if (t.type === 'special') level(o.bld, st.lv, st.m); // the landmark stands on its plot at every level: only the level is added
     else if (t.type === 'city') st.lv ? building(o.bld, st.lv, st.m ? 0x8c8c8c : new THREE.Color(t.color).lerp(new THREE.Color(0xffffff), 0.6).getHex(), col, st.m) : flag(o.bld, st.m ? 0x666666 : st.color); // an investment adds nothing: its props stand on the owner's plot, the colour says it all, a flag would only hide them
     bake(o.bld);
     dirtyShadow();
   }
+
+  // Rebuilds a tile's props in place (its model file hot-updated, or a dev poke at it): the building side keeps whatever ownership had put there.
+  const rebuild = (i: number) => {
+    const o = tiles[i];
+    freeBaked(o.props);
+    o.props.clear();
+    buildProps(o.props, TILES[i]);
+    bake(o.props);
+    const rocket = o.props.getObjectByName(MISSILE_NAME) as THREE.Group | undefined;
+    if (rocket) bake(rocket);
+    o.rocket = rocket;
+    live[i] = liveOf(o.props);
+    dirtyShadow();
+  };
+  setModelHandler((keys) => tiles.forEach((_, i) => keys.includes(modelKey(TILES[i]) ?? '') && rebuild(i)));
+
+  // One tile on its own: the rest of the board is hidden and the plot's footprint is outlined over it, the bound a model must keep to.
+  let bounds: THREE.Object3D | null = null;
+  const isolate = (i: number | null) => {
+    tiles.forEach((o, k) => (o.g.visible = i === null || k === i));
+    if (i === null) { bounds?.removeFromParent(); bounds = null; }
+    else {
+      bounds ??= new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(PAD.w, 0.02, PAD.d)), new THREE.LineBasicMaterial({ color: 0xff3b3b }));
+      bounds.position.set(PAD.x, TOP + PAD.h + 0.02, PAD.z); // the plot's top face, raised a hair so it does not z-fight
+      tiles[i].g.add(bounds);
+    }
+    dirtyShadow();
+  };
 
   const place = (r: THREE.Group, i: number, hop: number) => { // the cursor on tile i, hop above its resting height
     r.visible = i >= 0;
@@ -115,7 +145,7 @@ export function createBoard() {
   const walls = (i: number, lit: boolean) => tiles[i].side.color.set(TILES[i].color).multiplyScalar(lit ? 1.3 : 1); // the selected tile's walls are one band up the shading ramp (its bands are about 1.3x apart)
   let hov = -1, sel = -1;
   return {
-    slabs: tiles.map((o) => o.slab), setOwner, // what the pointer picks: each tile's base, a plain box
+    slabs: tiles.map((o) => o.slab), setOwner, rebuild, isolate, // what the pointer picks: each tile's base, a plain box
     launcher(i: number, visible: boolean) {
       const rocket = tiles[i].rocket;
       if (!rocket) return undefined;
@@ -155,7 +185,7 @@ export function createBoard() {
       if (i >= 0) { tiles[i].g.userData.lift = 0.6; walls(i, true); }
     },
     update(t: number, dt: number) {
-      live.forEach((m) => m.userData.tick(t));
+      live.forEach((l) => l.forEach((m) => m.userData.tick(t)));
       tiles.forEach((o) => { // each tile lifts as one piece (slab, card, props, building)
         const rise = o.g.userData.lift - o.g.position.y, popping = o.pop < 1;
         o.g.position.y += rise * Math.min(1, dt * 14);

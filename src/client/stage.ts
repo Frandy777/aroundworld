@@ -13,10 +13,15 @@ import { G, activeTab, hd2d, hudLive, selectedTile, tip } from './store';
 // The 3D side: the board, the tokens and the camera. The frame loop runs for the whole life of the page (or until a hot update, see initStage).
 let board: ReturnType<typeof createBoard>;
 export const cam = { follow: -1 }; // the player the camera tracks (-1: free)
-export const loop = { paused: false, scale: 1, time: 0, step: (_dt: number) => {}, draw: () => {} }; // dev: pause, slow or step the world's clock while keeping the camera live
+export const loop = { paused: false, scale: 1, time: 0, step: (_dt: number) => {}, scrub: (_t: number) => {}, draw: () => {} }; // dev: pause, slow or step the world's clock while keeping the camera live
 
 // ---- The board and its tokens ----
 export const setOwner = (i: number, o: Owned | null, S: GameState) => board.setOwner(i, o && { color: S.players[o.p].color, lv: o.lv, m: o.m });
+// Dev previews of ownership, with no room and no turn: who owns the lot (a player index, none: vacant), its level, mortgaged, and whether the SALE sign stands on a vacant one.
+export const setLot = (i: number, o: { p?: number; lv?: number; m?: boolean; sign?: boolean } | null) =>
+  board.setOwner(i, o?.p === undefined || o.p < 0 ? null : { color: PLAYER_DEFS[o.p].color, lv: o.lv ?? 0, m: !!o.m }, { sign: o?.sign });
+export const rebuildTile = (i: number) => board.rebuild(i);
+export const isolateTile = (i: number | null) => board.isolate(i);
 export async function playStrike(from: number, to: number) {
   const start = board.launcher(from, false);
   try { await strike(from, to, start, board.impact(to)); }
@@ -136,6 +141,7 @@ export function initStage() {
     };
     loop.draw = () => draw(0);
     loop.step = (dt: number) => { advance(Math.max(0, dt)); draw(0); };
+    loop.scrub = (T: number) => { t = T; advance(0); draw(0); }; // seek the world clock outright: `tick`-driven parts pose at t, tweens are only stepped (see step/strike)
     document.addEventListener('visibilitychange', () => { if (document.hidden) { finishTweens(); last = 0; } }, { signal: off.signal }); // a hidden tab draws no frames: its animations end at once, and it comes back to a zero step, not one huge one
     undo.push(() => { off.abort(); controls.removeEventListener('start', unfollow); loop.step = loop.draw = () => {}; });
     renderer.setAnimationLoop((now) => {

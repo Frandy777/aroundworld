@@ -44,7 +44,13 @@ await window.__aw.setView({ hd: true, hour: 0, tile: 1, zoom: 2.2, elev: 52, az:
 // Deterministic animation & effect scrubbing (camera stays interactive while world is paused):
 await window.__aw.strike(6, 28, 4.9);          // launch missile and freeze at t = 4.9s (terminal dive)
 await window.__aw.step(0.2);                   // advance simulation & tweens by 0.2s
+await window.__aw.scrub(2.0);                  // seek the world clock to t outright (poses `tick`-driven models exactly)
 window.__aw.setLoop({ paused: false, scale: 1 });
+
+// Model workbench & lot previews (no room, no turn needed):
+await window.__aw.setLot(28, { p: 0, lv: 3 });       // owner, level, mortgaged; `{ p: -1, sign: false }` hides a vacant SALE board
+await window.__aw.rebuild(28);                     // re-draw tile 28's props from its model file (board state untouched)
+await window.__aw.isolate(28);                     // tile 28 alone over its plot-outline bound (null: whole board again)
 
 // Room & in-game dev commands (commands run while ROLL DICE is active):
 await window.__aw.quickGame(3);

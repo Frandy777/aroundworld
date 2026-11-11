@@ -14,7 +14,20 @@ const MODELS: Record<string, ModelDef> = {};
 for (const m of Object.values(defs)) MODELS[m.default.key] = m.default;
 
 // The static props of tile t, drawn into g: a model keyed by the tile's name wins over one keyed by its kind
+export const modelKey = (t: Tile) => (MODELS[t.name] ?? MODELS[t.kind])?.key;
 export const buildProps = (g: Group, t: Tile) => {
   const def = MODELS[t.name] ?? MODELS[t.kind];
   drawProps(g, def?.props ?? [], def?.scale ?? PK);
 };
+
+// A model file saved while developing is accepted here: MODELS is updated in place and the board rebuilds only the tiles that draw it —
+// the camera, the clock and the lighting never notice (see board.rebuild).
+let onModelChange: (keys: string[]) => void = () => {};
+export const setModelHandler = (f: typeof onModelChange) => (onModelChange = f);
+if (import.meta.hot) {
+  import.meta.hot.accept(Object.keys(defs), (mods) => {
+    const keys: string[] = [];
+    mods?.forEach((m) => { const d = (m as { default?: ModelDef } | undefined)?.default; if (d) { MODELS[d.key] = d; keys.push(d.key); } });
+    if (keys.length) onModelChange(keys);
+  });
+}
