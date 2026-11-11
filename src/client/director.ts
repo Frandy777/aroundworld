@@ -188,6 +188,7 @@ async function play(ev: Ev) {
       return;
     }
     case 'own': apply(S, ev); setOwner(ev.i, ev.o, S); bumpAssets(); return;
+    case 'dep': apply(S, ev); bumpAssets(); return;
     case 'flag': {
       apply(S, ev);
       const tok = tokens[ev.pi];

@@ -62,12 +62,15 @@ const S = {
   bankrupt: [],
   over: false,
   log: [],
-  players: PLAYER_DEFS.slice(0, 2).map((p) => ({ ...p, cash: START_CASH, tile: 0, jail: false, party: false, stay: false, out: 0 })),
+  players: PLAYER_DEFS.slice(0, 2).map((p) => ({ ...p, cash: START_CASH, dep: null, tile: 0, jail: false, party: false, stay: false, out: 0 })),
 };
 apply(S, { t: 'cash', pi: 0, d: -500 });
-apply(S, { t: 'own', i: 1, o: { p: 0, lv: 1, m: false } });
+apply(S, { t: 'own', i: 1, o: { p: 0, lv: 1, m: false } }); // Wellington ($1,600) at Lv 1: lot value 1600 + 400
+apply(S, { t: 'dep', pi: 0, d: { amt: 2000, n: 5, made: 1 } });
 assert.equal(S.players[0].cash, START_CASH - 500);
 assert.equal(stats(S, 0).city, 1);
+assert.equal(stats(S, 0).val, 2000);
+assert.equal(stats(S, 0).net, START_CASH - 500 + 2000 + 2000); // cash + deposit + lot value
 assert.equal(ranking(S).length, 2);
 assert.ok(command(S, { c: 'cash', pi: 0, v: 2000 }));
 assert.equal(command(S, { c: 'cash', pi: 99, v: 0 }), undefined);

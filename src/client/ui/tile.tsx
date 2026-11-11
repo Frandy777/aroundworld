@@ -1,5 +1,5 @@
 import { INVEST, LEVEL_NAMES, PUBLIC, SPECIAL, TILES, cityRent, maxLevel, type InvestKind, type PublicKind, type Tile } from '../../shared/data';
-import { hasMonopoly } from '../../shared/state';
+import { hasMonopoly, lotValue } from '../../shared/state';
 import { useGame } from '../store';
 import { Face, Pips, Rows, hex, money } from './bits';
 
@@ -16,7 +16,7 @@ export function TileBody({ t, bare = false }: { t: Tile; bare?: boolean }) {
     <>
       {t.type === 'city' && (
         <>
-          <Rows a={[['Price', money(t.price)], ['Upgrade', money(t.up)], ['Mortgage value', money(t.mort)]]} />
+          <Rows a={[['Price', money(t.price)], ['Upgrade', money(t.up)], ['Lot value', money(lotValue(t, o))]]} />
           <table className="tbl"><tbody>
             <tr><th>LEVEL</th><th>RENT</th></tr>
             {cityRent(t).map((v, i) => <tr key={i} className={o?.lv === i ? 'cur' : ''}><td>{LEVEL_NAMES[i]}</td><td>{money(v)}</td></tr>)}
@@ -26,7 +26,7 @@ export function TileBody({ t, bare = false }: { t: Tile; bare?: boolean }) {
       )}
       {t.type === 'special' && (
         <>
-          <Rows a={[['Price', money(t.price)], ['Upgrade', t.up ? money(t.up) : 'Not upgradable'], ['Mortgage value', money(t.mort)]]} />
+          <Rows a={[['Price', money(t.price)], ['Upgrade', t.up ? money(t.up) : 'Not upgradable'], ['Lot value', money(lotValue(t, o))]]} />
           <div className="note">{fxText(t)}{t.up > 0 && <><br /><span className="dim">Values listed by level: Empty / Lv 1 / Lv 2</span></>}</div>
         </>
       )}

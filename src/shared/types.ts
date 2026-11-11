@@ -12,8 +12,9 @@ export interface Settings { mode: Mode; rounds: number }
 export type Step = 'redeem' | 'roll' | 'move' | 'resolve';
 export type Flag = 'jail' | 'party' | 'stay'; // each makes the player skip their next turn
 
-export interface Player { name: string; color: number; cash: number; tile: number; jail: boolean; party: boolean; stay: boolean; out: number } // out: the round of bankruptcy, 0 while playing
-export interface Owned { p: number; lv: number; m: boolean } // owner, building level, mortgaged
+export interface Player { name: string; color: number; cash: number; dep: Deposit | null; tile: number; jail: boolean; party: boolean; stay: boolean; out: number } // out: the round of bankruptcy, 0 while playing
+export interface Deposit { amt: number; n: number; made: number } // a fixed deposit at the bank: its principal, its term in rounds, the round it was placed (it matures at made + n)
+export interface Owned { p: number; lv: number; m: boolean; paid?: number } // owner, building level, mortgaged, and what its upgrades actually cost (a free one adds none; absent: lv × up is assumed)
 export interface LogLine { id: number; r: number; m: Msg } // id: counts up from 1, so a line keeps its React key as newer ones are added above it
 export interface GameState {
   settings: Settings;
@@ -63,6 +64,7 @@ export type Prompt =
   | { k: 'pick'; of: 'tile' | 'player'; title: string; sub: Msg; tone: number; hint: string; items: PickItem[]; rule: PickRule; label: string; skip?: string }
   | { k: 'confirm'; title: string; sub: Msg; tone: number; body: Block[]; yes: string; no: string }
   | { k: 'news'; card: NewsCard } // the Media owner may keep the story or draw again
+  | { k: 'dep'; max: number } // a fixed deposit on offer at the bank: `max` is the most it may hold (cash rounded down to whole thousands)
   | { k: 'casino'; view: CasinoView };
 // What the roll question of a dev room takes besides the roll (see `Game.debug`).
 export type Cmd =
@@ -70,7 +72,7 @@ export type Cmd =
   | { c: 'cash'; pi: number; v: number } // set a player's cash
   | { c: 'own'; i: number; o: Owned | null } // give a tile to a player (null: back to the bank)
   | { c: 'goto'; pi: number; i: number; land: boolean }; // jump to a tile; `land`: and stop there, which is the turn (it takes the roll's place)
-export type Answer = boolean | number[] | null | { act: 'roll'; bet: number } | { act: 'cash' } | Cmd;
+export type Answer = boolean | number[] | null | { act: 'roll'; bet: number } | { act: 'cash' } | { amt: number; n: number } | Cmd;
 
 // ---- Events: the one stream the game is told in ----
 export type Ev =
@@ -82,6 +84,7 @@ export type Ev =
   | { t: 'move'; pi: number; to: number; how: 'hop' | 'jump' }
   | { t: 'strike'; from: number; to: number } // a military launch: the impact precedes the target's `own` downgrade
   | { t: 'cash'; pi: number; d: number }
+  | { t: 'dep'; pi: number; d: Deposit | null } // a fixed deposit placed or gone (matured, withdrawn early, lost to bankruptcy): the money side is told by `cash`
   | { t: 'own'; i: number; o: Owned | null }
   | { t: 'flag'; pi: number; k: Flag; v: boolean }
   | { t: 'out'; pi: number }

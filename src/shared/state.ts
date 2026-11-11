@@ -1,5 +1,5 @@
 import { TILES, TILE_COUNT, maxLevel, type Tile } from './data';
-import type { Cmd, Ev, GameState, PickRule, RankRow } from './types';
+import type { Cmd, Ev, GameState, Owned, PickRule, RankRow } from './types';
 
 const LOG_MAX = 80;
 
@@ -11,6 +11,7 @@ export function apply(s: GameState, e: Ev) {
     case 'step': s.step = e.s; break;
     case 'move': s.players[e.pi].tile = e.to; break;
     case 'cash': s.players[e.pi].cash += e.d; break;
+    case 'dep': s.players[e.pi].dep = e.d; break;
     case 'own': if (e.o) s.own[e.i] = e.o; else delete s.own[e.i]; break;
     case 'flag': s.players[e.pi][e.k] = e.v; break;
     case 'out': { const p = s.players[e.pi]; p.out = s.round; p.cash = 0; s.bankrupt.push(e.pi); break; }
@@ -19,6 +20,11 @@ export function apply(s: GameState, e: Ev) {
   }
 }
 
+// What a property is worth on the books: its price plus what its upgrades actually cost (a free one adds none).
+export const lotValue = (t: Tile, o?: Owned | null) => t.price + (o ? (o.paid ?? o.lv * t.up) : 0);
+// Regular and special cities may be mortgaged; investments may not.
+export const canMortgage = (t: Tile) => t.type === 'city' || t.type === 'special';
+
 export function stats(S: GameState, i: number) {
   let city = 0, inv = 0, mort = 0, val = 0, lv = 0;
   for (const [k, o] of Object.entries(S.own)) {
@@ -26,9 +32,10 @@ export function stats(S: GameState, i: number) {
     const t = TILES[+k];
     t.type === 'invest' ? inv++ : city++;
     lv += o.lv;
-    o.m ? mort++ : (val += t.mort);
+    o.m ? mort++ : (val += lotValue(t, o));
   }
-  return { city, inv, mort, val, lv, net: S.players[i].cash + val };
+  const dep = S.players[i].dep?.amt ?? 0;
+  return { city, inv, mort, val, lv, dep, net: S.players[i].cash + dep + val };
 }
 
 // Who is still in, richest first, then the bankrupt, last out first.
@@ -53,7 +60,7 @@ export function hasMonopoly(S: GameState, tile: Tile): boolean {
 // A command of the dev panel, if it fits this game (who it names is in, its numbers are whole): a clean copy, so nothing else of what a client sent is kept.
 // The panel asks it of its own buttons too: one that gets nothing back is grey.
 export function command(S: GameState, v: unknown): Cmd | undefined {
-  const r = v as { c?: unknown; pi?: unknown; v?: unknown; i?: unknown; land?: unknown; o?: { p?: unknown; lv?: unknown; m?: unknown } | null } | null;
+  const r = v as { c?: unknown; pi?: unknown; v?: unknown; i?: unknown; land?: unknown; o?: { p?: unknown; lv?: unknown; m?: unknown; paid?: unknown } | null } | null;
   if (!r || typeof r !== 'object') return undefined;
   const int = (x: unknown, lo: number, hi = Infinity): x is number => Number.isInteger(x) && (x as number) >= lo && (x as number) <= hi;
   const who = (x: unknown): x is number => int(x, 0, S.players.length - 1) && !S.players[x].out;
@@ -65,7 +72,7 @@ export function command(S: GameState, v: unknown): Cmd | undefined {
       if (!int(r.i, 0, TILE_COUNT - 1) || TILES[r.i].type === 'public') return undefined;
       const o = r.o;
       if (!o) return { c: 'own', i: r.i, o: null };
-      return who(o.p) && int(o.lv, 0) ? { c: 'own', i: r.i, o: { p: o.p, lv: Math.min(o.lv, maxLevel(TILES[r.i])), m: !!o.m } } : undefined;
+      return who(o.p) && int(o.lv, 0) ? { c: 'own', i: r.i, o: { p: o.p, lv: Math.min(o.lv, maxLevel(TILES[r.i])), m: !!o.m, paid: int(o.paid, 0) ? o.paid : undefined } } : undefined;
     }
   }
 }

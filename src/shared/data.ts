@@ -17,6 +17,13 @@ export const PLAYER_DEFS = [
 export const MAX_PLAYERS = PLAYER_DEFS.length;
 export const START_CASH = 20000;
 
+// Fixed deposits at the Bank: a principal in whole thousands locked away for a term of 5-15 rounds, one per player.
+// The rate grows with the term: rate = n × 0.02% + 0.2%; interest = principal × rate × n, rounded up to a whole dollar
+// (integer math: rate is (2n + 20) / 10000). No auto-renew; an early withdrawal — only a forced settlement may cause one — pays no interest.
+export const DEP_STEP = 1000, DEP_MIN = 5, DEP_MAX = 15;
+export const depRate = (n: number) => (2 * n + 20) / 10000;
+export const depInterest = (amt: number, n: number) => Math.ceil((amt * n * (2 * n + 20)) / 10000);
+
 export type InvestKind = 'transport' | 'build' | 'military' | 'choke' | 'oil' | 'bbc' | 'devil';
 // Investment groups: shared price + effect text.
 export const INVEST: Record<InvestKind, { label: string; price: number; fx: string }> = {
@@ -61,7 +68,7 @@ export const PUBLIC: Record<PublicKind, { color: number; fx: string }> = {
   tax: { color: 0x7a5c3e, fx: 'Pay the bank (cities owned × $300) + (investments owned × $500).' },
   casino: { color: 0xb02a6b, fx: 'Try your luck with the dice. Beware of jail!' },
   club: { color: 0x6a3fb5, fx: 'Pay $100 and stay here for one turn (effect does not repeat).' },
-  bank: { color: 0x3b7bd9, fx: 'Stop here to voluntarily mortgage your cities.' },
+  bank: { color: 0x3b7bd9, fx: 'Stop here to mortgage properties for their full lot value, or to place a fixed deposit.' },
   news: { color: 0xe8b53a, fx: 'Stop here to trigger a random news event.' },
   area51: { color: 0x2bb5c8, fx: 'Stop here and you are teleported to a random other tile, whose effect then applies. An event move: nothing on the way is passed.' },
 };
@@ -71,42 +78,42 @@ export type TileType = 'city' | 'special' | 'invest' | 'public';
 export type CasinoVariant = 'lucky' | 'stakes';
 export interface Tile {
   i: number; type: TileType; kind: string; region: RegionKey | null; name: string;
-  price: number; up: number; mort: number; variant?: CasinoVariant; color: number;
+  price: number; up: number; variant?: CasinoVariant; color: number;
 }
 
 type Row = Omit<Tile, 'i'>;
-const row = (type: TileType, kind: string, name: string, price: number, up: number, mort: number, color: number, region: RegionKey | null = null, variant?: CasinoVariant): Row =>
-  ({ type, kind, region, name, price, up, mort, variant, color });
-const city = (r: RegionKey, name: string, price: number) => row('city', r, name, price, price / 4, price / 2, REGIONS[r][1], r);
-const special = (r: RegionKey, name: string, price: number, up: number, mort: number) => row('special', r, name, price, up, mort, REGIONS[r][1], r);
-const invest = (k: InvestKind, name: string) => row('invest', k, name, INVEST[k].price, 0, 0, 0x7d8aa6);
-const pub = (k: PublicKind, name = PUBLIC_NAMES[k] ?? '', variant?: CasinoVariant) => row('public', k, name, 0, 0, 0, PUBLIC[k].color, null, variant);
+const row = (type: TileType, kind: string, name: string, price: number, up: number, color: number, region: RegionKey | null = null, variant?: CasinoVariant): Row =>
+  ({ type, kind, region, name, price, up, variant, color });
+const city = (r: RegionKey, name: string, price: number) => row('city', r, name, price, price / 4, REGIONS[r][1], r);
+const special = (r: RegionKey, name: string, price: number, up: number) => row('special', r, name, price, up, REGIONS[r][1], r);
+const invest = (k: InvestKind, name: string) => row('invest', k, name, INVEST[k].price, 0, 0x7d8aa6);
+const pub = (k: PublicKind, name = PUBLIC_NAMES[k] ?? '', variant?: CasinoVariant) => row('public', k, name, 0, 0, PUBLIC[k].color, null, variant);
 
 // The loop, clockwise from START (see the map in the rules).
 export const TILES: Tile[] = [
   pub('start'), city('oce', 'Wellington', 1600), city('oce', 'Canberra', 1800), city('oce', 'Sydney', 2600),
-  city('sea', 'Jakarta', 1000), special('sea', 'Singapore', 5000, 4000, 2500), invest('choke', 'Strait of Malacca'),
+  city('sea', 'Jakarta', 1000), special('sea', 'Singapore', 5000, 4000), invest('choke', 'Strait of Malacca'),
   city('sea', 'Kuala Lumpur', 1400), pub('casino', undefined, 'lucky'), city('sea', 'Bangkok', 1200),
-  pub('club'), city('sea', 'Hanoi', 800), pub('exchange', 'HKEX'), special('chn', 'Hong Kong', 5000, 3000, 2500),
+  pub('club'), city('sea', 'Hanoi', 800), pub('exchange', 'HKEX'), special('chn', 'Hong Kong', 5000, 3000),
   city('chn', 'Shenzhen', 3200), invest('build', 'CSCEC'), city('chn', 'Taipei', 2600), pub('news'),
   city('chn', 'Shanghai', 3000), invest('transport', 'China Railway'), city('chn', 'Beijing', 2800),
   city('jpk', 'Tokyo', 3500), city('jpk', 'Osaka', 2200), city('jpk', 'Seoul', 2400),
-  invest('military', 'West Sea Base'), special('jpk', 'Pyongyang', 4000, 2000, 2000), pub('jail'),
+  invest('military', 'West Sea Base'), special('jpk', 'Pyongyang', 4000, 2000), pub('jail'),
   city('rus', 'Vladivostok', 800), city('rus', 'Yekaterinburg', 1000), pub('news'), city('rus', 'Moscow', 2000),
   city('rus', 'Saint Petersburg', 1600), city('eeu', 'Warsaw', 1200), city('eeu', 'Prague', 1400),
   city('eeu', 'Vienna', 2200), city('eeu', 'Budapest', 1000), pub('bank'), city('weu', 'Berlin', 2400),
-  special('weu', 'Zurich', 4000, 3000, 2000), invest('build', 'VINCI'), city('weu', 'Paris', 3000), pub('tax'),
+  special('weu', 'Zurich', 4000, 3000), invest('build', 'VINCI'), city('weu', 'Paris', 3000), pub('tax'),
   city('weu', 'Madrid', 2000), invest('bbc', 'BBC'), city('weu', 'London', 3800), pub('exchange', 'LSE'),
   invest('transport', 'Maersk'), city('nat', 'Copenhagen', 2200), pub('news'), city('nat', 'Oslo', 2600),
   pub('gojail'), invest('choke', 'Bering Strait'), city('nat', 'Ottawa', 2000), pub('exchange', 'NASDAQ'),
-  special('usa', 'New York', 5000, 4000, 2500), city('usa', 'Washington', 2800), invest('transport', 'United Airlines'),
+  special('usa', 'New York', 5000, 4000), city('usa', 'Washington', 2800), invest('transport', 'United Airlines'),
   city('usa', 'Chicago', 2200), invest('devil', "Devil's Island"), city('usa', 'San Francisco', 4000),
-  pub('casino', undefined, 'stakes'), special('usa', 'Las Vegas', 3000, 2000, 1500), pub('club'),
+  pub('casino', undefined, 'stakes'), special('usa', 'Las Vegas', 3000, 2000), pub('club'),
   invest('military', 'White Sands Base'), pub('area51'), city('cam', 'Mexico City', 1200), city('cam', 'Havana', 600), pub('news'),
   city('cam', 'San José', 1600), invest('choke', 'Panama Canal'), city('sam', 'Bogotá', 800),
-  invest('oil', 'Venezuela Oil'), city('sam', 'Buenos Aires', 1000), special('sam', 'Rio', 2000, 1800, 1000),
+  invest('oil', 'Venezuela Oil'), city('sam', 'Buenos Aires', 1000), special('sam', 'Rio', 2000, 1800),
   city('sam', 'Brasília', 1200), city('afr', 'Pretoria', 800), pub('news'), city('afr', 'Tunis', 600),
-  city('afr', 'Djibouti', 400), city('afr', 'Cairo', 1000), special('mea', 'Jerusalem', 3000, 2000, 1500),
+  city('afr', 'Djibouti', 400), city('afr', 'Cairo', 1000), special('mea', 'Jerusalem', 3000, 2000),
   invest('military', 'Damascus Base'), city('mea', 'Abu Dhabi', 2200), invest('oil', 'Saudi Aramco'),
   city('mea', 'Dubai', 2800), invest('choke', 'Strait of Hormuz'), city('mea', 'Tehran', 1000), pub('tax'),
   city('cas', 'Islamabad', 600), pub('news'), city('cas', 'New Delhi', 1000), city('cas', 'Mumbai', 1400),

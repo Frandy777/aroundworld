@@ -1,7 +1,7 @@
 import type { Answer, CasinoView, NewsCard as News, Notice, OrderPass, Player, Prompt, RankRow } from '../../shared/types';
 import { reply } from '../asks';
 import { autoFocus, cell, hd2d, openCard, type Open } from '../store';
-import { Btn, Card, CasinoCard, Check, ConfirmCard, DeedCard, NewsCard, NoticeCard, OrderCard, PickCard, ResultsCard, RulesCard, type Ctl } from './dialogs';
+import { Btn, Card, CasinoCard, Check, ConfirmCard, DeedCard, DepCard, NewsCard, NoticeCard, OrderCard, PickCard, ResultsCard, RulesCard, type Ctl } from './dialogs';
 
 // Putting a card up is not a component, so it lives apart from the cards (dialogs.tsx): a module that exports anything but components can't be hot-refreshed in place.
 
@@ -23,6 +23,7 @@ export function openAsk(id: number, p: Prompt, onAnswer?: (v: Answer) => void): 
     case 'deed': return openCard(() => <DeedCard id={id} p={p} />);
     case 'pick': return openCard(() => <PickCard id={id} p={p} />);
     case 'confirm': return openCard(() => <ConfirmCard id={id} p={p} />);
+    case 'dep': return openCard(() => <DepCard id={id} p={p} />);
     case 'news': return openCard((close) => <NewsCard c={p.card} close={() => close()} redraw={(again) => { onAnswer?.(again); reply(id, again); }} />);
     default: return null;
   }

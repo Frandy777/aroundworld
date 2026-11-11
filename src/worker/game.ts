@@ -1,6 +1,6 @@
-import { START_CASH, TILES, TILE_COUNT, cityRent, kindAt, maxLevel, tileAt, type Tile } from '../shared/data';
+import { DEP_MAX, DEP_MIN, DEP_STEP, START_CASH, TILES, TILE_COUNT, cityRent, depInterest, kindAt, maxLevel, tileAt, type Tile } from '../shared/data';
 import { B, P, T, m, money } from '../shared/msg';
-import { apply, canPick, command, hasMonopoly, maxRounds, ranking, stats } from '../shared/state';
+import { apply, canMortgage, canPick, command, hasMonopoly, lotValue, maxRounds, ranking } from '../shared/state';
 import type { Answer, Block, CasinoRoll, Cmd, Ev, GameState, Msg, Notice, OrderPass, Owned, PickItem, Prompt, Settings, Tone } from '../shared/types';
 import { NEWS } from './news';
 
@@ -35,7 +35,7 @@ export interface Saved { ckpt: Ckpt; tape: Entry[]; due: number; lapsed: number 
 export const fresh = (players: { name: string; color: number }[], settings: Settings): Ckpt => ({
   S: {
     settings, own: {}, order: players.map((_, i) => i), turn: 0, round: 1, step: null, bankrupt: [], over: false, log: [],
-    players: players.map((p) => ({ ...p, cash: START_CASH, tile: 0, jail: false, party: false, stay: false, out: 0 })),
+    players: players.map((p) => ({ ...p, cash: START_CASH, dep: null, tile: 0, jail: false, party: false, stay: false, out: 0 })),
   },
   mods: players.map(noMods), nextId: 1, gone: [], turn: 0, round: 1, rig: [],
 });
@@ -55,6 +55,7 @@ function fallback(p: Prompt): Answer {
       for (const x of [...p.items].sort((a, b) => (b.amt ?? 0) - (a.amt ?? 0))) { if (need <= 0) break; sel.push(x.i); need -= x.amt ?? 0; }
       return sel;
     }
+    case 'dep': return null; // the offer lapses: no deposit is placed
     case 'casino': return p.view.stage === 'bet' || p.view.stage === 'play' ? { act: 'roll', bet: p.view.bet } : { act: 'cash' };
     default: return false; // deed, confirm, news
   }
@@ -72,6 +73,13 @@ function check(p: Prompt, v: unknown): Answer | undefined {
       if (!v.every((i) => by.has(i))) return undefined;
       const sum = v.reduce((s: number, i: number) => s + (by.get(i) ?? 0), 0), r = p.rule;
       return canPick(r, v.length, sum) ? (v as number[]) : undefined;
+    }
+    case 'dep': {
+      if (v === null) return null;
+      const d = v as { amt?: unknown; n?: unknown } | null;
+      if (!d || typeof d !== 'object') return undefined;
+      const ok = Number.isInteger(d.amt) && (d.amt as number) % DEP_STEP === 0 && (d.amt as number) >= DEP_STEP && (d.amt as number) <= p.max && Number.isInteger(d.n) && (d.n as number) >= DEP_MIN && (d.n as number) <= DEP_MAX;
+      return ok ? { amt: d.amt as number, n: d.n as number } : undefined;
     }
     case 'casino': {
       const a = v as { act?: unknown; bet?: unknown } | null;
@@ -228,8 +236,11 @@ export class Game {
     const me = this.S.players[pi].tile, gap = (o: number) => ((((this.S.players[o].tile - me) * dir) % N) + N) % N || N;
     return this.alive().filter((o) => o !== pi).sort((a, b) => gap(a) - gap(b))[0] ?? -1;
   }
-  private mortgageable(pi: number): PickItem[] {
-    return Object.keys(this.S.own).map(Number).filter((i) => this.S.own[i].p === pi && !this.S.own[i].m && TILES[i].mort).map((i) => ({ i, lv: this.S.own[i].lv, amt: TILES[i].mort }));
+  /** The tiles a player may mortgage (regular and special cities, none already mortgaged), each with what it pays at `rate`. */
+  private mortgageable(pi: number, rate: number): PickItem[] {
+    return Object.keys(this.S.own).map(Number)
+      .filter((i) => this.S.own[i].p === pi && !this.S.own[i].m && canMortgage(TILES[i]))
+      .map((i) => ({ i, lv: this.S.own[i].lv, amt: Math.floor(lotValue(TILES[i], this.S.own[i]) * rate) }));
   }
 
   // ---- Money: what each of these is for (`why`) goes to the log with the sum ----
@@ -246,43 +257,64 @@ export class Game {
     this.toast(m`${T(i)}: ${this.nm(o.p)} earns ${money(vals[o.lv])}`, 'good');
     this.give(o.p, vals[o.lv], m`${T(i, true)}: ${why}`, bank);
   }
-  /** Take `amt` from a player for the bank or for `to`, mortgaging what must be mortgaged. False when they went bankrupt instead. */
+  /** Take `amt` from a player for the bank or for `to`. A shortfall first withdraws any fixed deposit (no interest), then mortgages at half the lot value. False when they went bankrupt instead. */
   async pay(pi: number, amt: number, why: Msg | string, to: number | null = null): Promise<boolean> {
     const S = this.S, p = S.players[pi];
     if (amt <= 0) return true;
+    if (p.cash < amt && p.dep) {
+      const d = p.dep;
+      this.emit({ t: 'dep', pi, d: null });
+      this.give(pi, d.amt, m`withdrew a ${String(d.n)}-round deposit early: no interest`);
+      this.toast(`${p.name} withdrew a deposit early (no interest)`, 'bad');
+    }
     if (p.cash < amt) {
-      const val = stats(S, pi).val, raised = p.cash + val;
+      const items = this.mortgageable(pi, 0.5), raised = p.cash + items.reduce((s, x) => s + (x.amt ?? 0), 0);
       if (raised < amt) {
         this.notice({ title: 'BANKRUPT!', sub: [p.name], tone: 0xb13e53, label: 'OH NO...', danger: true, long: true, body: [
           { k: 'face', p: pi },
-          note(`${p.name} owes ${money(amt)} but can only raise ${money(raised)} (cash + mortgage value). ${to !== null ? S.players[to].name + ' receives what can be raised.' : 'The bank takes everything.'}`)] });
+          note(`${p.name} owes ${money(amt)} but can only raise ${money(raised)} (cash + deposit + mortgage value). ${to !== null ? S.players[to].name + ' receives what can be raised.' : 'The bank takes everything.'}`)] });
         if (to !== null) this.xfer(pi, to, raised, m`${why} (bankrupt)`, p.cash);
         this.goBankrupt(pi);
         return false;
       }
-      const items = this.mortgageable(pi), forced = raised - Math.min(...items.map((x) => x.amt ?? 0)) < amt; // short even without the cheapest: every city goes, nothing to choose
-      if (forced) this.toast(`${p.name} must mortgage every city to pay ${money(amt)}`, 'bad');
+      const forced = raised - Math.min(...items.map((x) => x.amt ?? 0)) < amt; // short even without the cheapest: every property goes, nothing to choose
+      if (forced) this.toast(`${p.name} must mortgage every property to pay ${money(amt)}`, 'bad');
       const sel = forced ? items.map((x) => x.i) : (await this.ask(pi, { k: 'pick', of: 'tile', title: 'MORTGAGE TO PAY', sub: [`${p.name} owes ${money(amt)}`], tone: 0x3b7bd9,
-        hint: `You can't afford this. Mortgage properties to raise at least ${money(amt - p.cash)}.`, items, rule: { k: 'raise', cash: p.cash, need: amt }, label: 'MORTGAGE & PAY' })) as number[];
-      this.mortgage(pi, sel);
+        hint: `You can't afford this. Mortgage properties (each pays half its lot value) to raise at least ${money(amt - p.cash)}.`, items, rule: { k: 'raise', cash: p.cash, need: amt }, label: 'MORTGAGE & PAY' })) as number[];
+      this.mortgage(pi, sel, 0.5);
     }
     if (to === null) this.cash(pi, -amt, why);
     else this.xfer(pi, to, amt, why);
     return true;
   }
-  private mortgage(pi: number, sel: number[]) {
-    for (const i of sel) this.own(i, { ...this.S.own[i], m: true });
-    this.cash(pi, sel.reduce((s, i) => s + TILES[i].mort, 0), m`mortgaged ${tiles(sel)}`);
+  /** Mortgages pay `rate` of each property's lot value: half on a forced settlement, the full value at the bank. */
+  private mortgage(pi: number, sel: number[], rate: number) {
+    let sum = 0;
+    for (const i of sel) { sum += Math.floor(lotValue(TILES[i], this.S.own[i]) * rate); this.own(i, { ...this.S.own[i], m: true }); }
+    this.cash(pi, sum, m`mortgaged ${tiles(sel)}`);
   }
-  /** Out of the game: the properties go back to the bank. */
+  /** The bank's fixed-deposit offer: one at a time, a principal in whole thousands out of cash. */
+  private async deposit(pi: number) {
+    const S = this.S;
+    if (S.players[pi].dep) return;
+    const max = Math.floor(S.players[pi].cash / DEP_STEP) * DEP_STEP;
+    if (max < DEP_STEP) return;
+    const d = (await this.ask(pi, { k: 'dep', max })) as { amt: number; n: number } | null;
+    if (!d) return;
+    this.emit({ t: 'dep', pi, d: { amt: d.amt, n: d.n, made: S.round } });
+    this.cash(pi, -d.amt, m`placed a ${String(d.n)}-round fixed deposit`);
+    this.toast(m`${P(pi)} deposited ${money(d.amt)} for ${String(d.n)} rounds`, 'good');
+  }
+  /** Out of the game: the properties go back to the bank, and so does any deposit. */
   private goBankrupt(pi: number) {
     for (const k of Object.keys(this.S.own).map(Number)) if (this.S.own[k].p === pi) this.own(k, null);
+    if (this.S.players[pi].dep) this.emit({ t: 'dep', pi, d: null });
     this.emit({ t: 'out', pi });
     this.log(m`${P(pi)} went bankrupt`);
   }
   lower(i: number) {
     const o = this.S.own[i];
-    this.own(i, { ...o, lv: o.lv - 1 });
+    this.own(i, { ...o, lv: o.lv - 1, paid: Math.max(0, (o.paid ?? o.lv * TILES[i].up) - TILES[i].up) });
     this.log(m`${T(i, true)} was lowered to Lv ${String(o.lv - 1)}`);
   }
 
@@ -345,18 +377,24 @@ export class Game {
     const S = this.S, p = S.players[pi];
     this.log(m`${P(pi)}'s turn`);
     if (this.gone.has(pi)) { this.toast(`${p.name} left the game`, 'bad'); this.goBankrupt(pi); return; }
+    if (p.dep && S.round >= p.dep.made + p.dep.n) { // a fixed deposit that ran its term pays out even on a skipped turn
+      const d = p.dep, interest = depInterest(d.amt, d.n);
+      this.emit({ t: 'dep', pi, d: null });
+      this.give(pi, d.amt + interest, m`${String(d.n)}-round deposit matured (${money(d.amt)} + ${money(interest)} interest)`);
+      this.toast(m`${P(pi)}'s deposit matured: +${money(d.amt + interest)}`, 'good');
+    }
     if (p.jail || p.party || p.stay) {
       this.emit({ t: 'skip', pi, m: [`${p.name} ${p.jail ? 'is in jail' : p.party ? 'is partying' : 'is held up'}: turn skipped`] });
       for (const k of ['jail', 'party', 'stay'] as const) if (p[k]) this.emit({ t: 'flag', pi, k, v: false });
       return;
     }
-    // 1. Redeem (only when the cheapest mortgaged property is affordable: otherwise there is nothing to choose)
+    // 1. Redeem at the full lot value (only when the cheapest mortgaged property is affordable: otherwise there is nothing to choose)
     this.emit({ t: 'step', s: 'redeem' });
     const mort = Object.keys(S.own).map(Number).filter((i) => S.own[i].p === pi && S.own[i].m);
-    if (mort.length && p.cash >= Math.min(...mort.map((i) => TILES[i].mort))) {
+    if (mort.length && p.cash >= Math.min(...mort.map((i) => lotValue(TILES[i], S.own[i])))) {
       const sel = (await this.ask(pi, { k: 'pick', of: 'tile', title: 'REDEEM PROPERTIES?', sub: [`${p.name} \u00B7 optional`], tone: 0x2d7d6f,
-        hint: 'Pay the mortgage value to bring a property back to life. Skipping is fine.', items: mort.map((i) => ({ i, amt: TILES[i].mort })), rule: { k: 'redeem', cash: p.cash }, label: 'REDEEM', skip: 'SKIP' })) as number[] | null;
-      if (sel?.length) { for (const i of sel) this.own(i, { ...S.own[i], m: false }); this.cash(pi, -sel.reduce((s, i) => s + TILES[i].mort, 0), m`redeemed ${tiles(sel)}`); }
+        hint: 'Pay the full lot value to bring a property back to life. Skipping is fine.', items: mort.map((i) => ({ i, amt: lotValue(TILES[i], S.own[i]) })), rule: { k: 'redeem', cash: p.cash }, label: 'REDEEM', skip: 'SKIP' })) as number[] | null;
+      if (sel?.length) { for (const i of sel) this.own(i, { ...S.own[i], m: false }); this.cash(pi, -sel.reduce((s, i) => s + lotValue(TILES[i], S.own[i]), 0), m`redeemed ${tiles(sel)}`); }
     }
     // 2. Roll (in a dev room the question may be answered with a command of the panel instead: it runs, and the question is asked again)
     this.emit({ t: 'step', s: 'roll' });
@@ -436,7 +474,7 @@ export class Game {
     if (t.type === 'public') return this.publicTile(pi, t);
     if (!o) {
       if (!(await this.offer(pi, i, 'buy', t.price)) || !(await this.pay(pi, t.price, m`bought ${T(i, true)}`))) return;
-      this.own(i, { p: pi, lv: 0, m: false });
+      this.own(i, { p: pi, lv: 0, m: false, paid: 0 });
       this.toast(m`${p.name} bought ${T(i)}`, 'good');
       return;
     }
@@ -447,8 +485,8 @@ export class Game {
       const price = o.lv === 0 && this.count(pi, 'build') ? 0 : t.up; // a construction company builds the first level for free
       const lv = o.lv + 1, what = m`upgraded ${T(i, true)} to Lv ${String(lv)}`;
       if (o.lv >= maxLevel(t) || !(await this.offer(pi, i, 'upgrade', price)) || !(await this.pay(pi, price, what))) return;
-      if (!price) this.log(m`${P(pi)} ${what}`); // a free one has no payment to say it
-      this.own(i, { ...o, lv });
+      if (!price) this.log(m`${P(pi)} ${what}`); // a free one has no payment to say it — and adds nothing to the lot value
+      this.own(i, { ...o, lv, paid: (o.paid ?? o.lv * t.up) + price });
       this.toast(m`${T(i)} upgraded to Lv ${String(lv)}`, 'good');
       this.bonus('New York', [300, 500, 700], m`${P(pi)} upgraded ${T(i, true)}`);
       return;
@@ -567,11 +605,16 @@ export class Game {
         if (await this.pay(pi, 100, t.name)) this.emit({ t: 'flag', pi, k: 'party', v: true });
         break;
       case 'bank': {
-        const items = this.mortgageable(pi);
-        if (!items.length) { this.toast('Nothing to mortgage'); break; }
+        const items = this.mortgageable(pi, 1); // the bank pays the full lot value
+        if (!items.length) { // nothing to mortgage: the deposit is the only offer, if any
+          if (p.dep || p.cash < DEP_STEP) this.toast(`${t.name}: nothing to do`);
+          else await this.deposit(pi);
+          break;
+        }
         const sel = (await this.ask(pi, { k: 'pick', of: 'tile', title: 'BANK', sub: [`${p.name} \u00B7 optional`], tone: t.color,
-          hint: 'Mortgage cities for cash. Mortgaged properties stop earning until you redeem them.', items, rule: { k: 'any' }, label: 'MORTGAGE', skip: 'LEAVE' })) as number[] | null;
-        if (sel?.length) this.mortgage(pi, sel);
+          hint: 'Mortgage properties for their full lot value. Redeeming costs the same.', items, rule: { k: 'any' }, label: 'MORTGAGE', skip: 'LEAVE' })) as number[] | null;
+        if (sel?.length) this.mortgage(pi, sel, 1);
+        await this.deposit(pi);
         break;
       }
       case 'news': await this.news(pi); break;

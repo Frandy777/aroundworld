@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { TILES, maxLevel } from '../../shared/data';
-import { command } from '../../shared/state';
+import { canMortgage, command } from '../../shared/state';
 import type { Cmd, NewsCard, Notice, Prompt } from '../../shared/types';
 import { hold } from '../asks';
 import { quickGame } from '../controller';
@@ -28,6 +28,7 @@ const SAMPLES: Record<string, Notice | NewsCard | Prompt> = {
     items: [{ i: 1, lv: 2, amt: 800 }, { i: 2, lv: 0, amt: 900 }], rule: { k: 'raise', cash: 100, need: 1200 }, label: 'MORTGAGE & PAY',
   },
   confirm: { k: 'confirm', title: "DEVIL'S ISLAND", sub: ['Ruby'], tone: 0x2d7d6f, body: [{ k: 'note', m: ['Pay $700 bail and only visit the Jail tile, with no stay?'] }], yes: 'PAY $700', no: 'GO TO JAIL' },
+  dep: { k: 'dep', max: 12000 },
 };
 const sample = (k: string) => JSON.stringify(SAMPLES[k], null, 1);
 
@@ -67,7 +68,7 @@ export function Debug() {
   const toggleStop = () => setClock(clock.stop === null ? clock.shift : mod24(clock.stop - wall), clock.stop === null ? hour : null);
 
   const { elev } = viewAngles(), lodLabel = LOD_NAMES[lod.n] ?? '-';
-  const aim = TILES[tile], cap = maxLevel(aim), level = Math.min(lv, cap), mortgaged = mort && aim.mort > 0;
+  const aim = TILES[tile], cap = maxLevel(aim), level = Math.min(lv, cap), mortgaged = mort && canMortgage(aim);
   const btn = (label: string, c: Cmd, cls = '') => <button className={`btn sm ${cls}`} disabled={!S || !run || !command(S, c)} onClick={() => run?.(c)}>{label}</button>;
   const fireStrike = () => { const from = (tile + Math.floor(TILES.length / 2)) % TILES.length; void playStrike(from, tile); };
   const setPace = (paused: boolean, scale = loop.scale) => { loop.paused = paused; loop.scale = scale; loop.draw(); bumpUi(); };
@@ -120,7 +121,7 @@ export function Debug() {
                 </div>
                 <div className="seg">
                   {[0, 1, 2, 3].map((n) => <button key={n} className={level === n ? 'on' : ''} disabled={n > cap} onClick={() => setLv(n)}>Lv {n}</button>)}
-                  <button className={mortgaged ? 'on' : ''} disabled={!aim.mort} onClick={() => setMort(!mort)}>MORT</button>
+                  <button className={mortgaged ? 'on' : ''} disabled={!canMortgage(aim)} onClick={() => setMort(!mort)}>MORT</button>
                 </div>
               </>
             )}

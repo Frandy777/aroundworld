@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
-import { LEVEL_NAMES, REGIONS, TILES, maxLevel } from '../../shared/data';
+import { LEVEL_NAMES, REGIONS, TILES, depInterest, maxLevel } from '../../shared/data';
 import { maxRounds } from '../../shared/state';
 import { leaveRoom } from '../controller';
 import { CAM, focusTok, lookAtTile } from '../stage';
@@ -57,6 +57,7 @@ function PCard({ i, on, viewing }: { i: number; on: boolean; viewing: boolean })
           {p.jail && <span className="badge">JAIL</span>}
           {p.party && <span className="badge blue">PARTY</span>}
           {p.stay && <span className="badge blue">STAY</span>}
+          {p.dep && <span className="badge blue" title={`Fixed deposit ${money(p.dep.amt)} · ${p.dep.n} rounds`}>DEP</span>}
         </span>
       </div>
       <div className="cash" ref={(c) => { cashEls[i] = c; }}>{money(v)}</div>
@@ -93,7 +94,8 @@ function Assets() {
   return (
     <>
       <div className="row sum"><span>{p.name}'s total assets</span><b className="gold">{money(st.net)}</b></div>
-      <div className="note">Cash {money(p.cash)} + mortgage value {money(st.val)}</div>
+      <div className="note">Cash {money(p.cash)} + deposit {money(st.dep)} + lot value {money(st.val)}</div>
+      {p.dep && <div className="note">Fixed deposit {money(p.dep.amt)}: pays {money(p.dep.amt + depInterest(p.dep.amt, p.dep.n))} in {p.dep.made + p.dep.n - S.round} round{p.dep.made + p.dep.n - S.round === 1 ? '' : 's'}.</div>}
       {!mine.length && <div className="empty">No properties yet.</div>}
       {keys.map((k) => (
         <Fragment key={k}>

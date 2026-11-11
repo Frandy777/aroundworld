@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { START_CASH, TILES, maxLevel, type Tile } from '../../shared/data';
+import { DEP_MAX, DEP_MIN, DEP_STEP, START_CASH, TILES, depInterest, depRate, maxLevel, type Tile } from '../../shared/data';
 import { READ } from '../../shared/protocol';
 import { canPick } from '../../shared/state';
 import type { CasinoView, NewsCard as News, Notice, OrderPass, Player, Prompt, RankRow } from '../../shared/types';
@@ -67,24 +67,25 @@ const RULES: Record<string, ReactNode> = {
   GOAL: <>
     <h4>THE GOAL</h4><p>Buy cities and investments, collect rent, and push everyone else into bankruptcy. Everyone starts on START with {money(START_CASH)}.</p>
     <h4>TURN ORDER</h4><p>Each player rolls two dice. The <b>lower</b> total goes first. Ties re-roll.</p>
-    <h4>HOW IT ENDS</h4><ul><li><b>Limited rounds:</b> ranked by total assets (cash + mortgage value of properties). If only one player is left, they win early.</li><li><b>Endless:</b> last player standing wins. Rank follows bankruptcy order.</li></ul>
+    <h4>HOW IT ENDS</h4><ul><li><b>Limited rounds:</b> ranked by total assets (cash + deposits + lot value of unmortgaged properties). If only one player is left, they win early.</li><li><b>Endless:</b> last player standing wins. Rank follows bankruptcy order.</li></ul>
   </>,
   TURN: <>
-    <h4>YOUR TURN</h4><ul><li><b>1. Redeem</b> (optional): pay a mortgaged property's mortgage value to restore it.</li><li><b>2. Roll</b> two dice.</li><li><b>3. Move</b> tile by tile. Passing START or a chokepoint can trigger effects.</li><li><b>4. Stop</b> on the target tile and resolve it.</li></ul>
+    <h4>YOUR TURN</h4><ul><li><b>1. Redeem</b> (optional): pay a mortgaged property's full lot value to restore it.</li><li><b>2. Roll</b> two dice.</li><li><b>3. Move</b> tile by tile. Passing START or a chokepoint can trigger effects.</li><li><b>4. Stop</b> on the target tile and resolve it.</li></ul>
     <p><b>Normal moves</b> pass every tile on the way. <b>Event moves</b> (news, jail, Area 51) jump straight to the target.</p>
   </>,
   CITIES: <>
-    <h4>REGULAR CITIES</h4><ul><li>Rent: 10% / 25% / 50% / 100% of price (empty, Lv 1, Lv 2, Lv 3).</li><li>Upgrade cost: 25% of price. Mortgage value: 50% of price.</li><li>Own a whole region: <b>+50% rent</b>. Special cities do not count.</li></ul>
+    <h4>REGULAR CITIES</h4><ul><li>Rent: 10% / 25% / 50% / 100% of price (empty, Lv 1, Lv 2, Lv 3).</li><li>Upgrade cost: 25% of price. Lot value: price + paid upgrade costs.</li><li>Own a whole region: <b>+50% rent</b>. Special cities do not count.</li></ul>
     <h4>SPECIAL CITIES</h4><p>Eight landmark cities with unique passive effects such as taxing passers-by, boosting rent or paying out on dice doubles.</p>
   </>,
   DEBT: <>
-    <h4>MORTGAGE</h4><p>You cannot mortgage by choice. Only when you can't pay, or when you stop on the Bank. Mortgaged properties stop working: no rent, no upgrades, no effects.</p>
-    <h4>BANKRUPTCY</h4><p>If cash + mortgage value cannot cover a debt, you are out. The creditor only receives what you could raise.</p>
+    <h4>MORTGAGE</h4><p>You cannot mortgage by choice — only when you can't pay (each property pays half its lot value), or at the Bank (the full lot value). Mortgaged properties stop working: no rent, no upgrades, no effects. Redeeming one costs its full lot value.</p>
+    <h4>FIXED DEPOSIT</h4><p>At the Bank, lock cash away in whole thousands for {DEP_MIN}–{DEP_MAX} rounds: the rate per round is term × 0.02% + 0.2%. One deposit at a time, no auto-renew. Only a settlement you can't pay withdraws it early — principal back, no interest.</p>
+    <h4>BANKRUPTCY</h4><p>If cash + deposit + what mortgaging raises cannot cover a debt, you are out. The creditor only receives what you could raise.</p>
     <h4>JAIL</h4><p>Jailed players skip their next turn and collect no fees. Stopping on the Jail tile does not jail you.</p>
   </>,
   TILES: <>
     <h4>INVESTMENTS</h4><p>Transport, Construction, Military, Chokepoints, Oil, Media and Prison Island. Own more of a group to make it stronger.</p>
-    <h4>PUBLIC TILES</h4><ul><li><b>START:</b> collect $3,000 passing or stopping.</li><li><b>Exchanges:</b> investments owned {'\u00D7'} $500.</li><li><b>Tax Bureau:</b> cities {'\u00D7'} $300 + investments {'\u00D7'} $500.</li><li><b>Casino:</b> gamble on the dice — a wrong roll can send you to jail.</li><li><b>Nightclub:</b> pay $100, stay one turn.</li><li><b>Bank:</b> mortgage cities.</li><li><b>News Agency:</b> draw a random news event.</li><li><b>Area 51:</b> get teleported to a random other tile, and its effect applies.</li></ul>
+    <h4>PUBLIC TILES</h4><ul><li><b>START:</b> collect $3,000 passing or stopping.</li><li><b>Exchanges:</b> investments owned {'\u00D7'} $500.</li><li><b>Tax Bureau:</b> cities {'\u00D7'} $300 + investments {'\u00D7'} $500.</li><li><b>Casino:</b> gamble on the dice — a wrong roll can send you to jail.</li><li><b>Nightclub:</b> pay $100, stay one turn.</li><li><b>Bank:</b> mortgage at full lot value, or place a fixed deposit.</li><li><b>News Agency:</b> draw a random news event.</li><li><b>Area 51:</b> get teleported to a random other tile, and its effect applies.</li></ul>
   </>,
 };
 export function RulesCard({ close }: { close(v: string): void }) {
@@ -172,6 +173,37 @@ export function ConfirmCard({ id, p }: { id: number; p: Of<'confirm'> }) {
       <Btn id="no" onClick={() => reply(id, false)}>{p.no}</Btn>
       <Btn id="yes" cls="primary spend" onClick={() => reply(id, true)}>{p.yes}</Btn>
     </>}><Blocks blocks={p.body} /></Card>
+  );
+}
+
+// The bank's fixed deposit: a principal in whole thousands and a term of rounds, shown with the interest it earns.
+export function DepCard({ id, p }: { id: number; p: Of<'dep'> }) {
+  const [amt, setAmt] = useState(Math.min(5 * DEP_STEP, p.max));
+  const [n, setN] = useState(10);
+  const interest = depInterest(amt, n);
+  return (
+    <Card title="FIXED DEPOSIT" sub="Bank" tone={0x3b7bd9} foot={<>
+      <Btn id="leave" onClick={() => reply(id, null)}>LEAVE</Btn>
+      <Btn id="dep" cls="primary" onClick={() => reply(id, { amt, n })}>DEPOSIT {money(amt)}</Btn>
+    </>}>
+      <div className="note">Lock cash away for {DEP_MIN}–{DEP_MAX} rounds: it cannot be spent until it matures. A settlement you cannot pay withdraws the principal early, without interest.</div>
+      <div className="stepper">
+        <button className="btn sm" onClick={() => setAmt(Math.max(DEP_STEP, amt - DEP_STEP))}><Icon n="minus" /></button>
+        <b>{money(amt)}</b>
+        <button className="btn sm" onClick={() => setAmt(Math.min(p.max, amt + DEP_STEP))}><Icon n="plus" /></button>
+        <button className="btn sm gold" onClick={() => setAmt(p.max)}>MAX</button>
+      </div>
+      <div className="stepper">
+        <button className="btn sm" onClick={() => setN(Math.max(DEP_MIN, n - 1))}><Icon n="minus" /></button>
+        <b>{n} ROUNDS</b>
+        <button className="btn sm" onClick={() => setN(Math.min(DEP_MAX, n + 1))}><Icon n="plus" /></button>
+      </div>
+      <div className="rows">
+        <div className="row"><span>Rate per round</span><b>{(depRate(n) * 100).toFixed(1)}%</b></div>
+        <div className="row"><span>Interest at maturity</span><b className="good">+{money(interest)}</b></div>
+        <div className="row sum"><span>Payout after {n} rounds</span><b>{money(amt + interest)}</b></div>
+      </div>
+    </Card>
   );
 }
 
