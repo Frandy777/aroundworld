@@ -81,8 +81,10 @@
 .die.roll { animation: shake 0.3s steps(3) infinite; }
 @keyframes shake { 33% { transform: translate(-4px, 2px) rotate(-6deg); } 66% { transform: translate(4px, -2px) rotate(6deg); } }
 .big-msg { text-align: center; font: 34px / 36px var(--font-hd); min-height: 44px; }
-.stepper { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.stepper { display: flex; align-items: center; justify-content: center; gap: 8px; position: relative; }
 .stepper b { min-width: 120px; text-align: center; font: 34px / 36px var(--font-hd); color: var(--gold); text-shadow: 2px 2px 0 var(--brown); }
+.stepper > .max { position: absolute; right: 0; top: 50%; transform: translateY(-50%); }
+.stepper.dep b { width: 180px; }
 
 /* Setup / order / rules / results */
 .field { display: flex; flex-direction: column; gap: 4px; }

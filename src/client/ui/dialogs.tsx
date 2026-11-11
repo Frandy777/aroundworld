@@ -187,13 +187,13 @@ export function DepCard({ id, p }: { id: number; p: Of<'dep'> }) {
       <Btn id="dep" cls="primary" onClick={() => reply(id, { amt, n })}>DEPOSIT {money(amt)}</Btn>
     </>}>
       <div className="note">Lock cash away for {DEP_MIN}–{DEP_MAX} rounds: it cannot be spent until it matures. A settlement you cannot pay withdraws the principal early, without interest.</div>
-      <div className="stepper">
+      <div className="stepper dep">
         <button className="btn sm" onClick={() => setAmt(Math.max(DEP_STEP, amt - DEP_STEP))}><Icon n="minus" /></button>
         <b>{money(amt)}</b>
         <button className="btn sm" onClick={() => setAmt(Math.min(p.max, amt + DEP_STEP))}><Icon n="plus" /></button>
-        <button className="btn sm gold" onClick={() => setAmt(p.max)}>MAX</button>
+        <button className="btn sm gold max" onClick={() => setAmt(p.max)}>MAX</button>
       </div>
-      <div className="stepper">
+      <div className="stepper dep">
         <button className="btn sm" onClick={() => setN(Math.max(DEP_MIN, n - 1))}><Icon n="minus" /></button>
         <b>{n} ROUNDS</b>
         <button className="btn sm" onClick={() => setN(Math.min(DEP_MAX, n + 1))}><Icon n="plus" /></button>
