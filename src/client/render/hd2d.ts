@@ -17,7 +17,7 @@ const FIXED: [number, THREE.Vector3, number, number, number][] = [
   [5, at(casinos[0], 0, 1, 0.8), 0xff5de0, 12, 7], [6, at(casinos[1], 0, 1, 0.8), 0xff5de0, 12, 7], // the casinos' marquees
   [7, at(clubs[0], 0, 0.8, 0.8), 0x5dfff0, 10, 7], [8, at(clubs[1], 0, 0.8, 0.8), 0x5dfff0, 10, 7], // the nightclubs' neon
   [9, POS[kindAt('area51')].clone().add(new THREE.Vector3(LOT.x + 0.6, 2.4, LOT.z)), 0x5dfff0, 14, 8], // the saucer's beam
-  [10, at(kindAt('start'), 0, 2.2, 0.8), 0xffd23f, 10, 7], // the gold gate of START
+  [10, at(kindAt('start'), 0, 0.9, 0.5), 0xffb43a, 5, 5], // the gold ingot of START: a pool at its foot, weak and low (up among the gate's white posts, a stronger lamp turned them gold and fogged the whole tile)
   [11, new THREE.Vector3(ISLETS[1][0] + 0.3, 3.6, ISLETS[1][1]), 0xfff0c0, 28, 13], // the lighthouse
   [12, new THREE.Vector3(ISLETS[4][0], 4.4, ISLETS[4][1]), 0xff7a1a, 24, 14], // the volcano's lava
   [13, new THREE.Vector3(0, FLOAT, 0), 0x8fc4ff, 14, 12], // the globe

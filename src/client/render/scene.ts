@@ -28,12 +28,11 @@ function drain(d?: IdleDeadline) {
 }
 // A material whose map has one drawing per level: make(level) -> texture. Every draw takes the level in view (nothing is registered anywhere, so nothing outlives the material).
 // The level in view is made when it is first drawn, the other two (and their upload) when the page is idle, so a level switch is a pointer swap by the time anyone zooms;
-// one that comes sooner makes its level on the spot.
-export const lodMap = <M extends THREE.Material & { map: THREE.Texture | null }>(mat: M, make: (L: number) => THREE.Texture): M => {
-  const maps: THREE.Texture[] = [];
-  const get = (L: number) => (maps[L] ??= make(L));
-  mat.onBeforeRender = () => { if (lod.n >= 0) mat.map = get(lod.n); };
-  mat.userData.maps = maps; // all three drawings, for disposeTree
+// one that comes sooner makes its level on the spot. `slot` is the map it fills: the colour (`map`), or the lamps (`emissiveMap`, drawn on the same grid, see `nightlit`): a material can have both.
+export const lodMap = <M extends THREE.Material & { map: THREE.Texture | null }>(mat: M, make: (L: number) => THREE.Texture, slot: 'map' | 'emissiveMap' = 'map'): M => {
+  const maps = (mat.userData.maps ??= []) as THREE.Texture[], at = slot === 'map' ? 0 : 3, was = mat.onBeforeRender; // maps: all the drawings, for disposeTree (the colour's three, then the lamps')
+  const get = (L: number) => (maps[at + L] ??= make(L));
+  mat.onBeforeRender = (...a) => { was.apply(mat, a); if (lod.n >= 0) Object.assign(mat, { [slot]: get(lod.n) }); };
   if (typeof document !== 'undefined') { // the idle pre-upload needs the renderer: there is none under Node
     if (!later.length) idle(drain);
     for (const L of [0, 1, 2]) later.push(() => renderer.initTexture(get(L)));
