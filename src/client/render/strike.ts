@@ -99,7 +99,7 @@ export async function strike(from: number, to: number, start = launchPoint(from)
         const terminal = THREE.MathUtils.smoothstep(flightTime, plan.boost + plan.coast - 0.15, plan.boost + plan.coast + 0.2);
         const dive = THREE.MathUtils.clamp((flightTime - plan.boost - plan.coast) / plan.terminal, 0, 1), thrust = dive * dive * (3 - 2 * dive);
         flame.update(time, ignition * (1 - 0.4 * sustain + 0.25 * terminal + 0.45 * thrust));
-        fire.position.copy(p); fire.color.setHex(0xffa860); fire.intensity = 26 * ignition;
+        fire.position.copy(p).addScaledVector(v, -MISSILE_LENGTH * MISSILE_SCALE); fire.color.setHex(0xffa860); fire.intensity = 26 * ignition;
         aim.scale.setScalar(0.8 + 0.07 * Math.sin(time * 8));
         aimMaterial.opacity = Math.min(1, flightTime / plan.duration * 2) * (0.22 + terminal * 0.3);
         return;

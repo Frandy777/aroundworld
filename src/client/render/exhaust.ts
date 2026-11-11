@@ -42,7 +42,7 @@ export function exhaust(parent: THREE.Group, nozzle: number) {
         float diamonds = pow(.5 + .5 * cos(t * 48. - time * 9.), 5.) * core;
         vec3 color = mix(vec3(.18, .5, 1.), vec3(1., .72, .28), smoothstep(.08, .6, t));
         color = mix(color, vec3(1., .98, .87), clamp(core + diamonds * .5, 0., 1.));
-        gl_FragColor = vec4(color * (1. + (0.35 + 0.75 * uLamp) * uHd), envelope * (.55 + flow * .45) * power); // a restrained flash by day, HDR fire after dusk
+        gl_FragColor = vec4(color * (1.15 + (0.45 + 1.05 * uLamp) * uHd), envelope * (.65 + flow * .35) * power); // a restrained flash by day, HDR fire after dusk
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }
@@ -55,7 +55,7 @@ export function exhaust(parent: THREE.Group, nozzle: number) {
     update(time: number, power: number) {
       material.uniforms.time.value = time;
       material.uniforms.power.value = power;
-      material.uniforms.plumeLength.value = (0.65 + power * 1.25) * (1 + 0.07 * Math.sin(time * 43));
+      material.uniforms.plumeLength.value = (0.7 + power * 1.45) * (1 + 0.07 * Math.sin(time * 43));
     },
     dispose() { mesh.removeFromParent(); material.dispose(); },
   };
