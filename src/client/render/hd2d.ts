@@ -37,7 +37,7 @@ const WARM = new THREE.Color(0xffd9a0);
 // and a courtyard fill over the tile's middle (-x side wall and card yard): [kx, ky, kz, fx, fy, fz, colour, keyPower, fillPower, reach]
 const CITY_LIT: [number, number, number, number, number, number, number, number, number, number][] = [
   [0.2, 0.7, 1.52, -1.45, 0.75, -0.3, 0xffab42, 3.2, 1.8, 5.8],  // Lv 1 cottage
-  [0.22, 0.88, 1.55, -1.48, 0.95, -0.3, 0xffb44c, 3.8, 2.2, 6.2], // Lv 2 villa
+  [0.22, 0.88, 1.55, -1.48, 0.95, -0.3, 0xffb44c, 1.8, 1.0, 6.2], // Lv 2 villa: weaker, so that the owner's colour is not washed out
   [0.15, 1.18, 1.52, -1.48, 1.3, -0.35, 0xffc46b, 4.4, 2.6, 7.0], // Lv 3 tower
 ];
 const haloScale = new Float32Array(lamps.length).fill(1);

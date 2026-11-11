@@ -2,9 +2,10 @@ import * as THREE from 'three';
 import { box, lamplit } from '../../builder';
 
 // ---- An ordinary city's building: what every level shares (the buildings themselves are one file each, lv1/lv2/lv3) ----
-// After dusk every window is a lamp of its own (see `block`: lit or dark, warm or cold), the garden is lit by warm lamps (never in the owner's colour:
-// the plot below is that colour, and glows, so a part that shone in it would melt into it), and HD-2D adds a warm wrap-around PointLight pair per standing
-// building (see hd2d.ts). A mortgaged building has them all out: the walls are grey, and its glass the glass of any other house.
+// After dusk every window is a lamp of its own (see `block`: lit or dark, warm or cold), the garden is lit by warm lamps (not in the owner's colour:
+// the plot below is that colour, and glows, so a part that shone in it would melt into it, unless it far outshines it, as the villa's lamps do: see lv2.ts),
+// and HD-2D adds a warm wrap-around PointLight pair per standing building (see hd2d.ts). A mortgaged building has them all out: the walls are grey,
+// and its glass the glass of any other house.
 export const WARM = 0xffc070; // the light of a path and the garden lamps
 const BULB = 0xfff6b0;        // a lamp's bulb (one of NEON, so unlit)
 

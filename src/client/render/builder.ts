@@ -83,7 +83,7 @@ const rnd = (...k: number[]) => { let h = 0x811c9dc5; for (const v of k) { h = M
 const PLAIN: Record<string, string> = { door: 'win', lobby: 'flat', atrium: 'glass', foyer: 'ribbon', lounge: 'ribbon' }; // what a storey is on a face without the entrance
 const LAMPS: Record<string, number[]> = { // a kind's windows: the share of them that is lit by night, and the tones of their lamps (warm in a house, a blue screen now and then in the flats, cold in a tower, bright in a lobby)
   win: [0.7, 0xff9f3a, 0xffb457, 0xffca7d], flat: [0.55, 0xff9f3a, 0xffc063, 0xffdca4, 0x86b8ff], glass: [0.4, 0xcfe8ff, 0xaed6ff, 0xffe2b4], atrium: [0.9, 0xffdca0, 0xffe6b8],
-  foyer: [0.8, 0xff9f3a, 0xffb457, 0xffca7d], lounge: [0.8, 0xff9f3a, 0xffb457, 0xffca7d], ribbon: [0.65, 0xff9f3a, 0xffb457, 0xffca7d], clad: [0.9, 0xffb457, 0xffca7d],
+  foyer: [0.6, 0xcc7f2e, 0xcc9046, 0xcca264], lounge: [0.55, 0xcc7f2e, 0xcc9046, 0xcca264], ribbon: [0.45, 0xcc7f2e, 0xcc9046, 0xcca264], clad: [0.6, 0xcc9046, 0xcca264], // a villa's are fewer and dimmer: the owner's colour, not the amber, is what it is known by after dusk
 };
 const WIDE: Record<string, { y: number[]; h: number[]; panes: (cols: number) => number }> = { // a villa's panes, far, mid, near: where the glass starts, how tall it is, and how many panes there are to so many columns
   lounge: { y: [1, 2, 3], h: [3, 6, 12], panes: (c) => Math.ceil(c / 1.5) }, ribbon: { y: [2, 3, 5], h: [2, 4, 8], panes: (c) => Math.max(1, Math.round(c / 2)) },
