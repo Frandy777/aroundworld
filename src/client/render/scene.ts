@@ -22,7 +22,8 @@ export const texels = (units: number, L = 2) => Math.round((units * DENSITY) / 2
 const later: (() => void)[] = [];
 const idle = (f: (d?: IdleDeadline) => void) => ('requestIdleCallback' in window ? requestIdleCallback(f) : setTimeout(f, 16));
 function drain(d?: IdleDeadline) {
-  for (const end = performance.now() + (d?.timeRemaining() ?? 8); later.length && performance.now() < end;) later.shift()!();
+  // A job can be queued while the page is still booting, before initScene has made the renderer: the queue waits for it.
+  if (renderer) for (const end = performance.now() + (d?.timeRemaining() ?? 8); later.length && performance.now() < end;) later.shift()!();
   if (later.length) idle(drain);
 }
 // A material whose map has one drawing per level: make(level) -> texture. Every draw takes the level in view (nothing is registered anywhere, so nothing outlives the material).
@@ -33,8 +34,10 @@ export const lodMap = <M extends THREE.Material & { map: THREE.Texture | null }>
   const get = (L: number) => (maps[L] ??= make(L));
   mat.onBeforeRender = () => { if (lod.n >= 0) mat.map = get(lod.n); };
   mat.userData.maps = maps; // all three drawings, for disposeTree
-  if (!later.length) idle(drain);
-  for (const L of [0, 1, 2]) later.push(() => renderer.initTexture(get(L)));
+  if (typeof document !== 'undefined') { // the idle pre-upload needs the renderer: there is none under Node
+    if (!later.length) idle(drain);
+    for (const L of [0, 1, 2]) later.push(() => renderer.initTexture(get(L)));
+  }
   return mat;
 };
 
@@ -55,15 +58,13 @@ const levelNow = () => {
   return L;
 };
 
-// The GL context is the page's, not this module's: a hot update keeps the renderer (a second one on the canvas would take over its one context)
+// The GL context is the page's, not this module's: a hot update keeps the renderer (a second one on the canvas would take over its one context).
+// It is made by initScene, not on import: model files pull this module in under Node too (see scripts/check.mjs), where there is no canvas or GL.
 const kept = import.meta.hot?.data ?? {};
-export const renderer: THREE.WebGLRenderer = (kept.renderer ??= new THREE.WebGLRenderer({ canvas: document.getElementById('gl') as HTMLCanvasElement, antialias: false }));
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.BasicShadowMap; // hard, stair-stepped shadows
+export let renderer!: THREE.WebGLRenderer;
 // The 4096 x 4096 shadow map is drawn by the next render() after a dirtyShadow(), not every frame: the sun's frame moved (fitShadow), a tween, a tile or a landing token is still
 // moving, a plot's building changed. The endless loops (the globe's float, the tokens' bob) are no reason: their shadows catch up whenever the map is next drawn.
-renderer.shadowMap.autoUpdate = false;
-export const dirtyShadow = () => (renderer.shadowMap.needsUpdate = true);
+export const dirtyShadow = () => { if (renderer) renderer.shadowMap.needsUpdate = true; };
 
 export const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x14213d);
@@ -202,7 +203,6 @@ let framed = false;
 export let fitZoom = 0.5; // worked out by resize
 export const free = { w: 1 }; // the share of the canvas's width that the column leaves
 export const frame = (on: boolean) => { if (on !== framed) { framed = on; resize(); } }; // a game begins, or ends
-const css = getComputedStyle(document.documentElement);
 
 function resize() {
   const cv = renderer.domElement, w = cv.clientWidth, h = cv.clientHeight;
@@ -215,7 +215,7 @@ function resize() {
   texel.set(1 / buf.x, 1 / buf.y);
   const a = buf.x / buf.y; // the buffer's aspect, not the canvas's (it is rounded down): a world unit is then as many pixels across as down, which the pixel-exact lettering relies on
   Object.assign(camera, { left: -VIEW_H * a / 2, right: VIEW_H * a / 2, top: VIEW_H / 2, bottom: -VIEW_H / 2 });
-  const cr = framed ? parseFloat(css.getPropertyValue('--cr')) || 0 : 0; // how far the column reaches in, CSS px
+  const cr = framed ? parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cr')) || 0 : 0; // how far the column reaches in, CSS px
   free.w = 1 - cr / w;
   camera.setViewOffset(buf.x, buf.y, Math.round(cr / 2 / PX), 0, buf.x, buf.y); // the canvas's middle moves left by half of what is covered, in whole buffer pixels (see snap)
   lensView.splice(0, 3, buf.x, buf.y, Math.round(cr / 2 / PX));
@@ -421,6 +421,10 @@ function disposeTree(root: THREE.Object3D) {
   });
 }
 export function initScene() {
+  renderer = kept.renderer ??= new THREE.WebGLRenderer({ canvas: document.getElementById('gl') as HTMLCanvasElement, antialias: false });
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.BasicShadowMap; // hard, stair-stepped shadows
+  renderer.shadowMap.autoUpdate = false;
   controls.connect(renderer.domElement);
   scene.add(hemi, sun, sun.target, ...lamps, spot, spot.target);
   daylight();

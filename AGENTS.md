@@ -15,7 +15,7 @@
 
 ## Commands & Verification
 
-- `npm run check` — Primary fast check (<1s): runs native TypeScript 7 (`tsc -b`, ~300–400ms is normal—no `--force` needed) plus `scripts/check.mjs` (verifies Three.js `#include` / shader patch anchors, board data, reducer, and pure math).
+- `npm run check` — Primary fast check (<1s): runs native TypeScript 7 (`tsc -b`, ~300–400ms is normal—no `--force` needed) plus `scripts/check.mjs` (verifies Three.js `#include` / shader patch anchors, board data, reducer, pure math, and every model in `render/models/{special,invest,public}`: builds, bakes, ticks movers, and lints NaN vertices, plot bounds, ground contact, and draw-call/triangle budgets under Node—no browser needed).
 - `npm run build` — Full typecheck + client & Cloudflare Worker production build.
 - `npm run shots` — Runs `scripts/shot-matrix.mjs` against the running dev server (`http://localhost:5173`) via headless Chrome, checks for WebGL/GLSL/console errors, and writes a labeled comparison sheet to `/tmp/aw-shots/matrix.png`.
 - **Dev server**: Do **not** start a dev server unless explicitly asked. Probe `http://localhost:5173` first when visual checks are needed.

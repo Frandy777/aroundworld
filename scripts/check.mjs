@@ -93,4 +93,64 @@ if (fs.existsSync(flightPath)) {
   }
 }
 
-console.log(`check ok (${includeCount} shader chunk refs, ${TILE_COUNT} tiles, state & math verified)`);
+// 4. Registered tile models: every file under models/{special,invest,public} is a ModelDef, builds and bakes in Node, and its moving
+// parts tick at several times — all without a browser or a GL context (scene.ts and art.ts defer their DOM work to init/call time).
+const { bake, drawProps, freeBaked, PK } = await import('../src/client/render/builder.ts');
+const { LOT, PAD } = await import('../src/client/render/layout.ts');
+const defs = {};
+for (const dir of ['special', 'invest', 'public']) {
+  for (const f of walk(path.join(root, 'src/client/render/models', dir))) {
+    const mod = await import(pathToFileURL(f).href);
+    const def = mod.default;
+    assert(def && typeof def.key === 'string' && Array.isArray(def.props), `${path.relative(root, f)}: default export must be a ModelDef`);
+    assert(!(def.key in defs), `${path.relative(root, f)}: duplicate model key "${def.key}"`);
+    defs[def.key] = def;
+  }
+}
+// Coverage, the rule buildProps applies (a tile's name wins over its kind): every non-city tile resolves a model; cities share city.ts and register none.
+for (const t of TILES) {
+  if (t.type === 'city') assert(!defs[t.name], `city tile "${t.name}" must share the city.ts model, not register its own`);
+  else assert(defs[t.name] ?? defs[t.kind], `no model for tile ${t.i} "${t.name}" (kind ${t.kind})`);
+}
+
+// Per-model health: baked draw calls and triangles stay in budget, nothing dips under the plot, no NaN vertices, named nodes survive the bake.
+// Bounds (the plot's footprint relative to the props origin, PAD vs LOT in layout.ts) are reported, not asserted: a mast or a funnel may poke out on purpose.
+const BX = [PAD.x - LOT.x - PAD.w / 2, PAD.x - LOT.x + PAD.w / 2], BZ = [PAD.z - LOT.z - PAD.d / 2, PAD.z - LOT.z + PAD.d / 2];
+let modelCount = 0, moverCount = 0;
+for (const [key, def] of Object.entries(defs)) {
+  modelCount++;
+  const g = new THREE.Group();
+  drawProps(g, def.props, def.scale ?? PK);
+  const named = new Set();
+  g.traverse((o) => o.name && named.add(o.name));
+  bake(g);
+  named.forEach((n) => g.getObjectByName(n) instanceof THREE.Group && bake(g.getObjectByName(n))); // the board bakes kept subtrees on their own (the missile)
+  named.forEach((n) => assert.ok(g.getObjectByName(n), `model "${key}": named node "${n}" was lost in bake`));
+  const movers = [];
+  g.traverse((o) => o.userData.tick && movers.push(o));
+  moverCount += movers.length;
+  let meshes = 0, tris = 0;
+  const scan = () => g.traverse((o) => {
+    if (!o.isMesh) return;
+    meshes++;
+    const pos = o.geometry.attributes.position;
+    for (let i = 0; i < pos.array.length; i++) assert(Number.isFinite(pos.array[i]), `model "${key}": non-finite vertex`);
+    tris += (o.geometry.index?.count ?? pos.count) / 3;
+  });
+  scan();
+  for (const t of [0, 0.37, 1.9]) movers.forEach((m) => m.userData.tick(t));
+  g.updateMatrixWorld(true);
+  const pos0 = [];
+  g.traverse((o) => o.isMesh && pos0.push(o.geometry.attributes.position.array[0])); // re-scan after ticking: a tick must not produce NaN either
+  pos0.forEach((v) => assert(Number.isFinite(v), `model "${key}": tick produced a non-finite vertex`));
+  const box = new THREE.Box3().setFromObject(g);
+  assert(Number.isFinite(box.min.x), `model "${key}": built nothing`);
+  assert(box.min.y > -0.03, `model "${key}": dips below the plot top (min y ${box.min.y.toFixed(3)})`);
+  assert(meshes <= 64, `model "${key}": ${meshes} meshes after bake (draw calls get out of hand)`);
+  assert(tris <= 60_000, `model "${key}": ${Math.round(tris)} triangles`);
+  if (box.min.x < BX[0] - 0.03 || box.max.x > BX[1] + 0.03 || box.min.z < BZ[0] - 0.03 || box.max.z > BZ[1] + 0.03)
+    console.log(`  note: "${key}" overhangs the plot footprint: x [${box.min.x.toFixed(2)}, ${box.max.x.toFixed(2)}] z [${box.min.z.toFixed(2)}, ${box.max.z.toFixed(2)}]`);
+  freeBaked(g);
+}
+
+console.log(`check ok (${includeCount} shader chunk refs, ${TILE_COUNT} tiles, state & math verified, ${modelCount} models built+baked, ${moverCount} movers ticked)`);

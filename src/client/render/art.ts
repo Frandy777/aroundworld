@@ -31,9 +31,20 @@ const uri = (s: string) => `url("data:image/svg+xml,${encodeURIComponent(s)}")`;
 // the same sprites onto a 2D canvas (tile labels, dice, token sprites)
 export const paint = (g: CanvasRenderingContext2D, rows: string[], x0: number, y0: number, pal: Pal = PAL) =>
   rows.forEach((r, y) => [...r].forEach((c, x) => { if (c !== '.') { g.fillStyle = pal[c]; g.fillRect(x0 + x, y0 + y, 1, 1); } }));
+// Under Node there is no DOM (the model checks in scripts/check.mjs build and bake every model there): a drawing context that records nothing stands in.
+// Every call returns the context itself so chains like createLinearGradient().addColorStop() still run; measureText answers zero width.
+const ctx2d = () => {
+  const store: Record<PropertyKey, unknown> = {};
+  const px = new Proxy(store, {
+    get: (o, p) => (o[p] ??= p === 'measureText' ? () => ({ width: 0 }) : p === 'getImageData' ? () => ({ data: new Uint8ClampedArray(4) }) : () => px),
+    set: (o, p, v) => ((o[p] = v), true),
+  });
+  return px as unknown as CanvasRenderingContext2D;
+};
 // a w x h canvas, drawn by draw(ctx, w, h) (3D textures)
 export const canvas = (w: number, h: number, draw: (g: CanvasRenderingContext2D, w: number, h: number) => void) => {
-  const c = Object.assign(document.createElement('canvas'), { width: w, height: h });
+  const c = (typeof document !== 'undefined' ? Object.assign(document.createElement('canvas'), { width: w, height: h })
+    : { width: w, height: h, getContext: ctx2d }) as HTMLCanvasElement;
   draw(c.getContext('2d')!, w, h);
   return c;
 };
