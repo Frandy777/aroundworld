@@ -9,12 +9,12 @@ import { ISLETS } from './scenery';
 import { sky } from './sky';
 import { FLOAT } from './world';
 
-// ---- Local lights: the warm pools of Octopath's streets. Four lamps are the tokens' lanterns, one is borrowed by missiles (strike.ts), nineteen stand at glowing landmarks/islets,
+// ---- Local lights: the warm pools of Octopath's streets. Four lamps are the tokens' lanterns, one is borrowed by missiles (strike.ts), twenty stand at glowing landmarks/islets,
 // and each ordinary city holds a key+fill pair when built: [lamp, where, colour, intensity, reach, tile?], reach in world units ----
 const at = (i: number, x: number, y: number, z: number, k = 1.25) => POS[i].clone().add(new THREE.Vector3(LOT.x + x * k, (TILES[i].type === 'public' ? 0 : PAD.h) + y * k, LOT.z + z * k));
 const kinds = (kind: string) => TILES.filter((t) => t.kind === kind).map((t) => t.i);
 const [casinos, clubs, chokes, oils] = ['casino', 'club', 'choke', 'oil'].map(kinds);
-const [vegas, pyongyang, zurich, devil] = [tileAt('Las Vegas'), tileAt('Pyongyang'), tileAt('Zurich'), kindAt('devil')];
+const [vegas, pyongyang, zurich, hongkong, devil] = [tileAt('Las Vegas'), tileAt('Pyongyang'), tileAt('Zurich'), tileAt('Hong Kong'), kindAt('devil')];
 const FIXED: [number, THREE.Vector3, number, number, number, number?][] = [
   [5, at(casinos[0], 0, 1, 0.8), 0xff5de0, 12, 7, casinos[0]], [6, at(casinos[1], 0, 1, 0.8), 0xff5de0, 12, 7, casinos[1]], // the casinos' marquees
   [7, at(clubs[0], 0, 0.8, 0.8), 0x5dfff0, 10, 7, clubs[0]], [8, at(clubs[1], 0, 0.8, 0.8), 0x5dfff0, 10, 7, clubs[1]], // the nightclubs' neon
@@ -29,6 +29,7 @@ const FIXED: [number, THREE.Vector3, number, number, number, number?][] = [
   [21, at(pyongyang, -0.26, 5.7, -0.35, 1), 0xff4d3b, 5, 6.5, pyongyang], // Juche Tower's glowing red torch
   [22, at(zurich, 0, 0.85, 0.55, 1), 0xffbe66, 3.8, 5.5, zurich], // Bahnhofstrasse street lamps
   [23, at(devil, 0.72, 2.95, -0.15, 1), 0xffe494, 4.5, 6, devil], // Devil's Island lighthouse & searchlight
+  [24, at(hongkong, -0.4, 1.0, -0.15, 1), 0xdce8ff, 6, 7, hongkong], // Bank of China Tower's LED outline spilling over its podium: inside its lowest prism, so that no halo hangs in front of the glass
 ];
 for (const [i, p, color, , reach] of FIXED) { lamps[i].position.copy(p); lamps[i].color.setHex(color); lamps[i].distance = reach; }
 

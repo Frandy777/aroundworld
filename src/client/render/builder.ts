@@ -245,31 +245,64 @@ const cityMat = memo((cols: number, rows: string, c: number, seed: number, lamps
 });
 const roofMat = memo((c: number) => lodMap(toon(c), roofTex));
 // Tower prism: a quarter of a square tower, its apex at the centre. Groups: 0 the outer wall (half-width a, height h), 1 the two walls beside it, 2 the roof (rises r to the apex).
-// A wall is textured along its length and up it in modules m tall, the roof in panes of 4 texels, so a texel is a world texel on every face
-export const prism = memo((a: number, h: number, r: number, m: number) => {
-  const T = 4 / DENSITY, pos: number[] = [], uv: number[] = [], g = new THREE.BufferGeometry();
+// Every face is drawn whole, UV 0..1 across it and up it (a wall to its own top, the roof from its eave to the apex), so a prism has windows of its own and a texel is a world texel on every face
+export const prism = memo((a: number, h: number, r: number) => {
+  const pos: number[] = [], uv: number[] = [], g = new THREE.BufferGeometry();
   const faces: [number, number[][]][] = [[0, [[-a, 0, a], [a, 0, a], [a, h, a], [-a, h, a]]], [1, [[0, 0, 0], [-a, 0, a], [-a, h, a], [0, h + r, 0]]], [1, [[a, 0, a], [0, 0, 0], [0, h + r, 0], [a, h, a]]], [2, [[-a, h, a], [a, h, a], [0, h + r, 0]]]]; // corners, counter-clockwise seen from outside
   for (const [k, pts] of faces) {
     const start = pos.length / 3, [p0, p1] = pts, dx = p1[0] - p0[0], dz = p1[2] - p0[2], len = dx * dx + dz * dz; // a face's first edge runs along its wall
     for (let i = 1; i < pts.length - 1; i++) for (const p of [p0, pts[i], pts[i + 1]]) { // a fan of triangles
       pos.push(...p);
-      uv.push(...(k < 2 ? [((p[0] - p0[0]) * dx + (p[2] - p0[2]) * dz) / len, p[1] / m] : [p[0] / T, ((a - p[2]) * Math.hypot(a, r)) / (a * T)])); // along and up the wall, or across the roof and up its slope
+      uv.push(...(k < 2 ? [((p[0] - p0[0]) * dx + (p[2] - p0[2]) * dz) / len, p[1] / (k ? h + r : h)] : [(p[0] + a) / (2 * a), (a - p[2]) / a])); // along and up the wall, or across the roof and up its slope
     }
     g.addGroup(start, pos.length / 3 - start, k);
   }
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)).setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)).computeVertexNormals();
   return g;
 });
-const curtain = memo((w: number, m: number, L: number) => tex(texels(w, L), texels(m, L), (f, W, H) => { // curtain wall, w x m: silver-blue glass, an X of white bracing and posts along the edges, repeated up the tower
-  f('#86aadf', 0, 0, W, H);
-  if (L === 2) for (let k = 0; k < 4; k++) f('#7298d4', 0, Math.round((k * H) / 4), W, 1); // four floors to a module
-  const brace = (c: string, dy: number) => { const n = Math.max(W, H); for (let i = 0; i < n; i++) { const x = Math.round((i * (W - 1)) / (n - 1)), y = Math.round((i * (H - 1)) / (n - 1)) + dy; f(c, x, y, 1, 1); f(c, W - 1 - x, y, 1, 1); } }; // both diagonals
-  if (L === 2) brace('#b8cdee', 1); // a pale shadow under the braces, near
-  brace('#ffffff', 0);
-  if (L) { f('#e6eefb', 0, 0, 1, H); f('#e6eefb', W - 1, 0, 1, H); }
-}, 1));
-const panes = memo((L: number) => { const n = Math.max(1, texels(4 / DENSITY, L)); return tex(n, n, (f) => { f('#e4eeff', 0, 0, n, n); if (L === 2) { f('#b9cdee', 0, 0, n, 1); f('#b9cdee', 0, 0, 1, n); } }, 1); }); // glass roof: panes between mullions
-export const prismMat = memo((a: number, m: number) => [2 * a, a * Math.SQRT2].map((w) => lodMap(toon(0xffffff), (L) => curtain(w, m, L))).concat(lodMap(toon(0xffffff), panes))); // the materials of group 0, 1, 2: one lattice per wall width
+// The tower's glass, a module m tall to every X of bracing: silver-blue panes (the one above the crossing lighter, with the sky in it, the one below darker), a belt over the module and posts down the edges, and floors of ribbon glazing, four to a module
+// (two far). A wall is drawn whole, its modules and then the cap of a slanted wall above the last one, which has the floors but no X. By night the glass is black but for the bracing, belts and posts, which are lit in LED white (the tower is outlined in
+// light), and the floors that are lit, in the warm white of an office: a floor is lit all through or hardly at all, a stretch of it at a time, from a hash of its place, so no two modules and no two prisms are the same.
+const OFFICE = [0xffc46a, 0xffd48a, 0xffe2b4, 0xf4f6fb]; // an office's lamps: amber, warm, soft white, and a cool one now and then
+const GLASS = ['#9bb9e6', '#7799d3', '#5f83bd', '#4a6ba3']; // the pane above the crossing, at the sides, below it, and the shadow under a brace (dark enough that the glass is still glass by night)
+const curtain = memo((w: number, H: number, m: number, seed: number, L: number, night: boolean) => {
+  const W = texels(w, L), T = texels(H, L), M = (m * DENSITY) / 2 ** (2 - L), n = Math.floor(H / m + 1e-6), F = [2, 4, 4][L], P = M / F, row = (k: number) => Math.round(k * M); // texels across and up, a module's height (not a whole number), whole modules, floors to a module and a floor's height
+  return tex(W, T, (f) => {
+    const at = (c: string, x: number, y: number, bw = 1, bh = 1) => f(c, x, T - y - bh, bw, bh); // y counts up from the wall's foot
+    const brace = (c: string, dy = 0) => { // both diagonals of every module, corner to corner
+      for (let k = 0; k < n; k++) for (let y0 = row(k), h = row(k + 1) - y0, N = Math.max(W, h), i = 0; i < N; i++) { const t = i / (N - 1), x = Math.round(t * (W - 1)), y = y0 + Math.round(t * (h - 1)) + dy; at(c, x, y); at(c, W - 1 - x, y); }
+    };
+    f(night ? '#000' : GLASS[1], 0, 0, W, T);
+    if (night) for (let j = 0; (j + 0.5) * P < T; j++) { // the floors: a strip of lamps in each, near the belts fewer of them
+      const p = Math.min(1, (!L || (j % F && j % F < F - 1) ? 0.9 : 0.4) * (0.4 + rnd(seed, j, 7))), y = Math.round((j + 0.5) * P) - (L === 2 ? 1 : 0);
+      for (let x = 1, len = 1; x < W - 1; x += len + 1) {
+        len = Math.min(1 + Math.floor(rnd(seed, j, x) * [2, 4, 7][L]), W - 1 - x);
+        const t = OFFICE[Math.floor(rnd(seed, j, x, 2) * OFFICE.length)];
+        if (rnd(seed, j, x, 1) < p) { at(hex(t), x, y + (L === 2 ? 1 : 0), len); if (L === 2) at(shade(t, 0.8), x, y, len); } // lighter over darker, like any lit window
+      }
+    } else {
+      for (let k = 0; k < n; k++) for (let y0 = row(k), h = row(k + 1) - y0, y = 0; y < h; y++) { // the panes: the X leaves the sky above it, the ground below it and a side to the left and right
+        const t = (y + 0.5) / h, x = Math.round(t * W), lo = Math.min(x, W - x), hi = Math.max(x, W - x);
+        at(GLASS[t < 0.5 ? 2 : 0], lo, y0 + y, hi - lo);
+      }
+      if (L === 2) { for (let j = 1; j * P < T - 1; j++) if (j % F) at('#7a9ad2', 1, Math.round(j * P), W - 2); brace(GLASS[3], -1); } // near: the floors between the belts, and a shadow under the braces
+    }
+    brace('#ffffff');
+    for (let k = 0; k <= n; k++) at(night ? '#ffffff' : '#e9f0fb', 0, Math.min(T - 1, row(k)), W); // a belt over every module
+    if (L) for (const x of [0, W - 1]) at(night ? '#ffffff' : '#e6eefb', x, 0, 1, T); // posts down the edges
+  });
+});
+// The roof, a triangle from its eave (the foot of the texture) to the apex: glass in panes between mullions, framed in white, and by night the frame alone, lit (the frame is a texel inside the roof's own edge: a texel that straddles it is half off the face)
+const skylight = memo((w: number, s: number, L: number, night: boolean) => tex(texels(w, L), texels(s, L), (f, W, S) => {
+  const p = [1, 2, 4][L], mid = (W - 1) / 2;
+  f(night ? '#000' : '#e4eeff', 0, 0, W, S);
+  if (!night && L) for (let k = 0; k < Math.max(W, S); k += p) { f('#b9cdee', k, 0, 1, S); f('#b9cdee', 0, k, W, 1); }
+  for (let y = 0; y < S; y++) { const d = Math.round((mid * y) / (S - 1)); for (const x of [Math.round(mid) - d + 1, Math.round(mid) + d - 1]) f('#ffffff', Math.max(0, Math.min(W - 1, x)), y, 1, 1); } // the two slopes
+  f('#ffffff', 0, S - 1, W, 1);
+}));
+const glazed = (make: (L: number, night: boolean) => THREE.Texture) => lodMap(lodMap(toon(0xffffff, { emissive: 0xffffff }), (L) => make(L, false)), (L) => make(L, true), 'emissiveMap'); // day's drawing the colour, night's the lamps (see `cityMat`)
+const roof = memo((a: number, r: number) => glazed((L, night) => skylight(2 * a, Math.hypot(a, r), L, night))); // the same on every prism
+export const prismMat = memo((a: number, h: number, r: number, m: number, seed: number) => [glazed((L, night) => curtain(2 * a, h, m, seed, L, night)), glazed((L, night) => curtain(a * Math.SQRT2, h + r, m, seed + 1, L, night)), roof(a, r)]); // the materials of group 0, 1, 2
 export const part = (g: THREE.Group, geometry: THREE.BufferGeometry, h: number, material: THREE.Material | THREE.Material[], x: number, y: number, z: number) => {
   const m = new THREE.Mesh(geometry, material);
   m.position.set(x, y + h / 2, z);
