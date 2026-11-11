@@ -64,11 +64,19 @@ For shader, lighting, camera, model, or effect changes, prefer one matrix captur
 npm run shots
 
 # Close-up on tile 1 across dawn/noon/dusk/night:
-node scripts/shot-matrix.mjs --tile=1 --zoom=2.2 --hours=0,6.2,12,18
+node scripts/shot-matrix.mjs --tile=1 --zooms=2.2 --hours=0,6.2,12,18
 
 # Freeze a missile strike during terminal dive (t=4.9s):
-node scripts/shot-matrix.mjs --tile=28 --zoom=1.6 --looks=hd2d --hours=0,12 --strike=6,28,4.9
+node scripts/shot-matrix.mjs --tile=28 --zooms=1.6 --looks=hd2d --hours=0,12 --strike=6,28,4.9
+
+# Model turntable: one tile alone, four azimuths, no SALE board, two zooms (LOD far/near):
+node scripts/shot-matrix.mjs --tile=28 --iso=1 --nosign=1 --az=-35,0,35,145 --zooms=0.6,2.4 --hours=12
+
+# Level comparison and a paused animation frame (world clock t in seconds):
+node scripts/shot-matrix.mjs --tile=10 --lv=0,1,2,3 --hours=12 --looks=pixel
+node scripts/shot-matrix.mjs --tile=77 --time=0,1.0,2.0 --az=0,145 --hours=12
 ```
+Rows = looks × zooms × levels, columns = hours × azimuths × times; intermediate frames go to a per-run temp dir, so parallel runs sharing `--out`'s directory cannot overwrite each other.
 Read the resulting `/tmp/aw-shots/matrix.png` directly to inspect visual output.
 
 ## Style & Conventions

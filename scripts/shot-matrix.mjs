@@ -18,7 +18,7 @@ const args = Object.fromEntries(
 );
 
 if (args.help) {
-  console.log('Usage: node scripts/shot-matrix.mjs [--url=http://localhost:5173] [--looks=pixel,hd2d] [--hours=12,18,0] [--tile=N] [--zoom=fit|N] [--elev=52] [--az=0] [--strike=from,to,sec] [--autostart] [--size=960x540] [--dpr=1] [--out=/tmp/aw-shots/matrix.png]');
+  console.log('Usage: node scripts/shot-matrix.mjs [--url=http://localhost:5173] [--looks=pixel,hd2d] [--hours=12,18,0] [--tile=N] [--zooms=fit|N,...] [--elev=52] [--az=0,...] [--lv=0,1,2,3] [--nosign=1] [--iso=1] [--time=0,1.0,...] [--strike=from,to,sec] [--autostart] [--size=960x540] [--dpr=1] [--out=/tmp/aw-shots/matrix.png]');
   process.exit(0);
 }
 
@@ -30,11 +30,17 @@ const dpr = Number(args.dpr ?? 1);
 const outFile = args.out ?? '/tmp/aw-shots/matrix.png';
 const outDir = path.dirname(outFile);
 const tile = args.tile !== undefined ? Number(args.tile) : undefined;
-const zoom = args.zoom === 'fit' ? 'fit' : args.zoom !== undefined ? Number(args.zoom) : (tile !== undefined ? 2.2 : 'fit');
+const list = (v) => v === undefined ? [undefined] : String(v).split(',').map((s) => (s.trim() === 'fit' ? 'fit' : Number(s.trim()))).filter((n) => n === 'fit' || Number.isFinite(n));
+const zooms = list(args.zooms ?? args.zoom ?? (tile !== undefined ? '2.2' : 'fit'));
+const azs = list(args.az);
+const lvs = list(args.lv);
+const times = list(args.time);
 const elev = args.elev !== undefined ? Number(args.elev) : undefined;
-const az = args.az !== undefined ? Number(args.az) : undefined;
+const nosign = args.nosign === '1', iso = args.iso === '1';
 const strikeSpec = args.strike ? args.strike.split(',').map(Number) : null;
 const autostart = args.autostart === '1';
+if (iso && tile === undefined) { console.error('--iso=1 needs --tile=N'); process.exit(1); }
+if ((lvs[0] !== undefined || nosign) && tile === undefined) { console.error('--lv / --nosign need --tile=N'); process.exit(1); }
 
 try {
   const ctrl = new AbortController();
@@ -54,6 +60,7 @@ if (!fs.existsSync(chromeBin)) {
 
 fs.mkdirSync(outDir, { recursive: true });
 const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aw-chrome-'));
+const framesDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aw-frames-')); // frames stay private to the run: parallel runs never overwrite each other's
 
 const chrome = spawn(chromeBin, [
   '--headless=new',
@@ -144,23 +151,32 @@ try {
     await window.__aw.ready;
   })()`);
 
+  if (iso) await evalJs(`window.__aw.isolate(${tile})`);
+  if (nosign && lvs[0] === undefined) await evalJs(`window.__aw.setLot(${tile}, { p: -1, sign: false })`);
+
   const cells = [];
-  for (const look of looks) {
+  const cols = hours.length * azs.length * times.length;
+  for (const look of looks) { // rows: looks, then zooms, then levels
     const hd = look === 'hd2d' || look === 'hd' || look === '1';
-    for (const hour of hours) {
-      const viewOpts = { hd, hour, rotate: false, ui: autostart, ...(tile !== undefined ? { tile } : { x: 0, z: 0, lift: 0 }), zoom, ...(elev !== undefined ? { elev } : {}), ...(az !== undefined ? { az } : {}) };
-      await evalJs(`window.__aw.setView(${JSON.stringify(viewOpts)})`);
-      if (strikeSpec) {
-        const [from = 6, to = 28, sec = 1.4] = strikeSpec;
-        await evalJs(`window.__aw.strike(${from}, ${to}, ${sec})`);
+    for (const zoom of zooms) for (const lv of lvs) {
+      if (lv !== undefined) await evalJs(`window.__aw.setLot(${tile}, { p: 0, lv: ${lv} }).then(() => window.__aw.step(0.6))`); // let the pop-in squash settle before the shots
+      for (const hour of hours) { // columns: hours, then azimuths, then clock times
+        for (const az of azs) for (const time of times) {
+          const viewOpts = { hd, hour, rotate: false, ui: autostart, ...(tile !== undefined ? { tile } : { x: 0, z: 0, lift: 0 }), zoom, ...(elev !== undefined ? { elev } : {}), ...(az !== undefined ? { az } : {}) };
+          await evalJs(`window.__aw.setView(${JSON.stringify(viewOpts)})`);
+          if (strikeSpec) {
+            const [from = 6, to = 28, sec = 1.4] = strikeSpec;
+            await evalJs(`window.__aw.strike(${from}, ${to}, ${sec})`);
+          }
+          if (time !== undefined) await evalJs(`window.__aw.scrub(${time})`);
+          const state = await evalJs('window.__aw.state()');
+          const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' }, sessionId);
+          if (strikeSpec) await evalJs('window.__aw.setLoop({ paused: false })');
+          const file = path.join(framesDir, `f${cells.length}.png`);
+          fs.writeFileSync(file, Buffer.from(data, 'base64'));
+          cells.push({ file, label: `${hd ? 'HD-2D' : 'PIXEL'}  ${hhmm(hour)}${az !== undefined ? `  az${az}` : ''}${lv !== undefined ? `  lv${lv}` : ''}${time !== undefined ? `  t${time}` : ''}  z=${state.zoom} (${state.lodName})` });
+        }
       }
-      const state = await evalJs('window.__aw.state()');
-      const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' }, sessionId);
-      if (strikeSpec) await evalJs('window.__aw.setLoop({ paused: false })');
-      const tag = `${hd ? 'hd2d' : 'pixel'}-${hhmm(hour).replace(':', '')}`;
-      const file = path.join(outDir, `${tag}.png`);
-      fs.writeFileSync(file, Buffer.from(data, 'base64'));
-      cells.push({ file, label: `${hd ? 'HD-2D' : 'PIXEL'}  ${hhmm(hour)}  z=${state.zoom} (${state.lodName})` });
     }
   }
 
@@ -168,7 +184,7 @@ try {
   ws.close();
 
   // Stitch into a single labeled contact sheet via Python PIL if available.
-  const cols = hours.length, rows = looks.length;
+  const rows = Math.ceil(cells.length / Math.max(cols, 1));
   const py = spawnSync('python3', ['-', JSON.stringify({ cells, cols, rows, outFile })], {
     input: `
 import json, sys
@@ -192,7 +208,7 @@ sheet.save(out)
   });
 
   if (py.status === 0) console.log(`Saved ${cells.length}-panel contact sheet: ${outFile}`);
-  else console.log(`Saved ${cells.length} screenshots in: ${outDir} (PIL stitch skipped: ${py.stderr.trim()})`);
+  else { fs.cpSync(framesDir, outDir, { recursive: true }); console.log(`Saved ${cells.length} screenshots in: ${outDir} (PIL stitch skipped: ${py.stderr.trim()})`); }
 
   if (pageErrors.length) {
     console.error(`Console/WebGL errors (${pageErrors.length}):\n` + pageErrors.map((e) => `  - ${e}`).join('\n'));
@@ -204,4 +220,5 @@ sheet.save(out)
     await new Promise((r) => { chrome.once('exit', r); setTimeout(r, 1500).unref(); });
   }
   fs.rmSync(profileDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  fs.rmSync(framesDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }
