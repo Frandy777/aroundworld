@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { bake, box, cyl, mat, part, INK, IRON, LAVA } from '../builder';
-import { glow } from '../light';
+import { bake, box, cyl, final, mat, part, INK, IRON, LAVA, type ModelDef } from '../../builder';
+import { glow } from '../../light';
 
 type V3 = [number, number, number];
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
@@ -21,7 +21,6 @@ const HEAD = (() => { // the horsehead: a band of that arc, 0.12 thick and 0.14 
   s.absarc(0, 0, FORE, -a, a, false); s.absarc(0, 0, FORE - 0.12, a, -a, true);
   return new THREE.ExtrudeGeometry(s, { depth: 0.14, bevelEnabled: false, curveSegments: 10 }).translate(0, 0, -0.07);
 })();
-const LED = glow(new THREE.MeshBasicMaterial({ color: 0x35e07a })); // the indicator: unlit, so that it glows in the dark; its brightness is set every frame
 // A rigid part that moves, built round its pivot (u = x, v = y): it casts no shadow (the sun's map is not drawn again for what moves) and is baked into a few meshes of its own
 const body = (parent: THREE.Group, x: number, y: number, build: (b: THREE.Group) => void) => {
   const b = new THREE.Group(); b.position.set(x, y, 0);
@@ -52,9 +51,10 @@ const flame = (parent: THREE.Group, x: number, y: number, z: number) => {
 
 // An oil company's site on a concrete pad: a derrick and its doghouse over a new well; a pumping unit at work on an old one, with a control cabinet whose faint green light blinks with every stroke; two storage
 // tanks, joined by an oil header (which brings in the well's flow) and by a yellow vent line that runs on to the flare stack; barrels at the front. The pumping unit's linkage and the flame move (see `tick`).
-export function oil(g: THREE.Group) {
+function oil(g: THREE.Group) {
   const [dx, dz] = [-0.68, -0.58], [ox, oz] = [0.34, 0.47], TZ = -0.7, HZ = -0.2, GY = 1.36, FX = 0.99, PY = 0.275; // the derrick, the pumping unit's pivot, the tanks' row, the header's row, the vent line's height, the flare's x, the oil pipes' axis (the wellhead's flow tee)
   const xw = ox + WELL;
+  const LED = glow(new THREE.MeshBasicMaterial({ color: 0x35e07a })); // the indicator: unlit, so that it glows in the dark; made per build (two sites may stand on the board) and set every frame
   const strut = (p: THREE.Group, c: number, t: number, a: V3, b: V3) => { // a bar of section t from point a to point b
     const d = new THREE.Vector3(...b).sub(new THREE.Vector3(...a)), m = box(p, t, d.length(), t, c);
     m.position.set(...a).addScaledVector(d, 0.5); m.quaternion.setFromUnitVectors(Y_AXIS, d.normalize());
@@ -147,3 +147,10 @@ export function oil(g: THREE.Group) {
 
   for (const [x, z, c] of [[-0.96, 0.8, RED], [-0.74, 0.84, BLUE], [-0.86, 0.66, YEL]]) { cyl(g, 0.1, 0.24, c, x, 0.08, z); cyl(g, 0.105, 0.02, LIGHT, x, 0.3, z); } // barrels, each with its lid rim
 }
+
+export default {
+  key: 'oil',
+  props: [ // a derrick and its doghouse over the well, a pumping unit at work (its beam nodding, a faint light blinking), two tanks joined by pipes, a flare stack with a living flame, barrels at the front
+    final(oil),
+  ],
+} satisfies ModelDef;

@@ -110,6 +110,10 @@ const roofGeo = memo((w: number, d: number, h: number) => {
 const NEON = new Set([0xff5de0, 0x5dfff0, 0xff3b3b, 0x3b6bff, 0xfff6b0, LAVA]); // neon, lamps, flames and lava are unlit: they glow in the shade as in the sun
 const METAL = new Map<number, Pbr>([[GOLD, [0.3, 1, 0.55, 0]], [IRON, [0.45, 1, 0.5, 0]]]); // metal throws the HD-2D light back as a highlight (a metalness short of 1: there is no sky to mirror but the hemisphere's)
 export const mat = memo((c: THREE.ColorRepresentation) => (NEON.has(c as number) ? glow(new THREE.MeshBasicMaterial({ color: c })) : toon(c, {}, METAL.get(c as number))));
+// The same two special materials, picked explicitly rather than guessed from the colour — a new lamp or alloy need not join the colour tables (and so cannot change another model's parts that share the colour).
+// Shared through memo: never mutate a shared material's state in a `tick` — build a local `glow`/`toon` for that (see models/invest/oil.ts, which colours its own lamp each frame).
+export const emissive = memo((c: THREE.ColorRepresentation) => glow(new THREE.MeshBasicMaterial({ color: c })));
+export const metal = memo((c: THREE.ColorRepresentation, pbr: Pbr) => toon(c, {}, pbr));
 const wallMat = memo((cols: number, kind: string, c: number) => lodMap(toon(c), (L) => facade(cols, kind, L)));
 const roofMat = memo((c: number) => lodMap(toon(c), roofTex));
 // Tower prism: a quarter of a square tower, its apex at the centre. Groups: 0 the outer wall (half-width a, height h), 1 the two walls beside it, 2 the roof (rises r to the apex).
@@ -145,10 +149,11 @@ export const part = (g: THREE.Group, geometry: THREE.BufferGeometry, h: number, 
   g.add(m);
   return m;
 };
-// K = how much bigger than authored the thing being built is: props are drawn at PK (see models; their authored numbers stay at the old size), buildings at 1.
+// K = how much bigger than authored the thing being built is: props are drawn at PK by default (a model's `scale` overrides it, see ModelDef; their authored numbers stay at the old size), buildings at 1.
 // Textured parts keep one texel per world texel at any K: roofs and signs size their texture from the final geometry, storeys (floor) are whole
 // modules and never stretch, so a bigger facade simply gets more windows.
 let K = 1;
+export const PK = 1.25; // the default draw scale of a registered model's authored numbers
 export const box = (g: THREE.Group, w: number, h: number, d: number, color: THREE.ColorRepresentation, x = 0, y = 0, z = 0, m: THREE.Material | THREE.Material[] = mat(color)) => part(g, geo(w * K, h * K, d * K), h * K, m, x * K, y * K, z * K);
 export const cyl = (g: THREE.Group, r: number, h: number, color: THREE.ColorRepresentation, x = 0, y = 0, z = 0) => part(g, cylGeo(r * K, h * K), h * K, mat(color), x * K, y * K, z * K);
 export const hip = (g: THREE.Group, w: number, d: number, h: number, y: number, color: number, x = 0, z = 0) => part(g, roofGeo(w * K, d * K, h * K), h * K, roofMat(color), x * K, y * K, z * K);
@@ -163,7 +168,10 @@ export const floor = (g: THREE.Group, cols: number, dcols: number, kind: string,
 export const final = (fn: (g: THREE.Group) => void) => (g: THREE.Group) => { const k = K; K = 1; fn(g); K = k; }; // props made of storeys are authored in final units
 // A static prop: a box [color, w, h, d, x, y, z] (y from the tile top, z from the lot centre), or a function drawing into the group
 export type Prop = [color: number, w: number, h: number, d: number, x: number, y: number, z: number] | ((g: THREE.Group) => void);
-export const drawProps = (g: THREE.Group, props: Prop[], k: number) => { // props are drawn k times bigger than authored (see K)
+// One registered model, one file under models/{special,invest,public}/: `key` is the tile name or kind it builds (a tile's name wins over its kind, see buildProps),
+// `props` its static parts and `scale` its authored-units draw scale (PK by default). The registry finds the files itself (import.meta.glob): a new or tuned model never touches a shared table.
+export interface ModelDef { key: string; props: Prop[]; scale?: number }
+export const drawProps = (g: THREE.Group, props: Prop[], k = PK) => { // props are drawn k times bigger than authored (see K)
   K = k;
   for (const r of props) typeof r === 'function' ? r(g) : box(g, r[1], r[2], r[3], r[0], r[4], r[5], r[6]);
   K = 1;
@@ -190,11 +198,23 @@ export const decal = (g: THREE.Group, rows: string[], x: number, y: number, z: n
 };
 // A built model is baked into a few meshes: everything under `root` is brought into root's own space (each mesh by its own matrix and its parents', not root's: the model is still moved as one) and what shares a
 // material and a shadow setting is merged, so a hundred boxes cost a handful of draw calls, in the shadow pass as in the main one. A mesh of several materials (a storey, a sign) is cut along its groups first.
-// The geometries from memo are shared, so they are copied, never changed; the merged ones belong to root alone (see setOwner, which frees them).
-// A child group with a `userData.tick` moves every frame (the board calls it, see board.ts): it is left out of the batch and put back whole, its insides baked by whoever made it.
+// The geometries from memo are shared, so they are copied, never changed; each merged one is marked `userData.own` — it belongs to root alone, and `freeBaked` frees it when root is rebuilt.
+// A node with a `userData.tick` moves every frame (the board calls it, see board.ts), and a node with a name is looked up (a strike finds its missile): either is left out of the batch wherever it sits in the
+// tree and put back under a group holding the place its parents had (their matrices end up merged), its insides baked by whoever made it.
+const IDENT = new THREE.Matrix4();
 export function bake(root: THREE.Group) {
-  const live = root.children.filter((o) => o.userData.tick);
-  live.forEach((o) => o.removeFromParent());
+  const kept: [THREE.Object3D, THREE.Matrix4][] = [];
+  const hold = (o: THREE.Object3D) => {
+    for (const c of [...o.children]) {
+      if (c.userData.tick || c.name) { // a kept node's own transform is left alone: put it back under a group carrying the transform of the parents it loses
+        const m = new THREE.Matrix4();
+        for (let p = c.parent!; p !== root; p = p.parent!) { p.updateMatrix(); m.premultiply(p.matrix); }
+        kept.push([c, m]);
+        c.removeFromParent();
+      } else hold(c);
+    }
+  };
+  hold(root);
   const bins = new Map<string, { src: THREE.Mesh; material: THREE.Material; geometries: THREE.BufferGeometry[] }>();
   root.traverse((o) => {
     const m = o as THREE.Mesh;
@@ -211,7 +231,19 @@ export function bake(root: THREE.Group) {
   for (const { src, material, geometries } of bins.values()) {
     const m = new THREE.Mesh(mergeGeometries(geometries), material);
     m.castShadow = src.castShadow; m.receiveShadow = src.receiveShadow;
+    m.geometry.userData.own = true;
     root.add(m);
   }
-  live.forEach((o) => root.add(o));
+  for (const [o, m] of kept) {
+    if (m.equals(IDENT)) { root.add(o); continue; }
+    const w = new THREE.Group();
+    m.decompose(w.position, w.quaternion, w.scale);
+    w.add(o);
+    root.add(w);
+  }
 }
+/** Frees the merged geometries a `bake` produced (marked `userData.own`); the shared, memoized source geometries are left alone. Called before a baked tree is rebuilt or thrown away. */
+export const freeBaked = (root: THREE.Object3D) => root.traverse((o) => {
+  const m = o as THREE.Mesh;
+  if (m.isMesh && m.geometry.userData.own) m.geometry.dispose();
+});

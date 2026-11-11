@@ -73,17 +73,16 @@ export function createBoard() {
     const props = new THREE.Group(), bld = new THREE.Group();
     props.position.set(LOT.x, TOP + (pad ? PAD.h : 0), LOT.z); bld.position.copy(props.position);
     buildProps(props, t);
+    bake(props); // the named missile is kept out of the batch in place (see bake): bake it on its own so a strike can hide it
     const rocket = props.getObjectByName(MISSILE_NAME) as THREE.Group | undefined;
-    if (rocket) { rocket.removeFromParent(); bake(rocket); }
-    bake(props);
-    if (rocket) props.add(rocket); // kept out of the static batch so a strike can hide the missile that leaves the pad
+    if (rocket) bake(rocket);
     g.add(slab, card, letters, props, bld);
     if (pad) g.add(pad);
     root.add(g);
     if (pad) { sign(bld); bake(bld); }
     return { g, slab, card, letters, props, rocket, side, tint: [ground, card.material], pad, bld, key: '', pop: 1 };
   });
-  const live = tiles.flatMap((o) => o.props.children.filter((c) => c.userData.tick)); // the props that move (a model's groups with a `tick`, see bake): driven by the clock every frame
+  const live = tiles.flatMap((o) => { const l: THREE.Object3D[] = []; o.props.traverse((c) => c.userData.tick && l.push(c)); return l; }); // the props that move (a model's groups with a `tick`, kept by bake at any depth): driven by the clock every frame
   type Plot = (typeof tiles)[number];
   // A new owner or a new level: the building rises from the plot, squashed wide and flat first, with a little overshoot (ease out back)
   const squash = (o: Plot) => { const e = 1 + 2.70158 * (o.pop - 1) ** 3 + 1.70158 * (o.pop - 1) ** 2; o.bld.scale.set(1 + (1 - e) * 0.3, Math.max(e, 0.01), 1 + (1 - e) * 0.3); };

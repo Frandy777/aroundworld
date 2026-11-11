@@ -9,6 +9,7 @@
   - `net.ts` / `controller.ts` — WebSocket session, room lifecycle, and dev `quickGame()`.
   - `director.ts` — Plays server events sequentially onto the screen so UI and animations stay in lockstep.
   - `stage.ts` & `render/` — 3D stage, camera/post-processing, lighting, sky, voxel builder, and tile/token/effect models. Rendering and material details evolve actively—always read the header comments of the specific `render/*.ts` files you touch rather than assuming fixed rendering internals.
+  - `render/models/{special,invest,public}/<key>.ts` — One registered tile model per file: a `ModelDef` (`key` = tile name or kind, `props`, optional `scale`) default-exported and auto-collected by `models/index.ts` via `import.meta.glob` (no shared registry edits). Ordinary cities share `models/city.ts`'s `building()`/levels, not a model file.
   - `ui/` — Pixel-art HUD, cards/dialogs, and `?dev=1` debug panel (`debug.tsx`). Keep `.tsx` component files exporting components only so Vite Fast Refresh works in place.
   - `dev.ts` — Dev-only URL flag parser and `window.__aw` automation bridge (tree-shaken out of production builds).
 

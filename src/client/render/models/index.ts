@@ -1,18 +1,20 @@
 import type { Group } from 'three';
 import type { Tile } from '../../../shared/data';
-import { drawProps, type Prop } from '../builder';
-import { INVEST_PROPS } from './invest';
-import { LANDMARK_PROPS } from './landmarks';
-import { PUBLIC_PROPS } from './public';
+import { drawProps, PK, type ModelDef } from '../builder';
 
 export { building, flag, level, sign } from './city';
 
-const PK = 1.25; // props are drawn this much bigger than authored (see FIT for the wide ones)
-const FIT: Record<string, number> = { bank: 1.2, exchange: 1.15, jail: 1.45 }; // per-kind scale where PK would overflow the strip (or, the jail, can hold four prisoners)
-const PROPS: Record<string, Prop[]> = { ...PUBLIC_PROPS, ...INVEST_PROPS, ...LANDMARK_PROPS };
+// One registered model per file under {special,invest,public}/<key>.ts (a ModelDef: its key, its props, an optional draw-scale override).
+// special/ — the special cities' landmarks, each a monument of its own, keyed by city name.
+// invest/  — the investments: the carriers keyed by name, the rest sharing one per kind; they stand on the owner's pad (see board.ts).
+// public/  — the edge tiles that are not bought, keyed by kind: each keeps its signature floor (in its ground texture, see labels.ts) and one prop.
+// Ordinary cities have no model here: their house/flag/sign are drawn by ownership (city.ts). The glob import finds the files, so a new or tuned model never touches a shared table.
+const defs = import.meta.glob<{ default: ModelDef }>('./*/*.ts', { eager: true });
+const MODELS: Record<string, ModelDef> = {};
+for (const m of Object.values(defs)) MODELS[m.default.key] = m.default;
 
-// The static props of tile t, drawn into g: every special city and every carrier has a model of its own, the rest share one per kind
+// The static props of tile t, drawn into g: a model keyed by the tile's name wins over one keyed by its kind
 export const buildProps = (g: Group, t: Tile) => {
-  const key = PROPS[t.name] ? t.name : t.kind;
-  drawProps(g, PROPS[key] ?? [], FIT[key] ?? PK);
+  const def = MODELS[t.name] ?? MODELS[t.kind];
+  drawProps(g, def?.props ?? [], def?.scale ?? PK);
 };
