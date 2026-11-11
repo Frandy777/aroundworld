@@ -62,6 +62,7 @@ const PBR: Pbr = [0.8, 1, 0, 0.5];
 const TOON = /* glsl */`
 varying vec3 vViewPosition;
 uniform vec4 uPbr;
+uniform float uBacklit, uLamp;
 float hdGloss;
 struct ToonMaterial { vec3 diffuseColor; };
 #ifdef USE_MAP
@@ -119,14 +120,28 @@ const RELIEF = /* glsl */`
 `;
 /** onBeforeCompile of every `toon()` material (one function, so every program of the same kind is shared: three names a program by its text). */
 export function lit(this: THREE.Material, sh: THREE.WebGLProgramParametersWithUniforms) {
-  Object.assign(sh.uniforms, U, { uPbr: { value: new THREE.Vector4(...((this.userData.pbr as Pbr | undefined) ?? PBR)) } });
+  Object.assign(sh.uniforms, U, { uPbr: { value: new THREE.Vector4(...((this.userData.pbr as Pbr | undefined) ?? PBR)) }, uBacklit: { value: (this.userData.backlit as number | undefined) ?? 0 } });
   sh.fragmentShader = sh.fragmentShader
     .replace('#include <lights_toon_pars_fragment>', '')
     .replace('#include <shadowmap_pars_fragment>', `#include <shadowmap_pars_fragment>\n${TOON}`)
     .replace('#include <map_fragment>', `#include <map_fragment>\n${GLOSS}`)
     .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${RELIEF}`)
+    .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * uBacklit * uLamp;') // a backlit material's own colour (see `backlit`), unshadowed
     .replace('reflectedLight.indirectDiffuse + totalEmissiveRadiance', 'reflectedLight.indirectDiffuse + totalEmissiveRadiance + reflectedLight.directSpecular + reflectedLight.indirectSpecular');
 }
+
+/** The lamp inside a tile (artificial light, so it follows `uLamp`) shines up through this material: `t` of its own colour, texels and all, is added to what the sun and sky give it, in either look (see `lit`).
+ * A dark material passes little of it and a white one a lot, so the light comes out tinted by what it went through; shadows do not reach it. */
+export const backlit = <M extends THREE.Material>(m: M, t: number) => { m.userData.backlit = t; return m; };
+
+/** An unlit card is as bright by night as by day, so the lettering that the lamp lights (see `backlit`) stands out of it no better than by day: as the lamp (`uLamp`) comes on, the card is dimmed to `t` of its colours. */
+export const dusk = <M extends THREE.MeshBasicMaterial>(m: M, t: number) => {
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, { uLamp: U.uLamp, uDusk: { value: t } });
+    sh.fragmentShader = `uniform float uLamp, uDusk;\n${sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= mix(1.0, uDusk, uLamp);')}`;
+  };
+  return m;
+};
 
 /** Neon, lamps and flames are unlit (see builder.ts); HD-2D gives them a little daylight colour and enough HDR light to bloom after dusk. */
 export const glow = <M extends THREE.MeshBasicMaterial>(m: M) => {

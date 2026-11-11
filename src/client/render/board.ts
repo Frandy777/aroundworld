@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { scene, artH, camera, controls, lod, toon, lodMap, pixelTexture, texels, dirtyShadow, pxUnit, fitZoom, ELEV, DENSITY } from './scene';
+import { backlit, dusk } from './light';
 import { TILES, type Tile } from '../../shared/data';
 import { canvas, codePixels, shade } from './art';
 import { CARD_SIZE, codeOf, drawCard, drawGround, drawPad } from './labels';
@@ -11,12 +12,17 @@ import { MISSILE_NAME } from './models/missile';
 
 const VACANT = 0xb9b2a0; // the plot of a tile nobody owns
 
+// The lamp inside every tile (see `backlit`), burning from dusk: how much of it comes up through the floor (the least), through the plot (enough to read its colour at a glance) and through the lettering
+// (nearly all of it, so a white code stands out of its card as a dark one does). The card is unlit, as bright by night as by day, so it is dimmed (see `dusk`) to the share of its colours that the lamp lets through:
+// the card of a white code well down, for the white to stand out of it as a dark code does of a light card, and the card of a dark code hardly at all, since the dark code has to stand out of it.
+const THROUGH = { floor: 0.1, plot: 0.5, ink: 0.9, card: { white: 0.3, dark: 0.85 } };
+
 // ---- Tile surfaces: the info card, the ground and the plot, one drawing per zoom level (see labels) ----
 const cardTex = (t: Tile, L: number) => pixelTexture(canvas(...CARD_SIZE[L], (g) => drawCard(g, t, L)));
 const groundTex = memo((type: string, kind: string, color: number, L: number) => pixelTexture(canvas(32 << L, 32 << L, (g) => drawGround(g, type, kind, color, L))));
 // the plot, in whole texels of each level: top face carries the carpet, the walls are a darker tone of the same colour
 const padMats = memo((color: number) => {
-  const side = toon(shade(color, 0.6)), top = lodMap(toon(0xffffff), (L) => pixelTexture(canvas(texels(PAD.w, L), texels(PAD.d, L), (g, w, h) => drawPad(g, color, w, h, L))));
+  const side = backlit(toon(shade(color, 0.6)), THROUGH.plot), top = lodMap(backlit(toon(0xffffff), THROUGH.plot), (L) => pixelTexture(canvas(texels(PAD.w, L), texels(PAD.d, L), (g, w, h) => drawPad(g, color, w, h, L))));
   return [side, top];
 });
 
@@ -32,7 +38,7 @@ const slabGeo = memo((w: number, h: number, d: number) => twoGroups(new THREE.Bo
 const CARD_GEO = new THREE.PlaneGeometry(CARD.w, CARD.d).rotateX(-Math.PI / 2);
 // A card's code is carved on it as raised letters: a unit voxel for each font pixel of an 11 x 5 grid centred on the middle of the card, standing on its face (see `labels` for the size).
 const codeGeo = memo((code: string) => mergeGeometries(codePixels(code).map(([x, y]) => new THREE.BoxGeometry().translate(x - 5, 0.5, y - 2))));
-const inkMat = memo((fg: number, dim: boolean) => toon(dim ? new THREE.Color(fg).multiply(new THREE.Color(0x808080)) : fg)); // dim: a mortgaged card is greyed, and its letters with it
+const inkMat = memo((fg: number, dim: boolean) => backlit(toon(dim ? new THREE.Color(fg).multiply(new THREE.Color(0x808080)) : fg), THROUGH.ink)); // dim: a mortgaged card is greyed, and its letters with it
 // The tile cursor (hover, selection) is a bracket at each corner of the cell: an L of voxels, its corner at the origin and its two arms (30 texels long, 6 across and tall) along +x and +z.
 // A line one pixel wide breaks into dashes and stairs on the half-size buffer and is cut by whatever stands before it; blocks are drawn like everything else, and the ink pass gives them their edges.
 const CORNERS = [[-1, -1], [1, -1], [1, 1], [-1, 1]], ARM = 30 / DENSITY, BAR = 6 / DENSITY;
@@ -54,13 +60,13 @@ export function createBoard() {
     g.position.set(POS[t.i].x, 0, POS[t.i].z);
     g.userData = { lift: 0 };
     const side = lodMap(toon(t.color), sideTex);
-    const ground = lodMap(toon(0xffffff), (L) => groundTex(t.type, t.kind, t.color, L)); // lit: buildings and tokens cast their shadows on it
+    const ground = lodMap(backlit(toon(0xffffff), THROUGH.floor), (L) => groundTex(t.type, t.kind, t.color, L)); // lit: buildings and tokens cast their shadows on it
     const slab = new THREE.Mesh(slabGeo(SZ, SLAB, SZ), [side, ground]);
     slab.position.y = (TOP - 0.8) / 2;
     slab.receiveShadow = slab.castShadow = true;
-    const card = new THREE.Mesh(CARD_GEO, lodMap(new THREE.MeshBasicMaterial(), (L) => cardTex(t, L))); // unlit: exact colours, no shadow smudges
-    card.position.set(CARD.x, TOP + 0.03, CARD.z);
     const [code, fg] = codeOf(t), letters = new THREE.Mesh(codeGeo(code), inkMat(fg, false));
+    const card = new THREE.Mesh(CARD_GEO, lodMap(dusk(new THREE.MeshBasicMaterial(), fg === 0xffffff ? THROUGH.card.white : THROUGH.card.dark), (L) => cardTex(t, L))); // unlit: exact colours by day, no shadow smudges
+    card.position.set(CARD.x, TOP + 0.03, CARD.z);
     letters.position.copy(card.position);
     const pad = t.type === 'public' ? null : new THREE.Mesh(slabGeo(PAD.w, PAD.h, PAD.d), padMats(VACANT)); // the plot: city tiles only
     if (pad) { pad.position.set(PAD.x, TOP + PAD.h / 2, PAD.z); pad.castShadow = pad.receiveShadow = true; }
