@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { lodMap, pixelTexture, texels, toon, DENSITY } from './scene';
-import { glow, type Pbr } from './light';
-import { canvas, paint, ink, inkWidth, inkHeight } from './art';
+import { glow, nightlit, type Pbr } from './light';
+import { canvas, paint, hex, shade, ink, inkWidth, inkHeight } from './art';
 import { SZ, SLAB } from './layout';
 
 type Fill = (c: string, x: number, y: number, w: number, h: number) => void;
@@ -69,6 +69,131 @@ const facade = memo((cols: number, kind: string, L: number) => {
     if (kind === 'lobby') LOBBY[L](f, w);
   });
 });
+
+// ---- A city building's walls (see models/city.ts) ----
+// A face is one tall texture of whole storeys (`rows`, kinds from the bottom up), drawn twice: its day look, and its night, which is the emissive map of the material (see `nightlit`): black walls, and the glass of the windows that
+// are lit, in the colour of their lamps (a lighter tone over a darker one). Whether a window is lit, and in which lamp, comes of a hash of its place and the face's seed: some are dark, the lamps differ, and a face is always the same.
+// win / door: a house's windows, one to a column, and its door. flat / lobby: a flat's taller windows, and its entrance, glass doors under a sign. glass / atrium: a tower's curtain wall (two floors to a storey, small panes between
+// mullions: a tower is made of many little windows, never a few big ones) and its glazed lobby. A face that is not the front has no entrance (`PLAIN`).
+// foyer / lounge / ribbon / clad: a villa's. A modern house is glass in long panes, never a window to a column: lounge is a wall of it (foyer, the same with the door in its last column), ribbon a band low on a plain wall,
+// and clad upright boards of timber with a slot of window to each two columns (the block is made in the timber's colour, which tints its boards).
+// All of it is `villa` glass: aqua, lighter than a house's blue, with a pair of glints across each pane. By night a pane is a row of lamps in a house's amber, each lit or dark like any window: a long pane never glows as one sheet,
+// which in HD-2D would be the biggest, whitest thing in the scene (the others keep their light to small, saturated lamps).
+const rnd = (...k: number[]) => { let h = 0x811c9dc5; for (const v of k) { h = Math.imul(h ^ v, 0x01000193); h ^= h >>> 15; } return (h >>> 0) / 2 ** 32; }; // a hash of its arguments, in [0, 1)
+const PLAIN: Record<string, string> = { door: 'win', lobby: 'flat', atrium: 'glass', foyer: 'ribbon', lounge: 'ribbon' }; // what a storey is on a face without the entrance
+const LAMPS: Record<string, number[]> = { // a kind's windows: the share of them that is lit by night, and the tones of their lamps (warm in a house, a blue screen now and then in the flats, cold in a tower, bright in a lobby)
+  win: [0.7, 0xff9f3a, 0xffb457, 0xffca7d], flat: [0.55, 0xff9f3a, 0xffc063, 0xffdca4, 0x86b8ff], glass: [0.4, 0xcfe8ff, 0xaed6ff, 0xffe2b4], atrium: [0.9, 0xffdca0, 0xffe6b8],
+  foyer: [0.8, 0xff9f3a, 0xffb457, 0xffca7d], lounge: [0.8, 0xff9f3a, 0xffb457, 0xffca7d], ribbon: [0.65, 0xff9f3a, 0xffb457, 0xffca7d], clad: [0.9, 0xffb457, 0xffca7d],
+};
+const WIDE: Record<string, { y: number[]; h: number[]; panes: (cols: number) => number }> = { // a villa's panes, far, mid, near: where the glass starts, how tall it is, and how many panes there are to so many columns
+  lounge: { y: [1, 2, 3], h: [3, 6, 12], panes: (c) => Math.ceil(c / 1.5) }, ribbon: { y: [2, 3, 5], h: [2, 4, 8], panes: (c) => Math.max(1, Math.round(c / 2)) },
+};
+const GLAZING: Record<string, [number, number, number, number][]> = { // the glass of a window, [x, y, w, h] from the left of its column and the top of its storey, far, mid, near: a flat's are taller than a house's
+  win: [[1, 1, 1, 3], [1, 2, 3, 5], [3, 5, 5, 8]], flat: [[1, 1, 1, 3], [1, 1, 3, 6], [3, 3, 5, 10]],
+};
+const TOWER: [number, number, number, number][] = [[1, 5, 1, 1], [2, 5, 1, 0], [2, 10, 2, 0]]; // a tower's storey: floors to it, rows to a floor, rows of spandrel over and under the glass of a floor
+const PANES: [number, number][][] = [[[1, 2]], [[1, 4]], [[1, 4], [6, 5]]]; // and the panes of a column: [x, width] (the last pane of a face is one narrower, to close it with a mullion)
+const HALL: ((f: Fill, w: number) => void)[] = [ // a flat's entrance: two glass leaves in a dark surround under a navy sign band with a gold rule, the leaves tall (the glass takes all but a low kickplate); the two middle columns of 4
+  (f, w) => { const x = (w >> 1) - 2; f('#1a2250', x, 1, 4, 4); f('#7db6ff', x + 1, 2, 2, 2); },
+  (f, w) => { const x = (w >> 1) - 4; f('#1a2250', x - 1, 1, 10, 2); f('#ffd23f', x + 1, 2, 6, 1); f('#2b3350', x - 1, 3, 10, 7); for (const d of [0, 5]) { f('#7db6ff', x + d, 4, 3, 2); f('#3f6fd0', x + d, 6, 3, 2); f('#4a5a7a', x + d, 8, 3, 1); } f('#bdbdbd', x - 1, 9, 10, 1); },
+  (f, w) => {
+    const x = (w >> 1) - 8; f('#1a2250', x - 2, 3, 20, 2); f('#ffd23f', x, 5, 16, 1); f('#2b3350', x - 2, 6, 20, 14);
+    for (const d of [0, 9]) { f('#7db6ff', x + d, 7, 7, 4); f('#3f6fd0', x + d, 11, 7, 6); f('#dce8ff', x + d + 1, 8, 2, 1); f('#4a5a7a', x + d, 17, 7, 2); f('#ffd23f', x + (d ? 9 : 6), 10, 1, 3); }
+    f('#bdbdbd', x - 3, 19, 22, 1);
+  },
+];
+const HALL_LIT: ((w: number) => number[][])[] = [(w) => [[(w >> 1) - 1, 2, 2, 2]], (w) => [0, 5].map((d) => [(w >> 1) - 4 + d, 4, 3, 4]), (w) => [0, 9].map((d) => [(w >> 1) - 8 + d, 7, 7, 10])]; // what of it is lit: the glass of the leaves, all of it
+const ATRIUM: ((f: Fill, w: number) => void)[] = [ // a tower's lobby, its columns glass between mullions under a frieze; in the middle two the doors, two leaves in a dark surround, on a step
+  (f, w) => { f('#e8eefb', 0, 0, w, 5); f('#2f3a5c', 0, 0, w, 1); for (const x of [1, w - 3]) { f('#3f6fd0', x, 1, 2, 3); f('#6c7596', x - 1, 4, 4, 1); } f('#2b3350', 3, 1, w - 6, 4); f('#7db6ff', 4, 2, w - 8, 2); },
+  (f, w) => {
+    f('#e8eefb', 0, 0, w, 10); f('#2f3a5c', 0, 0, w, 1); f('#ffd23f', 0, 1, w, 1); f('#2b3350', 5, 2, 10, 7); f('#bdbdbd', 4, 9, 12, 1);
+    for (const x of [1, w - 4]) { f('#3f6fd0', x, 2, 3, 6); f('#6a8bd8', x, 2, 3, 2); f('#6c7596', x - 1, 8, 5, 1); }
+    for (const x of [6, 11]) { f('#7db6ff', x, 3, 3, 2); f('#3f6fd0', x, 5, 3, 2); f('#4a5a7a', x, 7, 3, 1); }
+  },
+  (f, w) => {
+    f('#e8eefb', 0, 0, w, 20); f('#2f3a5c', 0, 0, w, 3); f('#ffd23f', 0, 3, w, 1); f('#2b3350', 11, 4, 22, 15); f('#bdbdbd', 10, 19, 24, 1);
+    for (const x of [1, w - 10]) { f('#3f6fd0', x, 4, 9, 13); f('#6a8bd8', x, 4, 9, 4); f('#6c7596', x - 1, 17, 11, 3); }
+    for (const x of [12, 23]) { f('#7db6ff', x, 5, 9, 5); f('#3f6fd0', x, 10, 9, 6); f('#dce8ff', x + 1, 6, 2, 1); f('#4a5a7a', x, 16, 9, 2); }
+    f('#ffd23f', 20, 9, 1, 3); f('#ffd23f', 23, 9, 1, 3);
+  },
+];
+const ATRIUM_LIT: ((w: number) => { bays: number[][]; doors: number[][] })[] = [ // its lit parts: the glass of the two end columns (a hash picks the lamp of each) and of the doors
+  (w) => ({ bays: [[1, 1, 2, 3], [w - 3, 1, 2, 3]], doors: [[4, 2, w - 8, 2]] }),
+  (w) => ({ bays: [[1, 2, 3, 6], [w - 4, 2, 3, 6]], doors: [[6, 3, 3, 4], [11, 3, 3, 4]] }),
+  (w) => ({ bays: [[1, 4, 9, 13], [w - 10, 4, 9, 13]], doors: [[12, 5, 9, 11], [23, 5, 9, 11]] }),
+];
+const lamp = (f: Fill, L: number, x: number, y: number, w: number, h: number, tone: number) => { const k = L === 2 ? 3 : 2; f(hex(tone), x, y, w, h); if (L && h > k) f(shade(tone, 0.8), x, y + k, w, h - k); }; // a lit window: a lighter upper part over a darker one
+// A window with its glass at (x, y), w x h: by day in a frame with a glint and a sill, by night a lamp if `tone` says it is lit. A curtain-wall `cell` is bare glass, lighter at the top.
+const BLUE = ['#1a2250', '#3f6fd0', '#7db6ff', '#dce8ff'], AQUA = ['#2b3a5c', '#5cc0d8', '#a8ecf6', '#f2feff']; // a pane's frame, glass, sky (the top of it) and glint: a house's, and a villa's, which is lighter
+const pane = (f: Fill, L: number, night: boolean, x: number, y: number, w: number, h: number, tone?: number, [frame, glass, sky, glint] = BLUE) => {
+  if (night) return tone !== undefined && lamp(f, L, x, y, w, h, tone);
+  if (L === 2) { f(frame, x - 1, y - 1, w + 2, h + 2); f('#f4f4f4', x - 2, y + h + 1, w + 4, 1); f('#aaa', x - 2, y + h + 2, w + 4, 1); }
+  if (L === 1) { f(frame, x, y - 1, w, 1); f('#aaa', x - 1, y + h, w + 2, 1); }
+  f(glass, x, y, w, h); f(sky, x, y, w, L === 2 ? 3 : L ? 2 : 1);
+  if (L) f(glint, x, y, 1, L === 2 ? 2 : 1);
+};
+const villa = (f: Fill, L: number, night: boolean, x: number, y: number, w: number, h: number, tone: (c: number) => number | undefined) => { // a villa's window: aqua glass with two glints slanting across it (a long one and a short, from near and mid up); by night lamps 3 and 5 texels apart from mid up
+  if (night) {
+    const n = Math.max(1, Math.round(w / [w, 3, 5][L])), at = (c: number) => x + Math.round((c * w) / n); // n lamps across, a texel of mullion between them
+    for (let c = 0; c < n; c++) { const t = tone(c); if (t !== undefined) lamp(f, L, at(c), y, at(c + 1) - at(c) - +(c < n - 1), h, t); }
+    return;
+  }
+  pane(f, L, false, x, y, w, h, undefined, AQUA);
+  if (L) for (const [a, n] of L === 2 ? [[3, 6], [8, 3]] : [[2, 3]]) for (let k = 0; k < n && a + k < w - 1 && k < h - 1; k++) f(AQUA[2], x + a + k, y + h - 2 - k, 1, 1);
+};
+const cell = (f: Fill, L: number, night: boolean, x: number, y: number, w: number, h: number, tone?: number) => {
+  if (night) return tone !== undefined && lamp(f, L, x, y, w, h, tone);
+  f('#3f6fd0', x, y, w, h); f('#6aa8f7', x, y, w, Math.max(1, Math.round(h / 3)));
+};
+const city = memo((cols: number, rows: string, L: number, night: boolean, seed: number) => {
+  const kinds = rows.split(' '), [cw, h] = STOREY[L];
+  return tex(cols * cw, kinds.length * h, (g, w, H) => {
+    if (night) g('#000', 0, 0, w, H);
+    kinds.forEach((kind, i) => {
+      const f: Fill = (c, x, y, bw, bh) => g(c, x, H - (i + 1) * h + y, bw, bh), [on, ...tones] = LAMPS[kind === 'lobby' ? 'flat' : kind === 'door' ? 'win' : kind]; // the storey's own coordinates, from its top
+      const lit = (p: number, ...k: number[]) => (rnd(seed, i, ...k) < p ? tones[Math.floor(rnd(seed, i, ...k, 1) * tones.length)] : undefined); // the tone of a window's lamp, if it is lit
+      const base = () => { if (!night) { f('#fff', 0, 0, w, h); if (L === 2) f('#e2e2e2', 0, 18, w, 1); f('#c4c4c4', 0, h - 1, w, 1); } }; // wall and ledge
+      const entry = (x0: number, n: number) => { // the original door (see DOOR), centred in the n columns from x0 on: by night its glass and the lamp over it
+        const sub: Fill = (c, x, y, bw, bh) => f(c, x0 + x, y, bw, bh), sw = n * cw, dw = [1, 3, 7][L] + (n % 2 ? 0 : 1), x = (sw - dw) / 2;
+        if (!night) DOOR[L](sub, sw, dw);
+        else if (L) { lamp(sub, L, L === 2 ? x + 1 : x, L === 2 ? 7 : 4, L === 2 ? dw - 2 : dw, L === 2 ? 4 : 2, 0xffc070); sub('#ffe9a0', (sw >> 1) - 1, L === 2 ? 3 : 1, 2, 1); }
+      };
+      if (kind === 'glass') {
+        const [nf, fh, sp, sq] = TOWER[L], gh = fh - sp - sq;
+        if (!night) f('#e8eefb', 0, 0, w, h); // the mullions
+        for (let fl = 0; fl < nf; fl++) {
+          const y = fl * fh, p = on * 2 * rnd(seed, i, fl, 7); // a floor has more of its windows lit, or fewer: some floors are dark, some are on
+          if (!night) { f('#8da4cb', 0, y, w, fh); if (L === 2) f('#a9bde0', 0, y, w, 1); f('#e8eefb', 0, y + sp, w, gh); } // spandrel, a pale edge to it near, and the band of glass in its mullions
+          for (let c = 0; c < cols; c++) PANES[L].forEach(([dx, pw], k) => cell(f, L, night, c * cw + dx, y + sp, pw - +(c === cols - 1 && k === PANES[L].length - 1), gh, lit(p, fl, c, k)));
+        }
+      } else if (kind === 'atrium') {
+        if (!night) ATRIUM[L](f, w);
+        const { bays, doors } = ATRIUM_LIT[L](w);
+        if (night) { bays.forEach(([x, y, bw, bh], k) => { const t = lit(on, k); t !== undefined && lamp(f, L, x, y, bw, bh, t); }); doors.forEach(([x, y, bw, bh]) => lamp(f, L, x, y, bw, bh, 0xffe9c0)); }
+      } else if (kind === 'clad') {
+        base();
+        if (!night) for (let x = 0, b = [2, 3, 4][L]; x < w; x += b) f(x % (2 * b) ? '#fff' : '#d6d6d6', x, 0, 1, h - (L === 2 ? 2 : 1)); // a seam to every board, every other one picked out
+        for (let j = 0, n = Math.max(1, Math.round(cols / 2)), sw = [1, 2, 4][L]; j < n; j++) villa(f, L, night, Math.round(((j + 0.5) * w) / n - sw / 2), WIDE.lounge.y[L], sw, WIDE.lounge.h[L], (c) => lit(on, j, c));
+      } else if (kind === 'foyer' || kind in WIDE) {
+        base();
+        const { y, h: gh, panes } = WIDE[kind === 'foyer' ? 'lounge' : kind], gw = kind === 'foyer' ? cols - 1 : cols, m = [1, 1, 2][L], gap = [1, 1, 2][L], span = gw * cw - 2 * m + gap, n = panes(gw); // foyer: glass but for the last column, which is the door's
+        for (let j = 0; j < n; j++) {
+          const a = m + Math.round((j * span) / n), b = m + Math.round(((j + 1) * span) / n) - gap;
+          villa(f, L, night, a, y[L], b - a, gh[L], (c) => lit(on, j, c));
+        }
+        if (kind === 'foyer') entry(gw * cw, 1);
+      } else {
+        base();
+        if (kind === 'door') entry(0, cols);
+        else {
+          const [gx, gy, gw, gh] = GLAZING[kind === 'win' ? 'win' : 'flat'][L];
+          for (let c = 0; c < cols; c++) if (kind !== 'lobby' || Math.abs(c * cw + cw / 2 - w / 2) >= [2, 4, 8][L]) pane(f, L, night, c * cw + gx, gy, gw, gh, lit(on, c)); // not in front of the entrance
+          if (kind === 'lobby') { if (!night) HALL[L](f, w); else HALL_LIT[L](w).forEach(([x, y, bw, bh]) => lamp(f, L, x, y, bw, bh, 0xffe2ac)); }
+        }
+      }
+    });
+  });
+});
 const ROOF = 8; // roof tile size in near texels (4 and 2 on the mid and far grids)
 const roofTex = memo((L: number) => tex(ROOF >> (2 - L), ROOF >> (2 - L), (f, n) => { // shingle courses: 4 rows near (with a light row and joints), 2 mid and far
   const c = L === 2 ? 4 : 2;
@@ -107,6 +232,18 @@ const roofGeo = memo((w: number, d: number, h: number) => {
   }
   return g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
 });
+// gable roof, the ridge `w` long along x over a footprint `d` deep (`turn`: along z), rising h: its two slopes laid flat in UV space like a hip's (group 0), its two ends plain wall (group 1)
+const gableGeo = memo((w: number, d: number, h: number, turn: boolean) => {
+  const [a, b, c, k] = [w / 2, d / 2, h / 2, DENSITY / ROOF], s = Math.hypot(b, h) * k, pos: number[] = [], uv: number[] = [];
+  const quad = (p: number[][]) => { for (const i of [0, 1, 2, 0, 2, 3]) { pos.push(...p[i]); uv.push(...[[0, 0], [w * k, 0], [w * k, s], [0, s]][i]); } }; // corners counter-clockwise from outside, the eave first
+  quad([[-a, -c, b], [a, -c, b], [a, c, 0], [-a, c, 0]]); quad([[a, -c, -b], [-a, -c, -b], [-a, c, 0], [a, c, 0]]);
+  for (const p of [[a, -c, b], [a, -c, -b], [a, c, 0], [-a, -c, -b], [-a, -c, b], [-a, c, 0]]) { pos.push(...p); uv.push(0, 0); }
+  const g = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)).setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.addGroup(0, 12, 0); g.addGroup(12, 6, 1);
+  if (turn) g.rotateY(Math.PI / 2);
+  g.computeVertexNormals();
+  return g;
+});
 const NEON = new Set([0xff5de0, 0x5dfff0, 0xff3b3b, 0x3b6bff, 0xfff6b0, LAVA]); // neon, lamps, flames and lava are unlit: they glow in the shade as in the sun
 const METAL = new Map<number, Pbr>([[GOLD, [0.3, 1, 0.55, 0]], [IRON, [0.45, 1, 0.5, 0]]]); // metal throws the HD-2D light back as a highlight (a metalness short of 1: there is no sky to mirror but the hemisphere's)
 export const mat = memo((c: THREE.ColorRepresentation) => (NEON.has(c as number) ? glow(new THREE.MeshBasicMaterial({ color: c })) : toon(c, {}, METAL.get(c as number))));
@@ -114,7 +251,12 @@ export const mat = memo((c: THREE.ColorRepresentation) => (NEON.has(c as number)
 // Shared through memo: never mutate a shared material's state in a `tick` — build a local `glow`/`toon` for that (see models/invest/oil.ts, which colours its own lamp each frame).
 export const emissive = memo((c: THREE.ColorRepresentation) => glow(new THREE.MeshBasicMaterial({ color: c })));
 export const metal = memo((c: THREE.ColorRepresentation, pbr: Pbr) => toon(c, {}, pbr));
+export const lamplit = memo((c: number, night: number, k: number) => nightlit(toon(c, {}, METAL.get(c)), night, k)); // `mat(c)` by day, and by night it shines in `night` x k (see `nightlit`): a lit path, a strip of light
 const wallMat = memo((cols: number, kind: string, c: number) => lodMap(toon(c), (L) => facade(cols, kind, L)));
+const cityMat = memo((cols: number, rows: string, c: number, seed: number, lamps: boolean) => { // lamps: the night's drawing is the emissive map (white, so that the map alone says what is lit)
+  const m = lodMap(toon(c, lamps ? { emissive: 0xffffff } : {}), (L) => city(cols, rows, L, false, seed));
+  return lamps ? lodMap(m, (L) => city(cols, rows, L, true, seed), 'emissiveMap') : m;
+});
 const roofMat = memo((c: number) => lodMap(toon(c), roofTex));
 // Tower prism: a quarter of a square tower, its apex at the centre. Groups: 0 the outer wall (half-width a, height h), 1 the two walls beside it, 2 the roof (rises r to the apex).
 // A wall is textured along its length and up it in modules m tall, the roof in panes of 4 texels, so a texel is a world texel on every face
@@ -157,6 +299,7 @@ export const PK = 1.25; // the default draw scale of a registered model's author
 export const box = (g: THREE.Group, w: number, h: number, d: number, color: THREE.ColorRepresentation, x = 0, y = 0, z = 0, m: THREE.Material | THREE.Material[] = mat(color)) => part(g, geo(w * K, h * K, d * K), h * K, m, x * K, y * K, z * K);
 export const cyl = (g: THREE.Group, r: number, h: number, color: THREE.ColorRepresentation, x = 0, y = 0, z = 0) => part(g, cylGeo(r * K, h * K), h * K, mat(color), x * K, y * K, z * K);
 export const hip = (g: THREE.Group, w: number, d: number, h: number, y: number, color: number, x = 0, z = 0) => part(g, roofGeo(w * K, d * K, h * K), h * K, roofMat(color), x * K, y * K, z * K);
+export const gable = (g: THREE.Group, w: number, d: number, h: number, y: number, color: number, wall: number, x = 0, z = 0, turn = false) => part(g, gableGeo(w * K, d * K, h * K, turn), h * K, [roofMat(color), mat(wall)], x * K, y * K, z * K);
 export const plaque = (g: THREE.Group, text: string, bg: string, fg: string, w: number, h: number, x: number, y: number, z: number, s = 1) => { // sized in whole texels; s: texels to a pixel of its text (see plate)
   const side = mat(bg), W = Math.max(texels(w * K), inkWidth(text) * s + 2), H = texels(h * K);
   return part(g, geo(W / DENSITY, H / DENSITY, 0.12 * K), H / DENSITY, [side, side, side, side, plateMat(bg, fg, W, H, text, s), side], x * K, y * K, z * K);
@@ -164,6 +307,10 @@ export const plaque = (g: THREE.Group, text: string, bg: string, fg: string, w: 
 export const floor = (g: THREE.Group, cols: number, dcols: number, kind: string, color: number, y: number, x = 0, z = 0) => { // one storey, `cols` x `dcols` half-units, in final units; the entrance faces the viewer
   const alt = kind === 'glass' ? kind : 'win', side = wallMat(dcols, alt, color), plain = mat(color);
   return part(g, geo(cols / 2, 0.9, dcols / 2), 0.9, [side, side, plain, plain, wallMat(cols, kind, color), wallMat(cols, alt, color)], x, y, z);
+};
+export const block = (g: THREE.Group, cols: number, dcols: number, rows: string, color: number, y = 0, x = 0, z = 0, lamps = true, seed = 0) => { // a city building's walls (see `city`): a box of storeys, `rows` of them from the bottom up, cols x dcols half-units, in final units, the entrance facing the viewer; lamps: lit after dusk
+  const bare = rows.split(' ').map((k) => PLAIN[k] ?? k).join(' '), h = rows.split(' ').length * 0.9, side = cityMat(dcols, bare, color, seed + 2, lamps), plain = mat(color);
+  return part(g, geo(cols / 2, h, dcols / 2), h, [side, side, plain, plain, cityMat(cols, rows, color, seed, lamps), cityMat(cols, bare, color, seed + 1, lamps)], x, y, z);
 };
 export const final = (fn: (g: THREE.Group) => void) => (g: THREE.Group) => { const k = K; K = 1; fn(g); K = k; }; // props made of storeys are authored in final units
 // A static prop: a box [color, w, h, d, x, y, z] (y from the tile top, z from the lot centre), or a function drawing into the group
