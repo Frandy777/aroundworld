@@ -191,7 +191,10 @@ export const decal = (g: THREE.Group, rows: string[], x: number, y: number, z: n
 // A built model is baked into a few meshes: everything under `root` is brought into root's own space (each mesh by its own matrix and its parents', not root's: the model is still moved as one) and what shares a
 // material and a shadow setting is merged, so a hundred boxes cost a handful of draw calls, in the shadow pass as in the main one. A mesh of several materials (a storey, a sign) is cut along its groups first.
 // The geometries from memo are shared, so they are copied, never changed; the merged ones belong to root alone (see setOwner, which frees them).
+// A child group with a `userData.tick` moves every frame (the board calls it, see board.ts): it is left out of the batch and put back whole, its insides baked by whoever made it.
 export function bake(root: THREE.Group) {
+  const live = root.children.filter((o) => o.userData.tick);
+  live.forEach((o) => o.removeFromParent());
   const bins = new Map<string, { src: THREE.Mesh; material: THREE.Material; geometries: THREE.BufferGeometry[] }>();
   root.traverse((o) => {
     const m = o as THREE.Mesh;
@@ -210,4 +213,5 @@ export function bake(root: THREE.Group) {
     m.castShadow = src.castShadow; m.receiveShadow = src.receiveShadow;
     root.add(m);
   }
+  live.forEach((o) => root.add(o));
 }

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { box, cyl, final, floor, hip, plaque, GOLD, IRON, INK, type Prop } from '../builder';
 import { LAUNCH_PAD, MISSILE_LENGTH, MISSILE_NAME, MISSILE_SCALE, missile } from './missile';
+import { oil } from './oil';
 
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
@@ -203,40 +204,8 @@ export const INVEST_PROPS: Record<string, Prop[]> = {
       [[-0.33, 0.78, RED], [0.33, 0.78, GREEN]].forEach(([x, z, c]) => { cyl(g, 0.07, 0.1, c, x, 0.1, z); cyl(g, 0.04, 0.08, WHITE, x, 0.2, z); box(g, 0.02, 0.1, 0.02, INK, x, 0.28, z); }); // channel buoys
     }),
   ],
-  oil: [ // a derrick and its doghouse over the well, a pumpjack, two tanks and a flare stack on a concrete site, barrels at the front
-    final((g) => {
-      const [dx, dz] = [-0.62, -0.58], STEEL = 0x7b86a0, DARK = 0x2a2d3e, RED = 0xd9423e, WHITE = 0xf4f6fa;                  // derrick centre
-      const strut = (c: number, t: number, a: [number, number, number], b: [number, number, number]) => { // a bar of section t from point a to point b
-        const d = new THREE.Vector3(...b).sub(new THREE.Vector3(...a)), m = box(g, t, d.length(), t, c);
-        m.position.set(...a).addScaledVector(d, 0.5); m.quaternion.setFromUnitVectors(Y_AXIS, d.normalize());
-      };
-      box(g, 2.2, 0.08, 1.9, 0xb9b2a0, 0, 0, -0.05);                                                                         // site ground
-      for (const x of [-1, 1]) for (const z of [-1, 1]) strut(STEEL, 0.07, [dx + 0.36 * x, 0.08, dz + 0.36 * z], [dx + 0.08 * x, 3.58, dz + 0.08 * z]); // derrick: four legs leaning in
-      for (let i = 0; i < 8; i++) {                                                                                          // a girth ring every 0.5 and, between two rings, a brace on each visible face
-        const [a, b, y, s] = [0.36 - i * 0.04, 0.32 - i * 0.04, 0.08 + i * 0.5, i & 1 ? -1 : 1], L = 2 * a + 0.07;
-        for (const [w, d, x, z] of [[L, 0.05, 0, a], [0.05, L, -a, 0], [0.05, L, a, 0]]) box(g, w, 0.05, d, STEEL, dx + x, y - 0.025, dz + z);
-        if (i < 7) for (const [x0, z0, x1, z1] of [[-s * a, a, s * b, b], [a, -s * a, b, s * b], [-a, -s * a, -b, s * b]]) strut(STEEL, 0.04, [dx + x0, y, dz + z0], [dx + x1, y + 0.5, dz + z1]); // front, right, left
-      }
-      box(g, 0.66, 0.06, 0.66, 0x8a8fa3, dx, 0.4, dz);                                                                       // drill floor
-      box(g, 0.07, 3.5, 0.07, DARK, dx, 0.08, dz); box(g, 0.2, 0.2, 0.2, RED, dx, 2.2, dz);                                   // drill pipe, travelling block
-      box(g, 0.28, 0.14, 0.28, DARK, dx, 3.58, dz); box(g, 0.1, 0.1, 0.1, 0xff3b3b, dx, 3.72, dz);                            // crown block, beacon
-      box(g, 0.22, 0.26, 0.26, 0xe8e8e8, -0.08, 0.08, -0.34); box(g, 0.28, 0.05, 0.32, RED, -0.08, 0.34, -0.34); box(g, 0.08, 0.1, 0.02, 0x7db6ff, -0.08, 0.2, -0.2); // doghouse: walls, roof, window
-      cyl(g, 0.38, 0.9, WHITE, 0.45, 0.08, -0.5); cyl(g, 0.395, 0.14, RED, 0.45, 0.45, -0.5); cyl(g, 0.4, 0.05, 0xcfd6e6, 0.45, 0.93, -0.5); // tank: body, band, rim
-      cyl(g, 0.28, 0.06, 0x9aa5bd, 0.45, 0.98, -0.5); cyl(g, 0.15, 0.06, 0x9aa5bd, 0.45, 1.04, -0.5);                         // stepped roof
-      cyl(g, 0.27, 0.6, 0xcfd6e6, 0.75, 0.08, 0.15); cyl(g, 0.285, 0.1, STEEL, 0.75, 0.35, 0.15); cyl(g, 0.19, 0.06, 0x9aa5bd, 0.75, 0.68, 0.15); // small tank
-      box(g, 0.2, 0.12, 0.2, 0x8a8fa3, 1, 0.08, -0.8); box(g, 0.07, 2.4, 0.07, IRON, 1, 0.2, -0.8); box(g, 0.14, 0.08, 0.14, DARK, 1, 2.6, -0.8); // flare stack, its nozzle
-      box(g, 0.24, 0.2, 0.24, 0xff8a1f, 1, 2.68, -0.8); box(g, 0.18, 0.22, 0.18, GOLD, 1.02, 2.88, -0.8); box(g, 0.1, 0.2, 0.1, 0xfff6b0, 1.05, 3.1, -0.8); // flame, leaning with the wind
-      box(g, 0.04, 0.85, 0.07, DARK, 0.2, 0.1, -0.2);                                                                        // tank ladder
-      const [px, pz] = [-0.4, 0.46];
-      box(g, 1.05, 0.05, 0.3, 0x3a3f5a, px, 0.08, pz);                                                                       // pumpjack: skid
-      strut(STEEL, 0.08, [px - 0.2, 0.13, pz], [px, 0.66, pz]); strut(STEEL, 0.08, [px + 0.2, 0.13, pz], [px, 0.66, pz]);     // samson post
-      box(g, 1, 0.09, 0.2, RED, px, 0.62, pz).rotation.z = 0.1;                                                              // walking beam, nodding
-      cyl(g, 0.15, 0.2, RED, px - 0.49, 0.5, pz).rotation.x = Math.PI / 2;                                                   // horse head
-      box(g, 0.3, 0.22, 0.24, 0x3b5dc9, px + 0.3, 0.13, pz - 0.04); cyl(g, 0.17, 0.1, DARK, px + 0.3, 0.3, pz + 0.1).rotation.x = Math.PI / 2; // gearbox, crank
-      strut(0xcfd6e6, 0.05, [px + 0.49, 0.7, pz + 0.12], [px + 0.4, 0.4, pz + 0.12]);                                        // pitman arm
-      box(g, 0.07, 0.3, 0.07, RED, px - 0.49, 0.13, pz); cyl(g, 0.24, 0.02, 0x14161f, px - 0.46, 0.08, pz + 0.05);          // wellhead, oil pool
-      for (const [x, z, c] of [[0.2, 0.62, RED], [0.45, 0.64, 0x3b5dc9], [0.32, 0.82, 0xe0a020]]) cyl(g, 0.1, 0.24, c, x, 0.08, z); // barrels
-    }),
+  oil: [ // a derrick and its doghouse over the well, a pumping unit at work (its beam nodding, a faint light blinking), two tanks joined by pipes, a flare stack with a living flame, barrels at the front (see oil.ts)
+    final(oil),
   ],
   bbc: [ // Broadcasting House: a stepped Art Deco tower in Portland stone (statue over the doors, the three black BBC squares on its frieze, a red ON AIR sign and a banded mast on top), on its forecourt an outside-broadcast van with a dish, a camera on its dolly and a studio light
     final((g) => {

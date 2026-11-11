@@ -83,6 +83,7 @@ export function createBoard() {
     if (pad) { sign(bld); bake(bld); }
     return { g, slab, card, letters, props, rocket, side, tint: [ground, card.material], pad, bld, key: '', pop: 1 };
   });
+  const live = tiles.flatMap((o) => o.props.children.filter((c) => c.userData.tick)); // the props that move (a model's groups with a `tick`, see bake): driven by the clock every frame
   type Plot = (typeof tiles)[number];
   // A new owner or a new level: the building rises from the plot, squashed wide and flat first, with a little overshoot (ease out back)
   const squash = (o: Plot) => { const e = 1 + 2.70158 * (o.pop - 1) ** 3 + 1.70158 * (o.pop - 1) ** 2; o.bld.scale.set(1 + (1 - e) * 0.3, Math.max(e, 0.01), 1 + (1 - e) * 0.3); };
@@ -155,6 +156,7 @@ export function createBoard() {
       if (i >= 0) { tiles[i].g.userData.lift = 0.6; walls(i, true); }
     },
     update(t: number, dt: number) {
+      live.forEach((m) => m.userData.tick(t));
       tiles.forEach((o) => { // each tile lifts as one piece (slab, card, props, building)
         const rise = o.g.userData.lift - o.g.position.y, popping = o.pop < 1;
         o.g.position.y += rise * Math.min(1, dt * 14);
