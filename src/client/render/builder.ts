@@ -73,16 +73,18 @@ const facade = memo((cols: number, kind: string, L: number) => {
 // ---- A city building's walls (see models/city.ts) ----
 // A face is one tall texture of whole storeys (`rows`, kinds from the bottom up), drawn twice: its day look, and its night, which is the emissive map of the material (see `nightlit`): black walls, and the glass of the windows that
 // are lit, in the colour of their lamps (a lighter tone over a darker one). Whether a window is lit, and in which lamp, comes of a hash of its place and the face's seed: some are dark, the lamps differ, and a face is always the same.
-// win / door: a house's windows, one to a column, and its door. flat / lobby: a flat's taller windows, and its entrance, glass doors under a sign. glass / atrium: a tower's curtain wall (two floors to a storey, small panes between
-// mullions: a tower is made of many little windows, never a few big ones) and its glazed lobby. A face that is not the front has no entrance (`PLAIN`).
+// win / door: a house's windows, one to a column, and its door. flat / lobby: a flat's taller windows, and its entrance, glass doors under a sign. glass / atrium: a tower's ribbon glazing (a flat strip of glass to every floor, the width of
+// the face, four floors to a storey near and the same pitch of rows down the levels) and its lobby, the same with doors in the middle two columns. By night its strips are white, in segments that are lit or dark.
+// A face that is not the front has no entrance (`PLAIN`).
 // foyer / lounge / ribbon / clad: a villa's. A modern house is glass in long panes, never a window to a column: lounge is a wall of it (foyer, the same with the door in its last column), ribbon a band low on a plain wall,
 // and clad upright boards of timber with a slot of window to each two columns (the block is made in the timber's colour, which tints its boards).
 // All of it is `villa` glass: aqua, lighter than a house's blue, with a pair of glints across each pane. By night a pane is a row of lamps in a house's amber, each lit or dark like any window: a long pane never glows as one sheet,
 // which in HD-2D would be the biggest, whitest thing in the scene (the others keep their light to small, saturated lamps).
 const rnd = (...k: number[]) => { let h = 0x811c9dc5; for (const v of k) { h = Math.imul(h ^ v, 0x01000193); h ^= h >>> 15; } return (h >>> 0) / 2 ** 32; }; // a hash of its arguments, in [0, 1)
 const PLAIN: Record<string, string> = { door: 'win', lobby: 'flat', atrium: 'glass', foyer: 'ribbon', lounge: 'ribbon' }; // what a storey is on a face without the entrance
-const LAMPS: Record<string, number[]> = { // a kind's windows: the share of them that is lit by night, and the tones of their lamps (warm in a house, a blue screen now and then in the flats, cold in a tower, bright in a lobby)
-  win: [0.7, 0xff9f3a, 0xffb457, 0xffca7d], flat: [0.55, 0xff9f3a, 0xffc063, 0xffdca4, 0x86b8ff], glass: [0.4, 0xcfe8ff, 0xaed6ff, 0xffe2b4], atrium: [0.9, 0xffdca0, 0xffe6b8],
+const WHITE = [0xf4f6fb, 0xf4f6fb, 0xe6eefc, 0xfff3e0]; // a tower's lamps: neutral whites, a cool one and a warm one now and then
+const LAMPS: Record<string, number[]> = { // a kind's windows: the share of them that is lit by night, and the tones of their lamps (warm in a house, a blue screen now and then in the flats, white in a tower and its lobby)
+  win: [0.7, 0xff9f3a, 0xffb457, 0xffca7d], flat: [0.55, 0xff9f3a, 0xffc063, 0xffdca4, 0x86b8ff], glass: [0.8, ...WHITE], atrium: [0.9, ...WHITE],
   foyer: [0.6, 0xcc7f2e, 0xcc9046, 0xcca264], lounge: [0.55, 0xcc7f2e, 0xcc9046, 0xcca264], ribbon: [0.45, 0xcc7f2e, 0xcc9046, 0xcca264], clad: [0.6, 0xcc9046, 0xcca264], // a villa's are fewer and dimmer: the owner's colour, not the amber, is what it is known by after dusk
 };
 const WIDE: Record<string, { y: number[]; h: number[]; panes: (cols: number) => number }> = { // a villa's panes, far, mid, near: where the glass starts, how tall it is, and how many panes there are to so many columns
@@ -91,8 +93,7 @@ const WIDE: Record<string, { y: number[]; h: number[]; panes: (cols: number) => 
 const GLAZING: Record<string, [number, number, number, number][]> = { // the glass of a window, [x, y, w, h] from the left of its column and the top of its storey, far, mid, near: a flat's are taller than a house's
   win: [[1, 1, 1, 3], [1, 2, 3, 5], [3, 5, 5, 8]], flat: [[1, 1, 1, 3], [1, 1, 3, 6], [3, 3, 5, 10]],
 };
-const TOWER: [number, number, number, number][] = [[1, 5, 1, 1], [2, 5, 1, 0], [2, 10, 2, 0]]; // a tower's storey: floors to it, rows to a floor, rows of spandrel over and under the glass of a floor
-const PANES: [number, number][][] = [[[1, 2]], [[1, 4]], [[1, 4], [6, 5]]]; // and the panes of a column: [x, width] (the last pane of a face is one narrower, to close it with a mullion)
+const RIBBON: [number, number, number, number][] = [[1, 5, 1, 2], [2, 5, 1, 2], [4, 5, 1, 2]]; // a tower's storey, far, mid, near: floors to it, rows to a floor, rows of spandrel over the glass of a floor, rows of glass (a strip the width of the face)
 const HALL: ((f: Fill, w: number) => void)[] = [ // a flat's entrance: two glass leaves in a dark surround under a navy sign band with a gold rule, the leaves tall (the glass takes all but a low kickplate); the two middle columns of 4
   (f, w) => { const x = (w >> 1) - 2; f('#1a2250', x, 1, 4, 4); f('#7db6ff', x + 1, 2, 2, 2); },
   (f, w) => { const x = (w >> 1) - 4; f('#1a2250', x - 1, 1, 10, 2); f('#ffd23f', x + 1, 2, 6, 1); f('#2b3350', x - 1, 3, 10, 7); for (const d of [0, 5]) { f('#7db6ff', x + d, 4, 3, 2); f('#3f6fd0', x + d, 6, 3, 2); f('#4a5a7a', x + d, 8, 3, 1); } f('#bdbdbd', x - 1, 9, 10, 1); },
@@ -103,26 +104,14 @@ const HALL: ((f: Fill, w: number) => void)[] = [ // a flat's entrance: two glass
   },
 ];
 const HALL_LIT: ((w: number) => number[][])[] = [(w) => [[(w >> 1) - 1, 2, 2, 2]], (w) => [0, 5].map((d) => [(w >> 1) - 4 + d, 4, 3, 4]), (w) => [0, 9].map((d) => [(w >> 1) - 8 + d, 7, 7, 10])]; // what of it is lit: the glass of the leaves, all of it
-const ATRIUM: ((f: Fill, w: number) => void)[] = [ // a tower's lobby, its columns glass between mullions under a frieze; in the middle two the doors, two leaves in a dark surround, on a step
-  (f, w) => { f('#e8eefb', 0, 0, w, 5); f('#2f3a5c', 0, 0, w, 1); for (const x of [1, w - 3]) { f('#3f6fd0', x, 1, 2, 3); f('#6c7596', x - 1, 4, 4, 1); } f('#2b3350', 3, 1, w - 6, 4); f('#7db6ff', 4, 2, w - 8, 2); },
-  (f, w) => {
-    f('#e8eefb', 0, 0, w, 10); f('#2f3a5c', 0, 0, w, 1); f('#ffd23f', 0, 1, w, 1); f('#2b3350', 5, 2, 10, 7); f('#bdbdbd', 4, 9, 12, 1);
-    for (const x of [1, w - 4]) { f('#3f6fd0', x, 2, 3, 6); f('#6a8bd8', x, 2, 3, 2); f('#6c7596', x - 1, 8, 5, 1); }
-    for (const x of [6, 11]) { f('#7db6ff', x, 3, 3, 2); f('#3f6fd0', x, 5, 3, 2); f('#4a5a7a', x, 7, 3, 1); }
-  },
-  (f, w) => {
-    f('#e8eefb', 0, 0, w, 20); f('#2f3a5c', 0, 0, w, 3); f('#ffd23f', 0, 3, w, 1); f('#2b3350', 11, 4, 22, 15); f('#bdbdbd', 10, 19, 24, 1);
-    for (const x of [1, w - 10]) { f('#3f6fd0', x, 4, 9, 13); f('#6a8bd8', x, 4, 9, 4); f('#6c7596', x - 1, 17, 11, 3); }
-    for (const x of [12, 23]) { f('#7db6ff', x, 5, 9, 5); f('#3f6fd0', x, 10, 9, 6); f('#dce8ff', x + 1, 6, 2, 1); f('#4a5a7a', x, 16, 9, 2); }
-    f('#ffd23f', 20, 9, 1, 3); f('#ffd23f', 23, 9, 1, 3);
-  },
-];
-const ATRIUM_LIT: ((w: number) => { bays: number[][]; doors: number[][] })[] = [ // its lit parts: the glass of the two end columns (a hash picks the lamp of each) and of the doors
-  (w) => ({ bays: [[1, 1, 2, 3], [w - 3, 1, 2, 3]], doors: [[4, 2, w - 8, 2]] }),
-  (w) => ({ bays: [[1, 2, 3, 6], [w - 4, 2, 3, 6]], doors: [[6, 3, 3, 4], [11, 3, 3, 4]] }),
-  (w) => ({ bays: [[1, 4, 9, 13], [w - 10, 4, 9, 13]], doors: [[12, 5, 9, 11], [23, 5, 9, 11]] }),
-];
 const lamp = (f: Fill, L: number, x: number, y: number, w: number, h: number, tone: number) => { const k = L === 2 ? 3 : 2; f(hex(tone), x, y, w, h); if (L && h > k) f(shade(tone, 0.8), x, y + k, w, h - k); }; // a lit window: a lighter upper part over a darker one
+const PORTAL: [number, number, number, number][] = [[3, 3, 1, 1], [3, 4, 4, 3], [3, 5, 12, 9]]; // a tower's doors, far, mid, near: the top of their recess, the top and the height of the glass of the two leaves, the width of a leaf
+const portal = (f: Fill, L: number, night: boolean, x: number, w: number) => { // the lobby's doors in the w texels from x (its two middle columns, under the strip of the first floor): two glass leaves in a dark recess on a step, lit by night
+  const [top, gt, gh, lw] = PORTAL[L], leaves = [x + 1, x + w - 1 - lw], h = STOREY[L][1];
+  if (night) return leaves.forEach((lx) => lamp(f, L, lx, gt, lw, gh, 0xffe9c0));
+  f('#2b3350', x, top, w, h - top); f('#bdbdbd', x, h - 1, w, 1);
+  for (const lx of leaves) { f('#3f6fd0', lx, gt, lw, gh); f('#7db6ff', lx, gt, lw, [1, 2, 4][L]); if (L) f('#dce8ff', lx + 1, gt, L, 1); }
+};
 // A window with its glass at (x, y), w x h: by day in a frame with a glint and a sill, by night a lamp if `tone` says it is lit. A curtain-wall `cell` is bare glass, lighter at the top.
 const BLUE = ['#1a2250', '#3f6fd0', '#7db6ff', '#dce8ff'], AQUA = ['#2b3a5c', '#5cc0d8', '#a8ecf6', '#f2feff']; // a pane's frame, glass, sky (the top of it) and glint: a house's, and a villa's, which is lighter
 const pane = (f: Fill, L: number, night: boolean, x: number, y: number, w: number, h: number, tone?: number, [frame, glass, sky, glint] = BLUE) => {
@@ -141,10 +130,6 @@ const villa = (f: Fill, L: number, night: boolean, x: number, y: number, w: numb
   pane(f, L, false, x, y, w, h, undefined, AQUA);
   if (L) for (const [a, n] of L === 2 ? [[3, 6], [8, 3]] : [[2, 3]]) for (let k = 0; k < n && a + k < w - 1 && k < h - 1; k++) f(AQUA[2], x + a + k, y + h - 2 - k, 1, 1);
 };
-const cell = (f: Fill, L: number, night: boolean, x: number, y: number, w: number, h: number, tone?: number) => {
-  if (night) return tone !== undefined && lamp(f, L, x, y, w, h, tone);
-  f('#3f6fd0', x, y, w, h); f('#6aa8f7', x, y, w, Math.max(1, Math.round(h / 3)));
-};
 const city = memo((cols: number, rows: string, L: number, night: boolean, seed: number) => {
   const kinds = rows.split(' '), [cw, h] = STOREY[L];
   return tex(cols * cw, kinds.length * h, (g, w, H) => {
@@ -158,18 +143,19 @@ const city = memo((cols: number, rows: string, L: number, night: boolean, seed: 
         if (!night) DOOR[L](sub, sw, dw);
         else if (L) { lamp(sub, L, L === 2 ? x + 1 : x, L === 2 ? 7 : 4, L === 2 ? dw - 2 : dw, L === 2 ? 4 : 2, 0xffc070); sub('#ffe9a0', (sw >> 1) - 1, L === 2 ? 3 : 1, 2, 1); }
       };
-      if (kind === 'glass') {
-        const [nf, fh, sp, sq] = TOWER[L], gh = fh - sp - sq;
-        if (!night) f('#e8eefb', 0, 0, w, h); // the mullions
+      if (kind === 'glass' || kind === 'atrium') { // a tower's glazing, a strip to every floor; the lobby's two middle columns are its doors
+        const [nf, ph, y0, gh] = RIBBON[L], door = (c: number) => kind === 'atrium' && Math.abs((c + 0.5) * cw - w / 2) < cw;
+        if (!night) f('#dde6f5', 0, 0, w, h); // the spandrel
         for (let fl = 0; fl < nf; fl++) {
-          const y = fl * fh, p = on * 2 * rnd(seed, i, fl, 7); // a floor has more of its windows lit, or fewer: some floors are dark, some are on
-          if (!night) { f('#8da4cb', 0, y, w, fh); if (L === 2) f('#a9bde0', 0, y, w, 1); f('#e8eefb', 0, y + sp, w, gh); } // spandrel, a pale edge to it near, and the band of glass in its mullions
-          for (let c = 0; c < cols; c++) PANES[L].forEach(([dx, pw], k) => cell(f, L, night, c * cw + dx, y + sp, pw - +(c === cols - 1 && k === PANES[L].length - 1), gh, lit(p, fl, c, k)));
+          const y = fl * ph + y0, p = Math.min(1, on * (0.55 + 0.9 * rnd(seed, i, fl, 7))); // a floor has more of its windows lit, or fewer: some floors are dark, some are on
+          if (!night) { if (L === 2) f('#9db0d4', 0, y - 1, w, 1); f('#3f6fd0', 0, y, w, gh); f('#7db6ff', 0, y, w, 1); } // a shadow under the slab near, the glass, and the sky in it
+          else for (let c = 0; c < cols; c++) {
+            if (door(c) && fl) continue; // the doors' recess is below the first floor's strip
+            const t = door(c) ? 0xffe9c0 : lit(p, fl, c);
+            if (t !== undefined) { f(hex(t), c * cw, y, cw, 1); f(shade(t, 0.8), c * cw, y + 1, cw, gh - 1); }
+          }
         }
-      } else if (kind === 'atrium') {
-        if (!night) ATRIUM[L](f, w);
-        const { bays, doors } = ATRIUM_LIT[L](w);
-        if (night) { bays.forEach(([x, y, bw, bh], k) => { const t = lit(on, k); t !== undefined && lamp(f, L, x, y, bw, bh, t); }); doors.forEach(([x, y, bw, bh]) => lamp(f, L, x, y, bw, bh, 0xffe9c0)); }
+        if (kind === 'atrium') portal(f, L, night, (cols / 2 - 1) * cw, 2 * cw);
       } else if (kind === 'clad') {
         base();
         if (!night) for (let x = 0, b = [2, 3, 4][L]; x < w; x += b) f(x % (2 * b) ? '#fff' : '#d6d6d6', x, 0, 1, h - (L === 2 ? 2 : 1)); // a seam to every board, every other one picked out

@@ -38,7 +38,7 @@ const WARM = new THREE.Color(0xffd9a0);
 const CITY_LIT: [number, number, number, number, number, number, number, number, number, number][] = [
   [0.2, 0.7, 1.52, -1.45, 0.75, -0.3, 0xffab42, 3.2, 1.8, 5.8],  // Lv 1 cottage
   [0.22, 0.88, 1.55, -1.48, 0.95, -0.3, 0xffb44c, 1.8, 1.0, 6.2], // Lv 2 villa: weaker, so that the owner's colour is not washed out
-  [0.15, 1.18, 1.52, -1.48, 1.3, -0.35, 0xffc46b, 4.4, 2.6, 7.0], // Lv 3 tower
+  [0.15, 1.18, 1.52, -1.48, 1.3, -0.35, 0xeef2ff, 3.4, 2.0, 7.0], // Lv 3 tower: white like its windows, so that the owner's light band keeps its colour
 ];
 const haloScale = new Float32Array(lamps.length).fill(1);
 // Every frame: artificial light follows the hour, the tokens carry lanterns in their own colour warmed toward amber (the active one burns brighter),
