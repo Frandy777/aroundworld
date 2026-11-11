@@ -22,10 +22,13 @@ async function main() {
   await last?.catch(() => {}); // a run still starting finishes first (a failed one has reported itself, and took down what it had made)
   await Promise.all([10, 15, 20, 25].map((n) => document.fonts.load(`${n}px "Jersey ${n}"`)));
   stops.splice(0).reverse().forEach((stop) => stop());
+  const dev = import.meta.env.DEV ? await import('./dev') : null;
+  dev?.preBoot();
   skin(); // frames, cursors and sprites become CSS variables before the first paint
   stops.push(initStage(), bindKeys());
   (kept.root ??= createRoot(document.getElementById('root')!)).render(<App />);
   stops.push(boot());
+  if (dev) stops.push(dev.initDev());
 }
 kept.started = main();
 

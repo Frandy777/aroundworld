@@ -132,6 +132,8 @@ button, [data-tile], .pcard, .item { cursor: var(--cur-hand); }
 #dev > .btn { margin: 0; }
 #dev .box { width: 100%; }
 #dev .bd { max-height: calc(100vh - 270px); }
+:root:not(:has(#hud)) #dev { left: 14px; top: 12px; }
+:root:not(:has(#hud)) #dev .bd { max-height: calc(100vh - 80px); }
 #dev select { width: 100%; cursor: var(--cur-hand); }
 #dev textarea { width: 100%; resize: vertical; }
 #dev input[type=range] { width: 100%; margin: 4px 0; accent-color: var(--gold); cursor: var(--cur-hand); }

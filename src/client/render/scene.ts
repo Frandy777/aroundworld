@@ -254,6 +254,27 @@ export function overview(lift: number) {
   camera.updateProjectionMatrix();
 }
 
+/** Where the camera stands round its target: elevation above the ground and azimuth, in degrees. */
+export function viewAngles() {
+  const off = camera.position.clone().sub(controls.target), r = Math.hypot(off.x, off.z);
+  return { elev: THREE.MathUtils.radToDeg(Math.atan2(off.y, r)), az: THREE.MathUtils.radToDeg(Math.atan2(off.x, off.z)) };
+}
+
+/** Put the camera on `(x, lift, z)` at once, with no tween or damping lag, and mark shadows to redraw. */
+export function jumpTo(x: number, z: number, zoom: number | 'fit' = camera.zoom, elev = THREE.MathUtils.radToDeg(ELEV), az = 0, lift = 0) {
+  goal = null;
+  const el = THREE.MathUtils.degToRad(elev), a = THREE.MathUtils.degToRad(az), h = Math.cos(el) * 150;
+  controls.target.set(x, lift, z);
+  camera.position.set(x + Math.sin(a) * h, lift + Math.sin(el) * 150, z + Math.cos(a) * h);
+  camera.zoom = THREE.MathUtils.clamp(zoom === 'fit' ? fitZoom : zoom, controls.minZoom, controls.maxZoom);
+  camera.updateProjectionMatrix();
+  const damp = controls.enableDamping;
+  controls.enableDamping = false;
+  updateCamera(0);
+  controls.enableDamping = damp;
+  dirtyShadow();
+}
+
 // Orbit to an axis-aligned azimuth, where the tiles face the camera squarely. pickY may also lift the camera back to a height
 // (resetView restores the default ELEV pitch after a free drag; rotateView keeps the height it has).
 const Q = Math.PI / 2;

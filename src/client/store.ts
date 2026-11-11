@@ -36,6 +36,7 @@ export const bumpAssets = () => { tallies = []; bump(); };
 export type Tab = 'tile' | 'assets' | 'log';
 export interface Button { label: string; click(): void; kbd?: boolean; reply?(v: Answer): void } // reply: the question behind the button takes other answers too (the roll question: the dev panel's commands)
 export const hudLive = cell(false); // the HUD is up (the turn order is settled)
+export const stageOnly = cell(false); // dev: hide the screen's chrome so the 3D board stands alone
 export const selectedTile = cell(-1); // the tile in the side panel
 export const viewedPlayer = cell(-1); // whose assets the side panel shows
 export const activeTab = cell<Tab>('tile'); // which pane

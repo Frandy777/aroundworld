@@ -8,6 +8,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b",
+    "check": "tsc -b && node scripts/check.mjs",
+    "shots": "node scripts/shot-matrix.mjs",
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {

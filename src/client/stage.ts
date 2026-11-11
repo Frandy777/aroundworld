@@ -13,6 +13,7 @@ import { G, activeTab, hd2d, hudLive, selectedTile, tip } from './store';
 // The 3D side: the board, the tokens and the camera. The frame loop runs for the whole life of the page (or until a hot update, see initStage).
 let board: ReturnType<typeof createBoard>;
 export const cam = { follow: -1 }; // the player the camera tracks (-1: free)
+export const loop = { paused: false, scale: 1, time: 0, step: (_dt: number) => {}, draw: () => {} }; // dev: pause, slow or step the world's clock while keeping the camera live
 
 // ---- The board and its tokens ----
 export const setOwner = (i: number, o: Owned | null, S: GameState) => board.setOwner(i, o && { color: S.players[o.p].color, lv: o.lv, m: o.m });
@@ -126,17 +127,23 @@ export function initStage() {
     const off = new AbortController(), unfollow = () => (cam.follow = -1), hoverStep = bindCanvas(off.signal);
     controls.addEventListener('start', unfollow);
     let last = 0, t = 0; // the frame clock: `t` is only ever fed bounded steps, so a stalled loop cannot leap the world forward
-    document.addEventListener('visibilitychange', () => { if (document.hidden) { finishTweens(); last = 0; } }, { signal: off.signal }); // a hidden tab draws no frames: its animations end at once, and it comes back to a zero step, not one huge one
-    undo.push(() => { off.abort(); controls.removeEventListener('start', unfollow); });
-    renderer.setAnimationLoop((now) => {
-      const dt = last ? Math.min((now - last) / 1000, 0.1) : 0;
-      last = now; t += dt;
-      hoverStep(); // against the frame just drawn, before the board reacts to it
-      updateTweens(dt); updateWorld(t, dt); updateActors(t, dt); board.update(t, dt);
+    const advance = (dt: number) => { t += dt; loop.time = t; updateTweens(dt); updateWorld(t, dt); updateActors(t, dt); board.update(t, dt); };
+    const draw = (camDt = 0) => {
       if (cam.follow >= 0 && tokens[cam.follow]) { const p = tokens[cam.follow].g.position; focus(p.x, p.z); }
-      updateCamera(dt);
+      updateCamera(camDt);
       board.labels();
       render();
+    };
+    loop.draw = () => draw(0);
+    loop.step = (dt: number) => { advance(Math.max(0, dt)); draw(0); };
+    document.addEventListener('visibilitychange', () => { if (document.hidden) { finishTweens(); last = 0; } }, { signal: off.signal }); // a hidden tab draws no frames: its animations end at once, and it comes back to a zero step, not one huge one
+    undo.push(() => { off.abort(); controls.removeEventListener('start', unfollow); loop.step = loop.draw = () => {}; });
+    renderer.setAnimationLoop((now) => {
+      const raw = last ? Math.min((now - last) / 1000, 0.1) : 0;
+      last = now;
+      hoverStep(); // against the frame just drawn, before the board reacts to it
+      advance(loop.paused ? 0 : raw * loop.scale);
+      draw(raw);
     });
     undo.push(() => renderer.setAnimationLoop(null));
     return dispose;

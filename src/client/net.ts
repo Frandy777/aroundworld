@@ -4,7 +4,7 @@ import type { Ev } from '../shared/types';
 // Who this tab is: kept for the life of the tab, so a reload returns to the same seat.
 const pid = sessionStorage.getItem('pid') ?? (sessionStorage.setItem('pid', crypto.randomUUID()), sessionStorage.getItem('pid')!);
 
-const dev = new URLSearchParams(location.search).get('dev') === '1'; // a room made from a page opened with ?dev=1 is a dev room: its host may seat bots
+export const devUrl = new URLSearchParams(location.search).get('dev') === '1'; // a room made from a page opened with ?dev=1 is a dev room: its host may seat bots
 
 const FAIL: Record<Fail, string> = { 'no-room': 'Room not found', full: 'Room is full', started: 'The game has already started', busy: 'No room available' };
 
@@ -19,7 +19,7 @@ export const listen = (h: Handlers) => (on = h);
 
 const TRIES = 6, PING = 20_000, PONG = 10_000; // a ping goes out every PING ms; if nothing at all comes back within PONG ms of it, the link is dead
 let ws: WebSocket | null = null;
-let want: { code: string; name: string } | null = null; // the room to be in; null once left
+let want: { code: string; name: string; dev: boolean } | null = null; // the room to be in; null once left
 let joined = false, tries = 0, retry: ReturnType<typeof setTimeout> | undefined, beat: ReturnType<typeof setInterval> | undefined;
 let dead: ReturnType<typeof setTimeout> | undefined; // armed by every ping, disarmed by whatever the server says
 let first: ((err: string | null) => void) | null = null;
@@ -28,9 +28,9 @@ export function send(msg: C2S) { if (ws?.readyState === WebSocket.OPEN) ws.send(
 export const answer = (id: number, v: unknown) => send({ t: 'answer', id, v });
 
 /** Enter a room (an empty code creates one). Resolves null once in, else why not. */
-export function open(code: string, name: string): Promise<string | null> {
+export function open(code: string, name: string, dev = devUrl): Promise<string | null> {
   leave();
-  want = { code, name }; joined = false; tries = 0;
+  want = { code, name, dev }; joined = false; tries = 0;
   return new Promise((res) => { first = res; connect(); });
 }
 
@@ -57,7 +57,7 @@ function end(why: string) {
 function connect() {
   const w = want!, q = new URLSearchParams({ pid, name: w.name });
   if (w.code) q.set('code', w.code);
-  if (dev) q.set('dev', '1');
+  if (w.dev) q.set('dev', '1');
   const sock = (ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws?${q}`));
   sock.onopen = () => {
     clearInterval(beat);
