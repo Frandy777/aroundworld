@@ -23,7 +23,7 @@ export const flag = (g: THREE.Group, color: number) => {
   box(g, 1.4, 0.85, 0.08, color, cx, 1.8, z); box(g, 1.4, 0.16, 0.09, dark, cx, 1.8, z);
 };
 export const sign = (g: THREE.Group) => { const z = SPOT[1] + 0.35; box(g, 0.14, 0.9, 0.14, 0x8a5a2b, 0, 0, z - 0.1); plaque(g, 'SALE', '#fff', '#d9423e', 1.8, 0.85, 0, 0.7, z, 2); }; // out on the apron, clear of the props behind it
-// A special city's landmark stands on its plot at every level, so an upgrade is posted on a small gold sign at the front-left corner instead
+// A special city's landmark stands on its plot at every level, so an upgrade is posted on a small gold sign at the front-left corner instead (unless its model builds the upgrades itself, see buildLevels)
 export const level = (g: THREE.Group, lv: number, m: boolean) => {
   if (!lv) return;
   const [x, z] = SPOT;

@@ -336,7 +336,11 @@ export const final = (fn: (g: THREE.Group) => void) => (g: THREE.Group) => { con
 export type Prop = [color: number, w: number, h: number, d: number, x: number, y: number, z: number] | ((g: THREE.Group) => void);
 // One registered model, one file under models/{special,invest,public}/: `key` is the tile name or kind it builds (a tile's name wins over its kind, see buildProps),
 // `props` its static parts and `scale` its authored-units draw scale (PK by default). The registry finds the files itself (import.meta.glob): a new or tuned model never touches a shared table.
-export interface ModelDef { key: string; props: Prop[]; scale?: number }
+// `levels`: what a special city's upgrades build over its standing props, level 1 first and each one on top of the ones before it; they say the level, so such a model has no level sign. They are drawn into
+// the building group (see buildLevels), so they rise from the plot on every upgrade, and they are static: a part that moves belongs in `props`.
+// `owner`: for a model that only one tile draws, so that its lights and colours can follow the lot: called whenever the lot changes hands or is mortgaged or redeemed, and when it is drawn again (see board.rebuild), with
+// its owner's colour while it stands (bought, not mortgaged) and null while it is for sale or mortgaged; the model switches its lamps (see `switchOf`) and sets the colour of whatever shows its owner.
+export interface ModelDef { key: string; props: Prop[]; scale?: number; levels?: Prop[][]; owner?: (color: number | null) => void }
 export const drawProps = (g: THREE.Group, props: Prop[], k = PK) => { // props are drawn k times bigger than authored (see K)
   K = k;
   for (const r of props) typeof r === 'function' ? r(g) : box(g, r[1], r[2], r[3], r[0], r[4], r[5], r[6]);

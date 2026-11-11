@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { kindAt, tileAt, TILES } from '../../shared/data';
 import { tokens } from './actors';
-import { cityLamps, lotVisible } from './board';
+import { cityLamps, lotLit, lotVisible } from './board';
 import { LOT, PAD, POS } from './layout';
 import { LAMP, lamps, spot } from './light';
 import { free, hdCam, LENS, renderer, scene, sun, zoomed } from './scene';
@@ -68,6 +68,7 @@ function lights(t: number) {
   const flk = 1 + 0.12 * Math.sin(t * 7) * Math.sin(t * 3.1);
   lamps[12].intensity *= flk; lamps[18].intensity *= flk; lamps[19].intensity *= flk;
   lamps[11].intensity *= 0.92 + 0.08 * Math.sin(t * 2.2);
+  lamps[24].intensity *= +lotLit(hongkong); // the tower's outline is out while it is for sale or mortgaged
   spot.intensity = act && lotVisible(act.tile) ? 70 * k : 0;
   if (act) {
     spot.position.copy(act.g.position).add(new THREE.Vector3(-3, 11, 4));

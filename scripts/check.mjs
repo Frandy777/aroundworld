@@ -120,7 +120,8 @@ for (const t of TILES) {
 // Bounds (the plot's footprint relative to the props origin, PAD vs LOT in layout.ts) are reported, not asserted: a mast or a funnel may poke out on purpose.
 const BX = [PAD.x - LOT.x - PAD.w / 2, PAD.x - LOT.x + PAD.w / 2], BZ = [PAD.z - LOT.z - PAD.d / 2, PAD.z - LOT.z + PAD.d / 2];
 let modelCount = 0, moverCount = 0;
-for (const [key, def] of Object.entries(defs)) {
+const builds = Object.entries(defs).flatMap(([key, def]) => Array.from({ length: (def.levels?.length ?? 0) + 1 }, (_, lv) => [lv ? `${key} Lv ${lv}` : key, def, lv])); // a model with upgrades is built at every level
+for (const [key, def, lv] of builds) {
   modelCount++;
   const g = new THREE.Group();
   drawProps(g, def.props, def.scale ?? PK);
@@ -129,6 +130,7 @@ for (const [key, def] of Object.entries(defs)) {
   bake(g);
   named.forEach((n) => g.getObjectByName(n) instanceof THREE.Group && bake(g.getObjectByName(n))); // the board bakes kept subtrees on their own (the missile)
   named.forEach((n) => assert.ok(g.getObjectByName(n), `model "${key}": named node "${n}" was lost in bake`));
+  if (lv) { const h = new THREE.Group(); drawProps(h, def.levels.slice(0, lv).flat(), def.scale ?? PK); bake(h); g.add(h); } // the upgrades up to this level, baked apart from the props like the board's building group
   const movers = [];
   g.traverse((o) => o.userData.tick && movers.push(o));
   moverCount += movers.length;

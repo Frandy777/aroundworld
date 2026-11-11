@@ -7,7 +7,7 @@ import { canvas, codePixels, shade } from './art';
 import { CARD_SIZE, codeOf, drawCard, drawGround, drawPad } from './labels';
 import { CARD, LOT, PAD, POS, S, SLAB, SZ, TOP } from './layout';
 import { bake, freeBaked, memo, sideTex } from './builder';
-import { buildProps, building, flag, level, modelKey, setModelHandler, sign } from './models';
+import { buildLevels, buildProps, building, flag, modelKey, modelOwner, setModelHandler, sign } from './models';
 import { MISSILE_NAME } from './models/missile';
 
 const VACANT = 0xb9b2a0; // the plot of a tile nobody owns
@@ -15,6 +15,7 @@ export interface CityLamp { tile: number; g: THREE.Group; lv: number }
 export const cityLamps: CityLamp[] = []; // one entry per ordinary city tile, read by hd2d.ts to light standing, unmortgaged buildings
 const tileGroups: THREE.Group[] = [];
 export const lotVisible = (i: number) => tileGroups[i]?.visible ?? true;
+export const lotLit = (i: number): boolean => tileGroups[i]?.userData.lit ?? false; // the lot is bought and standing (not for sale, not mortgaged): its landmark's lights may be on
 
 // The lamp inside every tile (see `backlit`), burning from dusk: how much of it comes up through the floor (the least), through the plot (enough to read its colour at a glance) and through the lettering
 // (nearly all of it, so a white code stands out of its card as a dark one does). The card is unlit, as bright by night as by day, so it is dimmed (see `dusk`) to the share of its colours that the lamp lets through:
@@ -63,7 +64,7 @@ export function createBoard() {
   const tiles = TILES.map((t) => {
     const g = new THREE.Group();
     g.position.set(POS[t.i].x, 0, POS[t.i].z);
-    g.userData = { lift: 0 };
+    g.userData = { lift: 0, lit: false };
     const side = lodMap(toon(t.color), sideTex);
     const ground = lodMap(backlit(toon(0xffffff), THROUGH.floor), (L) => groundTex(t.type, t.kind, t.color, L)); // lit: buildings and tokens cast their shadows on it
     const slab = new THREE.Mesh(slabGeo(SZ, SLAB, SZ), [side, ground]);
@@ -87,7 +88,7 @@ export function createBoard() {
     if (pad) { sign(bld); bake(bld); }
     tileGroups[t.i] = g;
     const lamp = t.type === 'city' ? (cityLamps.push({ tile: t.i, g, lv: 0 }), cityLamps[cityLamps.length - 1]) : null;
-    return { g, slab, card, letters, props, rocket, side, tint: [ground, card.material], pad, bld, lamp, key: '', pop: 1 };
+    return { g, slab, card, letters, props, rocket, side, tint: [ground, card.material], pad, bld, lamp, key: '', pop: 1, redo: () => {} };
   });
   // the props that move (a model's groups with a `tick`, kept by bake at any depth): driven by the clock every frame, listed per tile so a rebuild swaps in its new nodes
   const liveOf = (props: THREE.Group) => { const l: THREE.Object3D[] = []; props.traverse((c) => c.userData.tick && l.push(c)); return l; };
@@ -99,6 +100,7 @@ export function createBoard() {
   function setOwner(i: number, st: { color: number; lv: number; m: boolean } | null, opts?: { sign?: boolean }) {
     const t = TILES[i], o = tiles[i];
     if (t.type === 'public') return;
+    o.redo = () => setOwner(i, st, opts); // the lot as it was last set, to be drawn again (see rebuild)
     const key = st ? `${st.color}|${st.lv}` : ''; // mortgaging or redeeming changes neither
     if (st && key !== o.key) { o.pop = 0; squash(o); }
     o.key = key;
@@ -108,15 +110,17 @@ export function createBoard() {
     o.letters.material = inkMat(codeOf(t)[1], !!st?.m);
     const col = st?.m ? 0x555555 : st?.color ?? VACANT;
     o.pad!.material = padMats(col);
+    const lit = st && !st.m ? st.color : null; // a standing lot (bought, not mortgaged) has its lights on, its owner's colour in them: for sale or mortgaged they are out
+    o.g.userData.lit = lit !== null; modelOwner(t, lit);
     if (!st) { if (opts?.sign !== false) sign(o.bld); }
-    else if (t.type === 'special') level(o.bld, st.lv, st.m); // the landmark stands on its plot at every level: only the level is added
+    else if (t.type === 'special') buildLevels(o.bld, t, st.lv, st.m); // the landmark stands on its plot at every level: only the level is added, by what its model builds for the upgrades or else a small sign
     else if (t.type === 'city') st.lv ? building(o.bld, st.lv, st.m ? 0x8c8c8c : new THREE.Color(t.color).lerp(new THREE.Color(0xffffff), 0.6).getHex(), col, st.m) : flag(o.bld, st.m ? 0x666666 : st.color); // an investment adds nothing: its props stand on the owner's plot, the colour says it all, a flag would only hide them
     if (o.lamp) o.lamp.lv = st && !st.m ? st.lv : 0;
     bake(o.bld);
     dirtyShadow();
   }
 
-  // Rebuilds a tile's props in place (its model file hot-updated, or a dev poke at it): the building side keeps whatever ownership had put there.
+  // Rebuilds a tile's props in place (its model file hot-updated, or a dev poke at it): the building side is drawn again from the ownership it last had, since a special city's upgrades are in its model file too.
   const rebuild = (i: number) => {
     const o = tiles[i];
     freeBaked(o.props);
@@ -127,6 +131,7 @@ export function createBoard() {
     if (rocket) bake(rocket);
     o.rocket = rocket;
     live[i] = liveOf(o.props);
+    o.redo();
     dirtyShadow();
   };
   setModelHandler((keys) => tiles.forEach((_, i) => keys.includes(modelKey(TILES[i]) ?? '') && rebuild(i)));

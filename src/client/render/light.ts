@@ -65,7 +65,7 @@ const DARK = new THREE.Color(0); // the lamps of a material that has none (see `
 const TOON = /* glsl */`
 varying vec3 vViewPosition;
 uniform vec4 uPbr;
-uniform float uBacklit, uLamp;
+uniform float uBacklit, uLamp, uSwitch;
 uniform vec3 uNight;
 float hdGloss;
 struct ToonMaterial { vec3 diffuseColor; };
@@ -110,7 +110,7 @@ hdGloss = 0.0;
 #endif
 `;
 const NIGHT = /* glsl */`
-float night = smoothstep( 0.12, 1.0, uLamp );
+float night = smoothstep( 0.12, 1.0, uLamp ) * uSwitch;
 #ifdef USE_EMISSIVEMAP
 	totalEmissiveRadiance = totalEmissiveRadiance * ( 1.0 + 0.42 * uHd ) + diffuseColor.rgb * vec3( 0.08, 0.05, 0.022 ) * uHd;
 	totalEmissiveRadiance *= night;
@@ -132,7 +132,7 @@ const RELIEF = /* glsl */`
 `;
 /** onBeforeCompile of every `toon()` material (one function, so every program of the same kind is shared: three names a program by its text). */
 export function lit(this: THREE.Material, sh: THREE.WebGLProgramParametersWithUniforms) {
-  Object.assign(sh.uniforms, U, { uPbr: { value: new THREE.Vector4(...((this.userData.pbr as Pbr | undefined) ?? PBR)) }, uBacklit: { value: (this.userData.backlit as number | undefined) ?? 0 }, uNight: { value: (this.userData.night as THREE.Color | undefined) ?? DARK } });
+  Object.assign(sh.uniforms, U, { uPbr: { value: new THREE.Vector4(...((this.userData.pbr as Pbr | undefined) ?? PBR)) }, uBacklit: { value: (this.userData.backlit as number | undefined) ?? 0 }, uNight: { value: (this.userData.night as THREE.Color | undefined) ?? DARK }, uSwitch: switchOf(this) });
   sh.fragmentShader = sh.fragmentShader
     .replace('#include <lights_toon_pars_fragment>', '')
     .replace('#include <shadowmap_pars_fragment>', `#include <shadowmap_pars_fragment>\n${TOON}`)
@@ -150,6 +150,10 @@ export const backlit = <M extends THREE.Material>(m: M, t: number) => { m.userDa
  * A plain material shines all over in `c` times `k` (past 1 is HDR, which blooms in HD-2D): a lit path, a strip of light. A textured one (the windows of a building) is lit where its `emissiveMap` is (see `lodMap`, which draws
  * it per zoom level like the colour): that drawing is the night's own, window by window, a quarter brighter again in HD-2D, to bloom. Every other material has black lamps: it adds nothing. */
 export const nightlit = <M extends THREE.Material>(m: M, c: THREE.ColorRepresentation, k = 1) => { m.userData.night = new THREE.Color(c).multiplyScalar(k); return m; };
+
+/** The switch of a material's lamps (see `nightlit`), 1 until set: 0 puts them all out, 1 lights them again, in either look. A material is shared by everything drawn with it (see memo), so only one that a single tile uses
+ * can be switched on its own (see ModelDef.owner). */
+export const switchOf = (m: THREE.Material) => (m.userData.on ??= { value: 1 }) as THREE.IUniform<number>;
 
 /** An unlit card is as bright by night as by day, so the lettering that the lamp lights (see `backlit`) stands out of it no better than by day: as the lamp (`uLamp`) comes on, the card is dimmed to `t` of its colours. */
 export const dusk = <M extends THREE.MeshBasicMaterial>(m: M, t: number) => {
