@@ -2,9 +2,9 @@ import * as THREE from 'three';
 import { box, lamplit } from '../../builder';
 
 // ---- An ordinary city's building: what every level shares (the buildings themselves are one file each, lv1/lv2/lv3) ----
-// After dusk every window is a lamp of its own (see `block`: lit or dark, warm or cold) and the garden is lit by warm lamps, never in the owner's colour:
-// the plot below is that colour, and glows, so a part that shone in it would melt into it. By day the lamps are plain trim (a building takes none of the
-// fixed PointLights, see light.ts). A mortgaged building has them all out: the walls are grey, and its glass the glass of any other house.
+// After dusk every window is a lamp of its own (see `block`: lit or dark, warm or cold), the garden is lit by warm lamps (never in the owner's colour:
+// the plot below is that colour, and glows, so a part that shone in it would melt into it), and HD-2D adds a warm wrap-around PointLight pair per standing
+// building (see hd2d.ts). A mortgaged building has them all out: the walls are grey, and its glass the glass of any other house.
 export const WARM = 0xffc070; // the light of a path and the garden lamps
 const BULB = 0xfff6b0;        // a lamp's bulb (one of NEON, so unlit)
 
@@ -28,6 +28,6 @@ export function kit(g: THREE.Group, wall: number, roof: number, m: boolean): Kit
     g, wall, roof, lamps: !m, sand, green, trim, grey, dim, lit,
     walk: (w, z) => box(g, w, 0.03, 1.72 - z, sand, 0, 0, (z + 1.72) / 2, lit(sand, WARM, 0.3)),
     bed: (x, y, z, w) => { box(g, w, 0.1, 0.22, dim(0x8a5a2b), x, y, z); box(g, w - 0.08, 0.15, 0.14, green, x, y + 0.1, z, lit(green, WARM, 0.18)); },
-    bulb: (x, y, z, s = 0.07) => box(g, s, s, s, dim(BULB), x, y, z),
+    bulb: (x, y, z, s = 0.085) => box(g, s, s, s, dim(BULB), x, y, z),
   };
 }

@@ -22,7 +22,7 @@ export function villa(k: Kit) {
   for (const [x, z] of [[-1.03, 1.03], [-0.53, 1.03], [-0.03, 1.03], [-1.03, 0.5], [-1.03, 0]]) box(g, 0.05, 0.3, 0.05, iron, x, 1.04, z); // its posts
   for (const x of [-0.85, -0.53, -0.21]) bulb(x, 1.2, 1.03);                                                 // string lights under the rail
   box(g, 0.5, 0.05, 0.12, dim(0xbdbdbd), 0.75, 0, 1.06); box(g, 0.34, 0.03, 0.66, sand, 0.75, 0, 1.46, lit(sand, WARM, 0.3)); // the doorstep, and the path from it to the plot's front
-  for (const x of [0.5, 1]) { cyl(g, 0.035, 0.2, iron, x, 0, 1.5); bulb(x, 0.2, 1.5, 0.08); }                     // a bollard light either side of it
+  for (const x of [0.5, 1]) { cyl(g, 0.035, 0.2, iron, x, 0, 1.5); bulb(x, 0.2, 1.5, 0.11); }                     // a bollard light either side of it
   for (const x of [0.4, 1.1]) { cyl(g, 0.08, 0.08, dim(0x8a5a2b), x, 0, 1.13); for (const [r, y, h] of [[0.12, 0.08, 0.12], [0.085, 0.2, 0.1], [0.05, 0.3, 0.08]]) cyl(g, r, h, green, x, y, 1.13); } // a topiary in a tub either side of the door
   box(g, 1.3, 0.03, 0.76, teak, -0.55, 0, 1.42); box(g, 1.06, 0.07, 0.42, trim, -0.55, 0, 1.55); box(g, 0.94, 0.02, 0.3, dim(WATER), -0.55, 0.06, 1.55, lit(WATER, AQUA, 0.9)); // the pool: decking, coping, water that glows after dusk
   for (const x of [-0.85, -0.4]) { box(g, 0.34, 0.06, 0.16, trim, x, 0.03, 1.14); box(g, 0.1, 0.12, 0.16, trim, x - 0.12, 0.03, 1.14); box(g, 0.1, 0.07, 0.16, roof, x + 0.08, 0.09, 1.14); } // two loungers on the deck, a towel in the owner's colour on each

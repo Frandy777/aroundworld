@@ -1,45 +1,73 @@
 import * as THREE from 'three';
-import { kindAt, TILES } from '../../shared/data';
+import { kindAt, tileAt, TILES } from '../../shared/data';
 import { tokens } from './actors';
-import { LOT, POS } from './layout';
-import { lamps, spot } from './light';
+import { cityLamps, lotVisible } from './board';
+import { LOT, PAD, POS } from './layout';
+import { LAMP, lamps, spot } from './light';
 import { free, hdCam, LENS, renderer, scene, sun, zoomed } from './scene';
 import { ISLETS } from './scenery';
 import { sky } from './sky';
 import { FLOAT } from './world';
 
-// ---- Local lights: the warm pools of Octopath's streets. Four of the fourteen lamps are the tokens' lanterns and one is borrowed by the missiles (strike.ts); the rest
-// stand at the glowing places of the map: [lamp, where, colour, intensity, reach], reach in world units ----
-const at = (i: number, x: number, y: number, z: number, k = 1.25) => POS[i].clone().add(new THREE.Vector3(LOT.x + x * k, y * k, LOT.z + z * k)); // a point of the props' frame (their drawing is 1.25 times its units)
+// ---- Local lights: the warm pools of Octopath's streets. Four lamps are the tokens' lanterns, one is borrowed by missiles (strike.ts), nineteen stand at glowing landmarks/islets,
+// and each ordinary city holds a key+fill pair when built: [lamp, where, colour, intensity, reach, tile?], reach in world units ----
+const at = (i: number, x: number, y: number, z: number, k = 1.25) => POS[i].clone().add(new THREE.Vector3(LOT.x + x * k, (TILES[i].type === 'public' ? 0 : PAD.h) + y * k, LOT.z + z * k));
 const kinds = (kind: string) => TILES.filter((t) => t.kind === kind).map((t) => t.i);
-const [casinos, clubs] = [kinds('casino'), kinds('club')];
-const FIXED: [number, THREE.Vector3, number, number, number][] = [
-  [5, at(casinos[0], 0, 1, 0.8), 0xff5de0, 12, 7], [6, at(casinos[1], 0, 1, 0.8), 0xff5de0, 12, 7], // the casinos' marquees
-  [7, at(clubs[0], 0, 0.8, 0.8), 0x5dfff0, 10, 7], [8, at(clubs[1], 0, 0.8, 0.8), 0x5dfff0, 10, 7], // the nightclubs' neon
-  [9, POS[kindAt('area51')].clone().add(new THREE.Vector3(LOT.x + 0.6, 2.4, LOT.z)), 0x5dfff0, 14, 8], // the saucer's beam
-  [10, at(kindAt('start'), 0, 0.9, 0.5), 0xffb43a, 5, 5], // the gold ingot of START: a pool at its foot, weak and low (up among the gate's white posts, a stronger lamp turned them gold and fogged the whole tile)
+const [casinos, clubs, chokes, oils] = ['casino', 'club', 'choke', 'oil'].map(kinds);
+const [vegas, pyongyang, zurich, devil] = [tileAt('Las Vegas'), tileAt('Pyongyang'), tileAt('Zurich'), kindAt('devil')];
+const FIXED: [number, THREE.Vector3, number, number, number, number?][] = [
+  [5, at(casinos[0], 0, 1, 0.8), 0xff5de0, 12, 7, casinos[0]], [6, at(casinos[1], 0, 1, 0.8), 0xff5de0, 12, 7, casinos[1]], // the casinos' marquees
+  [7, at(clubs[0], 0, 0.8, 0.8), 0x5dfff0, 10, 7, clubs[0]], [8, at(clubs[1], 0, 0.8, 0.8), 0x5dfff0, 10, 7, clubs[1]], // the nightclubs' neon
+  [9, POS[kindAt('area51')].clone().add(new THREE.Vector3(LOT.x + 0.6, 2.4, LOT.z)), 0x5dfff0, 14, 8, kindAt('area51')], // the saucer's beam
+  [10, at(kindAt('start'), 0, 0.9, 0.5), 0xffb43a, 5, 5, kindAt('start')], // the gold ingot of START: a pool at its foot, weak and low
   [11, new THREE.Vector3(ISLETS[1][0] + 0.3, 3.6, ISLETS[1][1]), 0xfff0c0, 28, 13], // the lighthouse
   [12, new THREE.Vector3(ISLETS[4][0], 4.4, ISLETS[4][1]), 0xff7a1a, 24, 14], // the volcano's lava
   [13, new THREE.Vector3(0, FLOAT, 0), 0x8fc4ff, 14, 12], // the globe
+  ...chokes.map((ti, k): [number, THREE.Vector3, number, number, number, number] => [14 + k, at(ti, 0, 2.2, -0.45, 1), 0xffe494, 4.8, 6.5, ti]), // harbour twin lighthouses
+  ...oils.map((ti, k): [number, THREE.Vector3, number, number, number, number] => [18 + k, at(ti, 0.99, 2.95, -0.65, 1), 0xff8524, 6, 6.5, ti]), // oil-site flare stacks
+  [20, at(vegas, -0.3, 1.5, 0.45, 1), 0xffae52, 5.5, 6, vegas], // Fabulous Las Vegas sign & neon
+  [21, at(pyongyang, -0.26, 5.7, -0.35, 1), 0xff4d3b, 5, 6.5, pyongyang], // Juche Tower's glowing red torch
+  [22, at(zurich, 0, 0.85, 0.55, 1), 0xffbe66, 3.8, 5.5, zurich], // Bahnhofstrasse street lamps
+  [23, at(devil, 0.72, 2.95, -0.15, 1), 0xffe494, 4.5, 6, devil], // Devil's Island lighthouse & searchlight
 ];
 for (const [i, p, color, , reach] of FIXED) { lamps[i].position.copy(p); lamps[i].color.setHex(color); lamps[i].distance = reach; }
 
 const WARM = new THREE.Color(0xffd9a0);
+// Each ordinary city level gets a porch/apron key lamp (+z front, inset from the tile's sea cliff like START's ingot so water reflections stay soft)
+// and a courtyard fill over the tile's middle (-x side wall and card yard): [kx, ky, kz, fx, fy, fz, colour, keyPower, fillPower, reach]
+const CITY_LIT: [number, number, number, number, number, number, number, number, number, number][] = [
+  [0.2, 0.7, 1.52, -1.45, 0.75, -0.3, 0xffab42, 3.2, 1.8, 5.8],  // Lv 1 cottage
+  [0.22, 0.88, 1.55, -1.48, 0.95, -0.3, 0xffb44c, 3.8, 2.2, 6.2], // Lv 2 villa
+  [0.15, 1.18, 1.52, -1.48, 1.3, -0.35, 0xffc46b, 4.4, 2.6, 7.0], // Lv 3 tower
+];
+const haloScale = new Float32Array(lamps.length).fill(1);
 // Every frame: artificial light follows the hour, the tokens carry lanterns in their own colour warmed toward amber (the active one burns brighter),
-// the lava and the lighthouse flicker, and a spot follows the active token.
+// standing city buildings cast warm wrap-around pools, the lava, flares and lighthouse flicker, and a spot follows the active token.
 function lights(t: number) {
   const act = tokens.find((k) => k?.active), k = sky.lampK;
-  for (const [i, , , power] of FIXED) lamps[i].intensity = power * k;
+  for (const [i, , , power, , ti] of FIXED) lamps[i].intensity = ti !== undefined && !lotVisible(ti) ? 0 : power * k;
   for (let i = 0; i < 4; i++) {
     const token = tokens[i], l = lamps[i];
-    l.intensity = token ? (token.active ? 8 : 3.5) * k : 0;
+    l.intensity = token && lotVisible(token.tile) ? (token.active ? 8 : 3.5) * k : 0;
     if (!token) continue;
     l.position.copy(token.g.position); l.position.y += 2.6; l.position.z += 0.6;
     l.color.set(token.color).lerp(WARM, 0.55); l.distance = 7;
   }
-  lamps[12].intensity *= 1 + 0.12 * Math.sin(t * 7) * Math.sin(t * 3.1);
+  for (let i = 0; i < cityLamps.length; i++) {
+    const c = cityLamps[i], key = lamps[LAMP.city + i * 2], fill = lamps[LAMP.city + i * 2 + 1];
+    if (!c || !c.lv || !c.g.visible) { key.intensity = fill.intensity = 0; continue; }
+    const [kx, ky, kz, fx, fy, fz, col, kp, fp, reach] = CITY_LIT[c.lv - 1], p = POS[c.tile], y0 = p.y + c.g.position.y + PAD.h;
+    key.position.set(p.x + LOT.x + kx, y0 + ky, p.z + LOT.z + kz);
+    fill.position.set(p.x + LOT.x + fx, y0 + fy, p.z + LOT.z + fz);
+    key.color.setHex(col); fill.color.setHex(col);
+    key.intensity = kp * k; fill.intensity = fp * k;
+    key.distance = reach; fill.distance = reach * 0.9;
+    haloScale[LAMP.city + i * 2] = 0.75; haloScale[LAMP.city + i * 2 + 1] = 0.35; // keep air haze subtle around dense rows of houses
+  }
+  const flk = 1 + 0.12 * Math.sin(t * 7) * Math.sin(t * 3.1);
+  lamps[12].intensity *= flk; lamps[18].intensity *= flk; lamps[19].intensity *= flk;
   lamps[11].intensity *= 0.92 + 0.08 * Math.sin(t * 2.2);
-  spot.intensity = act ? 70 * k : 0;
+  spot.intensity = act && lotVisible(act.tile) ? 70 * k : 0;
   if (act) {
     spot.position.copy(act.g.position).add(new THREE.Vector3(-3, 11, 4));
     spot.target.position.copy(act.g.position);
@@ -153,6 +181,7 @@ void main() {
 		}
 	}
 	for ( int i = 0; i < ${nLamp}; i ++ ) {
+		if ( uL[ i ].w <= 0.0 ) continue;
 		vec3 o = uL[ i ].xyz - uEye; float tc = dot( o, rd ), h2 = dot( o, o ) - tc * tc + uL[ i ].w * uL[ i ].w, h = sqrt( h2 );
 		acc += uLC[ i ] * ( ( atan( ( tm - tc ) / h ) - atan( - tc / h ) ) / h * pow( clamp( 1.0 - h2 / 20.25, 0.0, 1.0 ), 2.0 ) );
 	}
@@ -175,7 +204,7 @@ void main() {
 	vec4 w = uIVP * vec4( v * 2.0 - 1.0, d * 2.0 - 1.0, 1.0 ); w.xyz /= w.w;
 	vec3 rd = normalize( w.xyz - uEye ), c = texture2D( tC, v ).rgb;
 	float tm = d >= 1.0 ? 4000.0 : length( w.xyz - uEye );
-	if ( d >= 1.0 ) c = sky( rd ); else c *= mix( 1.0, texture2D( tA, v ).r, uAO );
+	if ( d >= 1.0 ) c = sky( rd ); else c *= mix( 1.0, texture2D( tA, v ).r, uAO * ( 1.0 - smoothstep( 0.85, 1.8, max( c.r, max( c.g, c.b ) ) ) ) );
 	float tr = exp( - tau( uEye, rd, tm ) );
 	gl_FragColor = vec4( c * tr + haze( rd ) * ( 1.0 - tr ) + texture2D( tV, v ).rgb, 1.0 );
 }`, { tC: sceneTex, tD: D, tA: aoTex, tV: volTex, uIVP: IVP, uEye: EYE, uSun: SUN, uLit: LIT, uSunC: SUNC, uHor: HOR, uZen: ZEN, uFog: FOG, uAO: K.ao });
@@ -279,8 +308,8 @@ function uniforms() {
   dofR.value = K.blur.value * renderer.getPixelRatio(); dofTilt.value = zoomed();
   FOG.value.w = K.haze.value;
   lamps.forEach((l, i) => {
-    L.value[i].set(l.position.x, l.position.y, l.position.z, LAMP_SOFT);
-    LC.value[i].set(l.color.r, l.color.g, l.color.b).multiplyScalar(l.intensity * LAMP_K);
+    L.value[i].set(l.position.x, l.position.y, l.position.z, l.intensity > 0 ? LAMP_SOFT : 0);
+    LC.value[i].set(l.color.r, l.color.g, l.color.b).multiplyScalar(l.intensity * LAMP_K * haloScale[i]);
   });
   SP.value.set(spot.position.x, spot.position.y, spot.position.z, Math.cos(spot.angle));
   SPD.value.copy(spot.target.position).sub(spot.position).normalize();

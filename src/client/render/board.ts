@@ -11,6 +11,10 @@ import { buildProps, building, flag, level, modelKey, setModelHandler, sign } fr
 import { MISSILE_NAME } from './models/missile';
 
 const VACANT = 0xb9b2a0; // the plot of a tile nobody owns
+export interface CityLamp { tile: number; g: THREE.Group; lv: number }
+export const cityLamps: CityLamp[] = []; // one entry per ordinary city tile, read by hd2d.ts to light standing, unmortgaged buildings
+const tileGroups: THREE.Group[] = [];
+export const lotVisible = (i: number) => tileGroups[i]?.visible ?? true;
 
 // The lamp inside every tile (see `backlit`), burning from dusk: how much of it comes up through the floor (the least), through the plot (enough to read its colour at a glance) and through the lettering
 // (nearly all of it, so a white code stands out of its card as a dark one does). The card is unlit, as bright by night as by day, so it is dimmed (see `dusk`) to the share of its colours that the lamp lets through:
@@ -47,6 +51,7 @@ const BRACKET = new THREE.ExtrudeGeometry(new THREE.Shape().moveTo(0, 0).lineTo(
 
 // ---- Board ----
 export function createBoard() {
+  cityLamps.length = tileGroups.length = 0;
   const root = new THREE.Group();
   scene.add(root);
   const cursor = (color: number) => { // four brackets, each turned to its corner by a negative scale (arms pointing in)
@@ -80,7 +85,9 @@ export function createBoard() {
     if (pad) g.add(pad);
     root.add(g);
     if (pad) { sign(bld); bake(bld); }
-    return { g, slab, card, letters, props, rocket, side, tint: [ground, card.material], pad, bld, key: '', pop: 1 };
+    tileGroups[t.i] = g;
+    const lamp = t.type === 'city' ? (cityLamps.push({ tile: t.i, g, lv: 0 }), cityLamps[cityLamps.length - 1]) : null;
+    return { g, slab, card, letters, props, rocket, side, tint: [ground, card.material], pad, bld, lamp, key: '', pop: 1 };
   });
   // the props that move (a model's groups with a `tick`, kept by bake at any depth): driven by the clock every frame, listed per tile so a rebuild swaps in its new nodes
   const liveOf = (props: THREE.Group) => { const l: THREE.Object3D[] = []; props.traverse((c) => c.userData.tick && l.push(c)); return l; };
@@ -104,6 +111,7 @@ export function createBoard() {
     if (!st) { if (opts?.sign !== false) sign(o.bld); }
     else if (t.type === 'special') level(o.bld, st.lv, st.m); // the landmark stands on its plot at every level: only the level is added
     else if (t.type === 'city') st.lv ? building(o.bld, st.lv, st.m ? 0x8c8c8c : new THREE.Color(t.color).lerp(new THREE.Color(0xffffff), 0.6).getHex(), col, st.m) : flag(o.bld, st.m ? 0x666666 : st.color); // an investment adds nothing: its props stand on the owner's plot, the colour says it all, a flag would only hide them
+    if (o.lamp) o.lamp.lv = st && !st.m ? st.lv : 0;
     bake(o.bld);
     dirtyShadow();
   }

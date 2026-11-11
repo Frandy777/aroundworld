@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { TILES } from '../../shared/data';
 
 // ---- Two looks, one world ----
 // The restrained look (a pixel buffer, banded toon light, hard shadows, inked edges) is the game's own. HD-2D is the option, after Octopath Traveler: the same pixel-art
@@ -13,9 +14,10 @@ export const U = {
 };
 
 // The local lights: a fixed set, parked at zero intensity when idle, because a different count would make every material compile again (hd2d.ts places them).
-export const lamps = Array.from({ length: 14 }, () => new THREE.PointLight(0xffffff, 0, 0, 2));
+export const CITY_COUNT = TILES.filter((t) => t.type === 'city').length;
+export const LAMP = { strike: 4, fixed: 5, city: 24 }; // 0-3 tokens, 4 missile, 5-23 fixed landmarks/islets, 24+ two lamps (front-right key + back-left fill) per ordinary city
+export const lamps = Array.from({ length: LAMP.city + CITY_COUNT * 2 }, () => new THREE.PointLight(0xffffff, 0, 0, 2));
 export const spot = new THREE.SpotLight(0xffe2b0, 0, 0, 0.45, 0.8, 1.6);
-export const LAMP = { strike: 4 }; // the lamp a missile's flame and blast borrow (0-3 are the tokens')
 export const setLamps = (on: boolean) => [...lamps, spot].forEach((l) => (l.visible = on)); // a hidden light is not in the shaders at all
 setLamps(false);
 
@@ -110,9 +112,10 @@ hdGloss = 0.0;
 const NIGHT = /* glsl */`
 float night = smoothstep( 0.12, 1.0, uLamp );
 #ifdef USE_EMISSIVEMAP
-	totalEmissiveRadiance *= night * ( 1.0 + 0.25 * uHd );
+	totalEmissiveRadiance = totalEmissiveRadiance * ( 1.0 + 0.42 * uHd ) + diffuseColor.rgb * vec3( 0.08, 0.05, 0.022 ) * uHd;
+	totalEmissiveRadiance *= night;
 #endif
-totalEmissiveRadiance += uNight * night;
+totalEmissiveRadiance += uNight * night * ( 1.0 + 0.45 * uHd );
 `;
 const RELIEF = /* glsl */`
 #ifdef USE_MAP
