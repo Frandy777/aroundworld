@@ -90,9 +90,9 @@ export function createBoard() {
     const lamp = t.type === 'city' ? (cityLamps.push({ tile: t.i, g, lv: 0 }), cityLamps[cityLamps.length - 1]) : null;
     return { g, slab, card, letters, props, rocket, side, tint: [ground, card.material], pad, bld, lamp, key: '', pop: 1, redo: () => {} };
   });
-  // the props that move (a model's groups with a `tick`, kept by bake at any depth): driven by the clock every frame, listed per tile so a rebuild swaps in its new nodes
-  const liveOf = (props: THREE.Group) => { const l: THREE.Object3D[] = []; props.traverse((c) => c.userData.tick && l.push(c)); return l; };
-  const live = tiles.map((o) => liveOf(o.props));
+  // the parts that move (a model's nodes with a `tick`, kept by bake at any depth, in its props or in what its upgrades build): driven by the clock every frame, listed per tile so a rebuild swaps in its new nodes
+  const liveOf = (g: THREE.Group) => { const l: THREE.Object3D[] = []; g.traverse((c) => c.userData.tick && l.push(c)); return l; };
+  const live = tiles.map((o) => liveOf(o.g));
   type Plot = (typeof tiles)[number];
   // A new owner or a new level: the building rises from the plot, squashed wide and flat first, with a little overshoot (ease out back)
   const squash = (o: Plot) => { const e = 1 + 2.70158 * (o.pop - 1) ** 3 + 1.70158 * (o.pop - 1) ** 2; o.bld.scale.set(1 + (1 - e) * 0.3, Math.max(e, 0.01), 1 + (1 - e) * 0.3); };
@@ -116,7 +116,7 @@ export function createBoard() {
     else if (t.type === 'special') buildLevels(o.bld, t, st.lv, st.m); // the landmark stands on its plot at every level: only the level is added, by what its model builds for the upgrades or else a small sign
     else if (t.type === 'city') st.lv ? building(o.bld, st.lv, st.m ? 0x8c8c8c : new THREE.Color(t.color).lerp(new THREE.Color(0xffffff), 0.6).getHex(), col, st.m) : flag(o.bld, st.m ? 0x666666 : st.color); // an investment adds nothing: its props stand on the owner's plot, the colour says it all, a flag would only hide them
     if (o.lamp) o.lamp.lv = st && !st.m ? st.lv : 0;
-    bake(o.bld);
+    bake(o.bld); live[i] = liveOf(o.g);
     dirtyShadow();
   }
 
@@ -130,7 +130,7 @@ export function createBoard() {
     const rocket = o.props.getObjectByName(MISSILE_NAME) as THREE.Group | undefined;
     if (rocket) bake(rocket);
     o.rocket = rocket;
-    live[i] = liveOf(o.props);
+    live[i] = liveOf(o.g);
     o.redo();
     dirtyShadow();
   };
