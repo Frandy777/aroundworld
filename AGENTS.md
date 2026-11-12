@@ -17,8 +17,8 @@
 
 - `npm run check` — Primary fast check (<1s): runs native TypeScript 7 (`tsc -b`, ~300–400ms is normal—no `--force` needed) plus `scripts/check.mjs` (verifies Three.js `#include` / shader patch anchors, board data, reducer, pure math, and every model in `render/models/{special,invest,public}`: builds, bakes, ticks movers, and lints NaN vertices, plot bounds, ground contact, and draw-call/triangle budgets under Node—no browser needed).
 - `npm run build` — Full typecheck + client & Cloudflare Worker production build.
-- `npm run shots` — Runs `scripts/shot-matrix.mjs` against the running dev server (`http://localhost:5173`) via headless Chrome, checks for WebGL/GLSL/console errors, and writes a labeled comparison sheet to `/tmp/aw-shots/matrix.png`.
-- **Dev server**: Do **not** start a dev server unless explicitly asked. Probe `http://localhost:5173` first when visual checks are needed.
+- `npm run shots` — Runs `scripts/shot-matrix.mjs` against the dev server (probes `localhost:5173`–`5176`, or `--url`/`--serve`) via headless Chrome, checks for WebGL/GLSL/console errors, and writes a labeled comparison sheet to `/tmp/aw-shots/matrix.png`. `npm run typecheck` is just the `tsc -b` half of `check` — prefer `check`.
+- **Dev server**: Do **not** start a dev server unless explicitly asked. Probe `http://localhost:5173` first when visual checks are needed; in a worktree or checkout with no server running, `shot-matrix.mjs --serve` spawns a throwaway `vite --port 0` for the run and tears it down after.
 
 ## Scene Automation & Visual Testing (Dev Builds)
 
@@ -58,7 +58,7 @@ window.__aw.cmd({ c: 'own', i: 1, o: { p: 0, lv: 3, m: false } });
 ```
 
 ### Batch Visual Comparison (`npm run shots`)
-For shader, lighting, camera, model, or effect changes, prefer one matrix capture over ad-hoc `/tmp` simulators or dozens of manual browser calls:
+For shader, lighting, camera, model, or effect changes, prefer one matrix capture over ad-hoc `/tmp` simulators or dozens of manual browser calls. Close-ups, owner-colour comparisons, neighbour lots and scripted single shots are all built in — never hand-write a CDP capture script:
 ```bash
 # Default: (pixel, hd2d) x (12:00, 18:00, 00:00) whole-board sheet -> /tmp/aw-shots/matrix.png
 npm run shots
@@ -75,8 +75,24 @@ node scripts/shot-matrix.mjs --tile=28 --iso=1 --nosign=1 --az=-35,0,35,145 --zo
 # Level comparison and a paused animation frame (world clock t in seconds):
 node scripts/shot-matrix.mjs --tile=10 --lv=0,1,2,3 --hours=12 --looks=pixel
 node scripts/shot-matrix.mjs --tile=77 --time=0,1.0,2.0 --az=0,145 --hours=12
+
+# Building close-up: aim the camera at the building (tx/tz shift the target off the lot
+# centre in world units, lift raises it), crop each cell to WxH centred + dx/dy (css px),
+# NEAREST-upscale by --scale:
+node scripts/shot-matrix.mjs --tiles=1,20 --owners=0,1 --lv=2 --az=0,-35 --zoom=3 --tx=1.6 --tz=1 --lift=0.9 --crop=420x340 --scale=2
+
+# Neighbour lots for context (t:p:lv[:m[:sign]]), mortgaged lot, keep the uncropped frames:
+node scripts/shot-matrix.mjs --tile=13 --lv=3 --m=1 --lots=14:1:2,15:-1:0:0:0 --raw
+
+# Scripted single shots — a JSON array (inline or a file path), one named PNG per entry,
+# --out is the directory. Shot: {name, tile, tx, tz, x, z, lift, zoom, elev, az, hour, hd,
+# ui, time, iso, setlot:{p,lv,m,sign}, lots:[[t,p,lv,m,sign]], strike:[f,t,s], crop, scale}:
+node scripts/shot-matrix.mjs --out=/tmp/aw-shots/hk --list='[{"name":"hk-nite","tile":13,"hour":0,"zoom":3,"tx":1.35,"tz":0.75,"lift":2.6,"crop":{"w":360,"h":420},"scale":2}]'
+
+# No dev server where you're running (worktree, delegated checkout): spawn a throwaway one
+node scripts/shot-matrix.mjs --serve --tile=28 --iso=1 --hours=0,12
 ```
-Rows = looks × zooms × levels, columns = hours × azimuths × times; intermediate frames go to a per-run temp dir, so parallel runs sharing `--out`'s directory cannot overwrite each other.
+Rows = looks × zooms × elevs × tiles × owners × levels, columns = hours × azimuths × times; `--cols` overrides the column count. Intermediate frames go to a per-run temp dir, so parallel runs sharing `--out`'s directory cannot overwrite each other.
 Read the resulting `/tmp/aw-shots/matrix.png` directly to inspect visual output.
 
 ## Style & Conventions
