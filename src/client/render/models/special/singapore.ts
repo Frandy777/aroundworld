@@ -15,6 +15,7 @@ const shine = (c: number | null) => { own = c; LIT.forEach((m) => (switchOf(m).v
 
 export default {
   key: 'Singapore',
+  lamps: [{ at: [0, 0.8, 0.85], color: WARM, power: 3.6, reach: 6.5, final: true, owned: true }], // the promenade's lights in front of the hotel's lobby: out with the hotel's own while the lot is for sale or mortgaged
   props: [ // Marina Bay Sands: three squat towers of dark glass, a clear gap between each, leaning on their back slabs under the long ship of the SkyPark, its bow out over the bay, with its infinity pool and gardens, on a podium by the water, the lotus of the ArtScience Museum on its quay and a bumboat on the water. By night, once the hotel is bought, the towers' floors, the lobby, the pool and the museum are lit
     final((g) => {
       const BASE = 0.46, H = 1.8, ZC = -0.26, OFF = 0.4, LEAN = 0.11, TOP = BASE + H, DY = TOP + 0.08, LX = -0.08, TW = 0.88, TD = 0.8;                         // the towers' foot and height, their centre line, how far each slab stands off it and leans (so that the two meet at the top), the SkyPark's underside and its walking level, the middle tower's (and the lobby's) x, how much a slab is narrowed and thinned

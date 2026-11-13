@@ -31,6 +31,7 @@ const person = (g: THREE.Group, x: number, y: number, z: number, c: number, lean
 
 export default {
   key: 'Jerusalem',
+  lamps: [{ at: [0, 0.95, 0.75], color: 0xffc870, power: 4, reach: 6.5, final: true }], // the floodlights of the Temple Mount, in front of the shrine's south porch
   props: [ // Dome of the Rock: the octagonal shrine in marble and blue Ottoman tile, a frieze of white script under its battlements, a porch on three of its faces and a gilded dome on its windowed drum under a crescent; on the limestone platform of the Temple Mount, with its stair, a free-standing arch at each front corner, the Dome of the Chain, cypresses, olives, pilgrims and doves; the apron in front of the plaza is left bare for the upgrades (see `levels`)
     final((g) => {
       const [CX, CZ, PY] = [0, -0.2, 0.236];                                                                                                                    // the shrine's centre line, the top of the platform it stands on
@@ -48,7 +49,7 @@ export default {
       const MOON = new THREE.TorusGeometry(0.1, 0.024, 4, 10, 4.7);                                                                                             // the finial's crescent: a ring open at the top
       const at = (a: number, r: number, t = 0) => [CX + Math.sin(a) * r + Math.cos(a) * t, CZ + Math.cos(a) * r - Math.sin(a) * t];                                             // the point r out from the shrine's axis at angle a from the south, t along the face's tangent
       const oct = (a: number, h: number, c: number, y: number) => { part(g, OCT, h, mat(c), CX, y, CZ).scale.set(a / C8, h, a / C8); };                                                         // an octagonal slab of apothem a, on the shrine's axis
-      const disc = (r: number, h: number, c: number, y: number, x = CX, z = CZ) => { part(g, ROUND, h, mat(c), x, y, z).scale.set(r, h, r); };                                                  // a round slab of radius r
+      const disc = (r: number, h: number, c: number | THREE.Material, y: number, x = CX, z = CZ) => { part(g, ROUND, h, typeof c === 'number' ? mat(c) : c, x, y, z).scale.set(r, h, r); }; // a round slab of radius r
       const porch = (a: number) => { const [x, z] = at(a, A + 0.06), [px, pz] = at(a, A + 0.162); stone(g, 0.318, 0.318, 0.2, MARBLE, x, Y0, z).rotation.y = a; box(g, 0.41, 0.04, 0.28, LEAD, x, Y0 + 0.318, z).rotation.y = a; decal(g, PORTAL, px, Y0, pz).rotation.y = a; };  // the porch on the face at angle a: a marble block, its lead roof, the doorway
       stone(g, 2.4, 0.1, 1.9, PLAZA);                                                                                                                           // the plaza
       stone(g, 2.2, 0.136, 1.6, DECK, 0, 0.1, -0.1);                                                                                                            // the platform of the mount, flagged in limestone
@@ -60,8 +61,8 @@ export default {
       oct(A - 0.04, 0.045, LEAD, Y0 + 0.545); oct(A - 0.15, 0.04, LEAD2, Y0 + 0.59);                                                                            // the lead roof, in two steps
       [0, Math.PI / 2, -Math.PI / 2].forEach(porch);                                                                                                           // the porches: south, east and west
       disc(0.4, 0.3, BLUE, DY); disc(0.44, 0.03, DGOLD, DY + 0.3);                                                                                              // the drum, its gold band
-      for (let k = -4; k <= 4; k++) { const a = (k * Math.PI) / 8, [x, z] = at(a, 0.397); box(g, 0.06, 0.14, 0.03, GLASS, x, DY + 0.08, z).rotation.y = a; }    // nine of its sixteen windows
-      Array.from({ length: 14 }, (_, i) => 0.42 * Math.sqrt(1 - ((i + 0.5) / 14) ** 2.4)).forEach((r, i) => disc(r, 0.04, i & 1 ? 0xf6c534 : GOLD, DY + 0.33 + i * 0.04));  // the dome: fourteen slices of a flattened hemisphere, in two golds
+      for (let k = -4; k <= 4; k++) { const a = (k * Math.PI) / 8, [x, z] = at(a, 0.397); box(g, 0.06, 0.14, 0.03, GLASS, x, DY + 0.08, z, lamplit(GLASS, 0xffd9a0, 0.9)).rotation.y = a; } // nine of its sixteen windows
+      Array.from({ length: 14 }, (_, i) => 0.42 * Math.sqrt(1 - ((i + 0.5) / 14) ** 2.4)).forEach((r, i) => disc(r, 0.04, lamplit(i & 1 ? 0xf6c534 : GOLD, 0xffcf60, 0.55), DY + 0.33 + i * 0.04)); // the dome: fourteen slices of a flattened hemisphere, in two golds
       box(g, 0.03, 0.14, 0.03, GOLD, CX, DY + 0.87, CZ); disc(0.045, 0.05, GOLD, DY + 0.97); part(g, MOON, 0, mat(0xfff6b0), CX, DY + 1.12, CZ).rotation.z = Math.PI / 2 + (2 * Math.PI - 4.7) / 2;  // the finial: a mast, its ball and the crescent opening upward
       for (const s of [-1, 1]) part(g, ARCH, 0, mat(TRIM), s * 0.88, PY, 0.58);                                                                                 // an arch at each front corner of the platform
       const [DX, DZ] = [0.92, 0.26];                                                                                                                            // the Dome of the Chain: its centre

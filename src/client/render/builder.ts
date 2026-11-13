@@ -365,11 +365,12 @@ const stoneTex = memo((L: number) => tex(STONE >> (2 - L), STONE >> (2 - L), (f,
 const stoneMat = memo((c: number) => lodMap(toon(c), stoneTex));
 export const stone = (g: THREE.Group, w: number, h: number, d: number, color: number, x = 0, y = 0, z = 0) => part(g, brick(w, h, d), h, stoneMat(color), x, y, z); // a block of masonry
 export const sprite = memo((rows: string[]) => pixelTexture(canvas(rows[0].length, rows.length, (g) => paint(g, rows, 0, 0)))); // string art as a texture
-export const decal = (g: THREE.Group, rows: string[], x: number, y: number, z: number) => { // a sprite on a wall that faces the viewer, a sprite pixel to the near texel
-  const [w, h] = [rows[0].length / DENSITY, rows.length / DENSITY], m = part(g, new THREE.PlaneGeometry(w, h), h, toon(0xffffff, { map: sprite(rows), alphaTest: 0.5 }), x, y, z);
+export const decal = (g: THREE.Group, rows: string[], x: number, y: number, z: number, lamps?: string[]) => { // a sprite on a wall that faces the viewer, a sprite pixel to the near texel; lamps: its drawing by night, what is lit (see `lampsOf`)
+  const [w, h] = [rows[0].length / DENSITY, rows.length / DENSITY], m = part(g, new THREE.PlaneGeometry(w, h), h, toon(0xffffff, { map: sprite(rows), alphaTest: 0.5, ...(lamps && { emissive: 0xffffff, emissiveMap: sprite(lamps) }) }), x, y, z);
   m.castShadow = false;
   return m;
 };
+export const lampsOf = (rows: string[], lit: string, tone = 'Y') => rows.map((r) => r.replace(/./g, (c) => (lit.includes(c) ? tone : '.'))); // the night's drawing of a sprite: the paints in `lit` shine in the lamp's `tone`, the rest of it is dark (see `nightlit`)
 // A built model is baked into a few meshes: everything under `root` is brought into root's own space (each mesh by its own matrix and its parents', not root's: the model is still moved as one) and what shares a
 // material and a shadow setting is merged, so a hundred boxes cost a handful of draw calls, in the shadow pass as in the main one. A mesh of several materials (a storey, a sign) is cut along its groups first.
 // The geometries from memo are shared, so they are copied, never changed; each merged one is marked `userData.own` — it belongs to root alone, and `freeBaked` frees it when root is rebuilt.

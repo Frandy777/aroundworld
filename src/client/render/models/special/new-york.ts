@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { box, cyl, decal, final, lamplit, memo, metal, part, rnd, sprite, stone, GOLD, INK, IRON, OFFICE, type ModelDef } from '../../builder';
+import { box, box as solid, cyl, decal, final, lamplit, memo, metal, part, rnd, sprite, stone, GOLD, INK, IRON, OFFICE, type ModelDef } from '../../builder';
 import { canvas, hex, shade } from '../../art';
 import { nightlit } from '../../light';
 import { DENSITY, pixelTexture, toon } from '../../scene';
@@ -72,6 +72,7 @@ const shaft = memo((a: number, h: number) => {
 
 export default {
   key: 'New York',
+  lamps: [{ at: [0, 1.3, 1.15], color: 0xffc878, power: 3.2, reach: 6.5, final: true }], // the floodlights of Liberty Island, in front of the statue's pedestal
   props: [ // Statue of Liberty: a verdigris copper figure on a granite pedestal inside the eleven-pointed star of Fort Wood on Liberty Island, torch raised in one hand and the tablet in the other under a crown of seven rays; trees and the Stars and Stripes on the lawn, a Staten Island ferry in the harbour; the island stands forward on its plot, which leaves the back for the skyline of the upgrades
     final((r) => {
       const g = new THREE.Group(); g.position.z = FWD; r.add(g);                                                                                                // the island stands FWD forward on its plot, which leaves its back for the two towers that rise behind it
@@ -79,6 +80,7 @@ export default {
       const WATER = 0x2c6fd2, FOAM = 0xdcefff, GRASS = 0x4f9d4f, WALL = 0xcfc8b6, PATH = 0xdba596, FORT = 0xb4ab95, GR = 0xcbc3ae, GRL = 0xded8c6, GRD = 0xa9a08a, DARK = 0x3f392e;  // paints: sea, foam, lawn, seawall, the pink promenade, fort stone, granite in three tones, the loggia's shade
       const WOOD = 0x6e3a12, WHITE = 0xf4f6fa, NAVY = 0x1a2250, ORANGE = 0xf26b1d;                                                                              // trunks, the ferry's white paint, its windows, its orange
       const PAT = 0x5cc6a6, PATL = 0x8fe4cc, PATD = 0x419e83, PATDD = 0x2d7662, DGOLD = 0xe0a020;                                                               // the statue's verdigris in four tones, the flame's darker gold
+      const VERDIGRIS = [PAT, PATL, PATD, PATDD], box: typeof solid = (g, w, h, d, c, x, y, z, m) => solid(g, w, h, d, c, x, y, z, m ?? (VERDIGRIS.includes(c as number) ? lamplit(c as number, c as number, 0.5) : undefined)); // from here on her verdigris is floodlit by night, as the Merlion is (see singapore.ts)
       const rod = (x: number, y: number, len: number, a: number, w: number, c: number, z = SZ, d = w) => { box(g, w, len, d, c, x - Math.sin(a) * len / 2, y + (Math.cos(a) - 1) * len / 2, z).rotation.z = a; return [x - Math.sin(a) * len, y + Math.cos(a) * len]; };  // a bar standing on (x, y), len long, tipped over by a (to the viewer's left when positive); returns its tip
       const Y = (h: number) => P + h;                                                                                                                                   // a height above the plinth
       box(g, 2.4, 0.1, 1.9, WATER); box(g, 2.2, 0.012, 1.7, 0x3d88e0, 0, 0.1, -0.15);                                                                           // the harbour, its shallows

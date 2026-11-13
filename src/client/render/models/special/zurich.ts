@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { box, cyl, decal, final, hip, stone, GOLD, INK, type ModelDef } from '../../builder';
+import { box, cyl, decal, final, hip, lampsOf, stone, GOLD, INK, type ModelDef } from '../../builder';
 
 // What the two towers behind the Grossmünster share (see `levels`): the green of weathered copper, how far forward on its plot the church stands to leave them room, the height of the quay they stand on (the church's own) and the line of their centres on it
 const COPPER = 0x3fa08e, FWD = 0.4, BANK = 0.22, Z = -0.95;
@@ -30,17 +30,17 @@ export default {
       for (const s of [-1, 1]) {                                                                                                                                // the twin towers; the south one (right) is the Karlsturm
         const x = s * TX; let y = 0.3;                                                                                                                          // this tower's centre line, the height built so far
         const up = (h: number, w = W, c = SAND, m = stone) => { m(g, w, h, w, c, x, y, TZ); y += h; };                                                                  // the next stage of the shaft: ashlar, or a plain box for a cornice
-        decal(g, FRONT, x, y, FZ + 0.02);                                                                                                                       // its windows and pilasters
+        decal(g, FRONT, x, y, FZ + 0.02, lampsOf(FRONT, 'Ode')); // its windows and pilasters
         up(1.2); up(0.06, W + 0.06, TRIM, box); up(0.72); up(0.06, W + 0.06, TRIM, box); up(0.5); up(0.05, W + 0.1, TRIM, box);                                 // shaft, cornice, belfry, cornice, upper stage, terrace slab
         [[W + 0.1, 0.04, 0, 1], [W + 0.1, 0.04, 0, -1], [0.04, W + 0.1, 1, 0], [0.04, W + 0.1, -1, 0]].forEach(([w, d, a, b]) => box(g, w, 0.1, d, TRIM, x + a * R, y, TZ + b * R)); // its balustrade
         [[0.205, SAND], [0.19, SAND]].forEach(([r, c], k) => { cyl(g, r, 0.33, c, x, y + 0.33 * k, TZ).rotation.y = Math.PI / 10; });                           // the octagonal stage, tapering
-        decal(g, LANCET, x, y + 0.04, TZ + 0.2);                                                                                                                // its lancets
+        decal(g, LANCET, x, y + 0.04, TZ + 0.2, lampsOf(LANCET, 'Ode')); // its lancets
         y += 0.66; cyl(g, 0.235, 0.05, TRIM, x, y, TZ); y += 0.05;                                                                                              // the crown ring under the dome
         [0.215, 0.25, 0.255, 0.23, 0.18, 0.11, 0.05].forEach((r, i) => cyl(g, r, 0.06, i & 1 ? SLATE2 : SLATE, x, y + i * 0.06, TZ));                           // the dome: a stepped onion in slate
         y += 0.42; cyl(g, 0.015, 0.08, GOLD, x, y, TZ); cyl(g, 0.04, 0.05, GOLD, x, y + 0.06, TZ); box(g, 0.03, 0.14, 0.03, GOLD, x, y + 0.11, TZ); box(g, 0.1, 0.03, 0.03, GOLD, x, y + 0.18, TZ); // the gold post, ball and cross
       }
       decal(g, KARL, TX, 0.95, FZ + 0.02);                                                                                                                      // Charlemagne, seated in his niche on the south tower
-      stone(g, 0.37, 0.9, 0.42, SAND, 0, 0.3, -0.01); decal(g, LATTICE, 0, 0.7, 0.22);                                                                          // the wall between the towers and its lattice window
+      stone(g, 0.37, 0.9, 0.42, SAND, 0, 0.3, -0.01); decal(g, LATTICE, 0, 0.7, 0.22, lampsOf(LATTICE, 'a')); // the wall between the towers and its lattice window
       [0.37, 0.3, 0.23, 0.16, 0.09].forEach((w, i) => stone(g, w, 0.05, 0.42, SAND, 0, 1.2 + i * 0.05, -0.01));                                                 // its stepped gable
       stone(g, 1.52, 0.3, 0.73, SAND, 0, 0.3, -0.585);                                                                                                          // the nave and aisles behind
       [1.52, 1.3, 1.08].forEach((w, i) => box(g, w, 0.07, 0.73, ROOF, 0, 0.6 + i * 0.07, -0.585));                                                              // the aisle roofs
@@ -77,8 +77,8 @@ export default {
           for (const x of [-0.05, 0.05]) box(p, 0.035, 0.08, 0.012, INK, x, E + 0.07, f + 0.004);                                                               // its two windows
           box(p, 0.08, 0.24, 0.08, UP, 0.3, E, 0.3); hip(p, 0.1, 0.1, 0.32, E + 0.24, COPPER, 0.3, 0.3); finial(p, 0.3, E + 0.52, 0.3, 0.9);                    // the pinnacle: its shaft, its needle roof, its gold ball
         });
-        const clock = decal(front, CLOCK, 0, C + 0.1, W / 2 + 0.02); others.forEach((p) => p.add(clock.clone()));                                               // the clock on every side (the copies share its material: one draw call)
-        for (const y of [0.9, 2.15]) decal(front, LANCET, 0, y, W / 2 + 0.02);                                                                                  // the lancet windows up the shaft of its front, clear of the church's roofs
+        const clock = decal(front, CLOCK, 0, C + 0.1, W / 2 + 0.02, lampsOf(CLOCK, 'Y')); others.forEach((p) => p.add(clock.clone())); // the clock on every side (the copies share its material: one draw call)
+        for (const y of [0.9, 2.15]) decal(front, LANCET, 0, y, W / 2 + 0.02, lampsOf(LANCET, 'd')); // the lancet windows up the shaft of its front, clear of the church's roofs
       }),
     ],
     [ // Lv 2, the Fraumünster behind the church on the right: a slender tower of warm sandstone with a Gothic window and, on every side, a black and gold clock under a stepped gable, a squat copper roof and a long needle of green copper rising from it, a gold ball on every gable and on its tip, the highest thing on the plot
@@ -94,8 +94,8 @@ export default {
           for (let k = 0; k < 6; k++) stone(p, W - 0.095 * k, 0.08, 0.1, SAND, 0, E + 0.08 * k, W / 2 - 0.05);
           finial(p, 0, E + 0.48, W / 2 - 0.05);
         });
-        const clock = decal(front, CLOCK, 0, E - 0.37, W / 2 + 0.02); others.forEach((p) => p.add(clock.clone()));                                              // the clock on every side, up into the gable (the copies share its material: one draw call)
-        decal(front, WINDOW, 0, E - 1.18, W / 2 + 0.02);                                                                                                        // the window under the clock on its front
+        const clock = decal(front, CLOCK, 0, E - 0.37, W / 2 + 0.02, lampsOf(CLOCK, 'Y')); others.forEach((p) => p.add(clock.clone())); // the clock on every side, up into the gable (the copies share its material: one draw call)
+        decal(front, WINDOW, 0, E - 1.18, W / 2 + 0.02, lampsOf(WINDOW, 'de')); // the window under the clock on its front
       }),
     ],
   ],
