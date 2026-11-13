@@ -141,7 +141,7 @@ button, [data-tile], .pcard, .item { cursor: var(--cur-hand); }
 #tip { position: fixed; pointer-events: none; z-index: 20; padding: 2px 8px; min-width: 150px; }
 #tip b { display: flex; align-items: center; gap: 8px; color: var(--gold); font: 34px / 36px var(--font-hd); }
 #toasts { position: fixed; top: 100px; left: 0; right: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; pointer-events: none; z-index: 30; }
-.toast { padding: 4px 14px 2px; white-space: nowrap; animation: toast 2.8s steps(14) forwards; }
+.toast { padding: 4px 14px 2px; white-space: nowrap; animation: toast 5s steps(14) forwards; }
 .toast.good { --f: var(--fr-green); } .toast.bad { --f: var(--fr-red); }
 @keyframes toast { 0% { transform: translateY(-16px); opacity: 0; } 8%, 85% { transform: none; opacity: 1; } 100% { transform: translateY(-8px); opacity: 0; } }
 .float { position: fixed; z-index: 25; width: 320px; margin-left: -160px; text-align: center; font: 34px / 36px var(--font-hd); pointer-events: none; color: var(--paper);

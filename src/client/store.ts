@@ -62,7 +62,7 @@ const expire = <T extends { id: number }>(c: Cell<T[]>, item: T, ms: number) => 
   c.set([...c.get(), item]);
   setTimeout(() => c.set(c.get().filter((x) => x.id !== item.id)), ms);
 };
-export const toast = (m: Msg | string, tone: Tone = '') => expire(toasts, { id: seq++, m: typeof m === 'string' ? [m] : m, tone }, 2800);
+export const toast = (m: Msg | string, tone: Tone = '') => expire(toasts, { id: seq++, m: typeof m === 'string' ? [m] : m, tone }, 5000);
 export const floatText = (x: number, y: number, text: string, cls = '') => expire(floats, { id: seq++, x: Math.round(x), y: Math.round(y), text, cls }, 1500);
 // The cash on each player's card, put here by the card itself (a ref): what floats numbers over a card finds it by player, without knowing the HUD's markup
 export const cashEls: (HTMLElement | null)[] = [];
