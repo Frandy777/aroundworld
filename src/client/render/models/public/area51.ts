@@ -3,6 +3,7 @@ import { box, cyl, final, mat, part, plaque, GOLD, IRON, INK, type ModelDef } fr
 
 export default {
   key: 'area51',
+  lamps: [{ at: [0.6, 2.4, 0], color: 0x5dfff0, power: 14, reach: 8, final: true }], // the saucer's beam
   props: [ // hangar under its sign, and a saucer beaming a cow up over a crop circle
     final((g) => {
       const [UX, UZ, BY, HX] = [0.62, 0.1, 2.0, -0.6]; // saucer axis and belly height, hangar centre line

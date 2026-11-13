@@ -11,6 +11,7 @@ shine(null); // nobody owns it until the board says so
 
 export default {
   key: 'Hong Kong',
+  lamps: [{ at: [-0.4, 1.0, -0.15], color: 0xdce8ff, power: 6, reach: 7, final: true, owned: true }], // the tower's LED outline spilling over its podium: inside its lowest prism, so that no halo hangs in front of the glass; out while the lot is for sale or mortgaged
   props: [ // Bank of China Tower: four glass prisms stepping up to twin masts on a granite podium, a rock garden with a red bridge over its pond, and Victoria Harbour with a red-sailed junk and a Star Ferry. By night, once the tower is bought, the prisms are outlined in LED white (see `prismMat`) and the lobby is lit; the lamps, pond and ferry are lit anyway
     final((g) => {
       const TX = -0.4, TZ = -0.35, BASE = 0.44, RED = 0xd9423e, WHITE = 0xf4f6fa, GREEN = 0x2f8f5a, WOOD = 0x6e3a12, TAR = 0x3a2008, PANE = 0xe8edf6, ROCK = 0x8a8f9c, SHRUB = 0x4f9d4f; // the tower's centre and base height; paints

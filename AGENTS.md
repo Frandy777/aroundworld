@@ -9,13 +9,13 @@
   - `net.ts` / `controller.ts` — WebSocket session, room lifecycle, and dev `quickGame()`.
   - `director.ts` — Plays server events sequentially onto the screen so UI and animations stay in lockstep.
   - `stage.ts` & `render/` — 3D stage, camera/post-processing, lighting, sky, voxel builder, and tile/token/effect models. Rendering and material details evolve actively—always read the header comments of the specific `render/*.ts` files you touch rather than assuming fixed rendering internals.
-  - `render/models/{special,invest,public}/<key>.ts` — One registered tile model per file: a `ModelDef` (`key` = tile name or kind, `props`, optional `scale`; for a special city optional `levels`: the landmarks each upgrade adds over its standing `props`, drawn into the building group in place of the gold level sign, and optional `owner`: called with the owner's colour, or null while for sale or mortgaged, so the model can switch its lamps (`switchOf` in `light.ts`) and tint what shows its owner; see `special/hong-kong.ts` for both) default-exported and auto-collected by `models/index.ts` via `import.meta.glob` (no shared registry edits). Ordinary cities are drawn by ownership, not a model file: `models/city.ts` dispatches `building()` to one file per level under `models/city/` over the shared `kit.ts`.
+  - `render/models/{special,invest,public}/<key>.ts` — One registered tile model per file: a `ModelDef` (`key` = tile name or kind, `props`, optional `scale`; for a special city optional `levels`: the landmarks each upgrade adds over its standing `props`, drawn into the building group in place of the gold level sign, and optional `owner`: called with the owner's colour, or null while for sale or mortgaged, so the model can switch its lamps (`switchOf` in `light.ts`) and tint what shows its owner; see `special/hong-kong.ts` for both; optional `lamps`: the tile's landmark point lights `{at, color, power, reach, final, owned, flicker}` that `render/lamps.ts` collects into the fixed `PointLight` slots, `owned` dimmed by `lotLit`) default-exported and auto-collected by `models/index.ts` via `import.meta.glob` (no shared registry edits). Ordinary cities are drawn by ownership, not a model file: `models/city.ts` dispatches `building()` to one file per level under `models/city/` over the shared `kit.ts`.
   - `ui/` — Pixel-art HUD, cards/dialogs, and `?dev=1` debug panel (`debug.tsx`). Keep `.tsx` component files exporting components only so Vite Fast Refresh works in place.
   - `dev.ts` — Dev-only URL flag parser and `window.__aw` automation bridge (tree-shaken out of production builds).
 
 ## Commands & Verification
 
-- `npm run check` — Primary fast check (<1s): runs native TypeScript 7 (`tsc -b`, ~300–400ms is normal—no `--force` needed) plus `scripts/check.mjs` (verifies Three.js `#include` / shader patch anchors, board data, reducer, pure math, and every model in `render/models/{special,invest,public}`: builds, bakes, ticks movers, and lints NaN vertices, plot bounds, ground contact, and draw-call/triangle budgets under Node—no browser needed).
+- `npm run check` — Primary fast check (<1s): runs native TypeScript 7 (`tsc -b`, ~300–400ms is normal—no `--force` needed) plus `scripts/check.mjs` (verifies Three.js `#include` / shader patch anchors, board data, reducer, pure math, and every model in `render/models/{special,invest,public}`: builds, bakes, ticks movers, exercises `owner()` callbacks, asserts the declared fixed lamps fit their `light.ts` slots, and lints NaN vertices, plot bounds, ground contact, and draw-call/triangle budgets under Node—no browser needed). `npm run check -- <model...>` (e.g. `npm run check -- las-vegas hong-kong`, names slug-matched) prints a per-level inspection report instead—meshes/tris budgets, bounding box, and plot overhang per level—then exits.
 - `npm run build` — Full typecheck + client & Cloudflare Worker production build.
 - `npm run shots` — Runs `scripts/shot-matrix.mjs` against the dev server (probes `localhost:5173`–`5176`, or `--url`/`--serve`) via headless Chrome, checks for WebGL/GLSL/console errors, and writes a labeled comparison sheet to `/tmp/aw-shots/matrix.png`. `npm run typecheck` is just the `tsc -b` half of `check` — prefer `check`.
 - **Dev server**: Do **not** start a dev server unless explicitly asked. Probe `http://localhost:5173` first when visual checks are needed; in a worktree or checkout with no server running, `shot-matrix.mjs --serve` spawns a throwaway `vite --port 0` for the run and tears it down after.
@@ -81,22 +81,34 @@ node scripts/shot-matrix.mjs --tile=77 --time=0,1.0,2.0 --az=0,145 --hours=12
 # NEAREST-upscale by --scale:
 node scripts/shot-matrix.mjs --tiles=1,20 --owners=0,1 --lv=2 --az=0,-35 --zoom=3 --tx=1.6 --tz=1 --lift=0.9 --crop=420x340 --scale=2
 
-# Neighbour lots for context (t:p:lv[:m[:sign]]), mortgaged lot, keep the uncropped frames:
+# Same, in the model's own LOT space (lx/lz measured from the props origin, ly up from
+# the plot top — the coordinates the model files use; --lot=1 is a bare centre aim;
+# tiles also take a name or kind slug):
+node scripts/shot-matrix.mjs --tile=jerusalem --lot=1 --zoom=3 --crop=420x340 --scale=2
+node scripts/shot-matrix.mjs --tile="Las Vegas" --lx=-0.3 --ly=1.5 --lz=0.45 --zoom=3 --hours=0
+
+# Neighbour lots for context (t:p:lv[:m[:sign]], names work too), mortgaged lot, keep the uncropped frames:
 node scripts/shot-matrix.mjs --tile=13 --lv=3 --m=1 --lots=14:1:2,15:-1:0:0:0 --raw
 
 # Scripted single shots — a JSON array (inline or a file path), one named PNG per entry,
-# --out is the directory. Shot: {name, tile, tx, tz, x, z, lift, zoom, elev, az, hour, hd,
-# ui, time, iso, setlot:{p,lv,m,sign}, lots:[[t,p,lv,m,sign]], strike:[f,t,s], crop, scale}:
+# --out is the directory. Shot: {name, tile, tx, tz, x, z, lift, lot, lx, ly, lz, zoom,
+# elev, az, hour, hd, ui, time, iso, setlot:{p,lv,m,sign}, lots:[[t,p,lv,m,sign]],
+# strike:[f,t,s], crop, scale}:
 node scripts/shot-matrix.mjs --out=/tmp/aw-shots/hk --list='[{"name":"hk-nite","tile":13,"hour":0,"zoom":3,"tx":1.35,"tz":0.75,"lift":2.6,"crop":{"w":360,"h":420},"scale":2}]'
+
+# Same, stitched into ONE labeled contact sheet (--out ending .png, or --sheet[=file]);
+# cells keep their own crop/scale and the grid sizes to the largest:
+node scripts/shot-matrix.mjs --out=/tmp/aw-shots/hk.png --list=shots.json --cols=2
 
 # No dev server where you're running (worktree, delegated checkout): spawn a throwaway one
 node scripts/shot-matrix.mjs --serve --tile=28 --iso=1 --hours=0,12
 ```
-Rows = looks × zooms × elevs × tiles × owners × levels, columns = hours × azimuths × times; `--cols` overrides the column count. Intermediate frames go to a per-run temp dir, so parallel runs sharing `--out`'s directory cannot overwrite each other.
+Rows = looks × zooms × elevs × tiles × owners × levels, columns = hours × azimuths × times; `--cols` overrides the column count. Intermediate frames go to a per-run temp dir, and the default output picks up the tile tag (`matrix-rio.png`, `matrix-t1-t20.png`; only a tileless run writes `matrix.png`), so parallel runs sharing a directory cannot overwrite each other.
 Read the resulting `/tmp/aw-shots/matrix.png` directly to inspect visual output.
 
 ## Style & Conventions
 
 - Keep code compact and direct; match surrounding naming, concisely typed helpers, and `strict` / `noUnusedLocals` / `noUnusedParameters` / `verbatimModuleSyntax`.
+- Trailing `//` comments take a single natural space — never pad spaces to align them at a fixed column, and never rewrap untouched lines just to keep an alignment.
 - Preserve existing explanatory comments (which explain *why* a design choice exists); do not overwrite user-tuned constants or style parameters unasked.
 - When asked to create git commits, use concise single-line imperative subjects matching `git log --oneline` without extra trailers unless requested.

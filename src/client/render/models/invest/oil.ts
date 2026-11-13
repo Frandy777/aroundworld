@@ -150,6 +150,7 @@ function oil(g: THREE.Group) {
 
 export default {
   key: 'oil',
+  lamps: [{ at: [0.99, 2.95, -0.65], color: 0xff8524, power: 6, reach: 6.5, final: true, flicker: true }], // the flare stack
   props: [ // a derrick and its doghouse over the well, a pumping unit at work (its beam nodding, a faint light blinking), two tanks joined by pipes, a flare stack with a living flame, barrels at the front
     final(oil),
   ],

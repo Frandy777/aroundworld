@@ -29,6 +29,7 @@ const shine = (c: number | null) => { switchOf(SKIN).value = +(c !== null); SKIN
 
 export default {
   key: 'Las Vegas',
+  lamps: [{ at: [-0.3, 1.5, 0.45], color: 0xffae52, power: 5.5, reach: 6, final: true }], // the Fabulous Las Vegas sign & neon
   props: [ // Welcome to Fabulous Las Vegas: the diamond sign on its median, seven silver-dollar coins spelling WELCOME across its top, a star between the two poles that carry it, palms and boulders round its foot; the boulevard in front with a taxi, on the plaza that the upgrades build on (the Strat behind the sign on the right, the Sphere behind it in the middle)
     final((g) => {
       const [SX, SZ, SY] = [-0.34, 0.2, 0.99];                                                                                                                  // the sign's centre line, its depth, the foot of its board

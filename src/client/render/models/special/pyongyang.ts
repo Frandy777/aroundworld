@@ -2,6 +2,7 @@ import { box, cyl, decal, final, stone, GOLD, type ModelDef } from '../../builde
 
 export default {
   key: 'Pyongyang',
+  lamps: [{ at: [-0.26, 5.7, -0.35], color: 0xff4d3b, power: 5, reach: 6.5, final: true }], // the Juche Tower's glowing red torch
   props: [ // Juche Tower: a tapering shaft of granite tiers with gold characters up its front, under a red glass torch on a gold collar; beside it the statue of the worker, peasant and intellectual raising hammer, sickle and brush; the Taedong in front with two fountains and a rowing boat
     final((g) => {
       const [TX, TZ, SX, SZ, FY, P] = [-0.26, -0.5, 0.76, 0.1, 5.05, 0.63];                                                                                    // the shaft's centre line, the statue's, the foot of the torch, the top of the statue's pedestal

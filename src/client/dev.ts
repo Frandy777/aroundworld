@@ -3,7 +3,7 @@ import { TILES } from '../shared/data';
 import { command } from '../shared/state';
 import type { Cmd } from '../shared/types';
 import { leaveRoom, quickGame } from './controller';
-import { POS } from './render/layout';
+import { LOT, PAD, POS } from './render/layout';
 import { U, hd } from './render/light';
 import { camera, controls, dirtyShadow, finishTweens, fitZoom, hdCam, jumpTo, lod, renderer, scene, setLighting, viewAngles } from './render/scene';
 import { clock, sky, wallHour } from './render/sky';
@@ -168,7 +168,7 @@ export function initDev() {
       return true;
     },
     snapDataUrl: () => (loop.draw(), renderer.domElement.toDataURL('image/png')),
-    refs: { G, TILES, POS, clock, sky, U, camera, hdCam, controls, renderer, scene, loop },
+    refs: { G, TILES, POS, LOT, PAD, clock, sky, U, camera, hdCam, controls, renderer, scene, loop },
   };
   (window as unknown as { __aw?: typeof api }).__aw = api;
   return () => { delete (window as unknown as { __aw?: typeof api }).__aw; };

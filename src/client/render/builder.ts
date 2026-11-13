@@ -340,7 +340,11 @@ export type Prop = [color: number, w: number, h: number, d: number, x: number, y
 // the building group (see buildLevels), so they rise from the plot on every upgrade; a part of them that moves has a `tick`, as in `props` (see bake).
 // `owner`: for a model that only one tile draws, so that its lights and colours can follow the lot: called whenever the lot changes hands or is mortgaged or redeemed, and when it is drawn again (see board.rebuild), with
 // its owner's colour while it stands (bought, not mortgaged) and null while it is for sale or mortgaged; the model switches its lamps (see `switchOf`) and sets the colour of whatever shows its owner.
-export interface ModelDef { key: string; props: Prop[]; scale?: number; levels?: Prop[][]; owner?: (color: number | null) => void }
+// `lamps`: the point lights of the model's own glow (lamps.ts resolves them into the scene's fixed lamp slots, see light.ts LAMP). `at` is over the props origin in the model's own units — its draw scale applies,
+// like its props — unless `final` marks numbers already in final units (like props inside `final()`); y counts up from the plot top (a public tile has none). `owned` puts the lamp out while the lot is for sale or
+// mortgaged (see board.lotLit); `flicker` makes it breathe with the oil flares.
+export interface ModelLamp { at: [number, number, number]; color: number; power: number; reach: number; final?: boolean; owned?: boolean; flicker?: boolean }
+export interface ModelDef { key: string; props: Prop[]; scale?: number; levels?: Prop[][]; owner?: (color: number | null) => void; lamps?: ModelLamp[] }
 export const drawProps = (g: THREE.Group, props: Prop[], k = PK) => { // props are drawn k times bigger than authored (see K)
   K = k;
   for (const r of props) typeof r === 'function' ? r(g) : box(g, r[1], r[2], r[3], r[0], r[4], r[5], r[6]);

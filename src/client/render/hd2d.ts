@@ -1,37 +1,19 @@
 import * as THREE from 'three';
-import { kindAt, tileAt, TILES } from '../../shared/data';
 import { tokens } from './actors';
 import { cityLamps, lotLit, lotVisible } from './board';
 import { LOT, PAD, POS } from './layout';
+import { fixedLamps } from './lamps';
 import { LAMP, lamps, spot } from './light';
+import { defOf } from './models';
 import { free, hdCam, LENS, renderer, scene, sun, zoomed } from './scene';
-import { ISLETS } from './scenery';
 import { sky } from './sky';
-import { FLOAT } from './world';
 
-// ---- Local lights: the warm pools of Octopath's streets. Four lamps are the tokens' lanterns, one is borrowed by missiles (strike.ts), twenty stand at glowing landmarks/islets,
-// and each ordinary city holds a key+fill pair when built: [lamp, where, colour, intensity, reach, tile?], reach in world units ----
-const at = (i: number, x: number, y: number, z: number, k = 1.25) => POS[i].clone().add(new THREE.Vector3(LOT.x + x * k, (TILES[i].type === 'public' ? 0 : PAD.h) + y * k, LOT.z + z * k));
-const kinds = (kind: string) => TILES.filter((t) => t.kind === kind).map((t) => t.i);
-const [casinos, clubs, chokes, oils] = ['casino', 'club', 'choke', 'oil'].map(kinds);
-const [vegas, pyongyang, zurich, hongkong, devil] = [tileAt('Las Vegas'), tileAt('Pyongyang'), tileAt('Zurich'), tileAt('Hong Kong'), kindAt('devil')];
-const FIXED: [number, THREE.Vector3, number, number, number, number?][] = [
-  [5, at(casinos[0], 0, 1, 0.8), 0xff5de0, 12, 7, casinos[0]], [6, at(casinos[1], 0, 1, 0.8), 0xff5de0, 12, 7, casinos[1]], // the casinos' marquees
-  [7, at(clubs[0], 0, 0.8, 0.8), 0x5dfff0, 10, 7, clubs[0]], [8, at(clubs[1], 0, 0.8, 0.8), 0x5dfff0, 10, 7, clubs[1]], // the nightclubs' neon
-  [9, POS[kindAt('area51')].clone().add(new THREE.Vector3(LOT.x + 0.6, 2.4, LOT.z)), 0x5dfff0, 14, 8, kindAt('area51')], // the saucer's beam
-  [10, at(kindAt('start'), 0, 0.9, 0.5), 0xffb43a, 5, 5, kindAt('start')], // the gold ingot of START: a pool at its foot, weak and low
-  [11, new THREE.Vector3(ISLETS[1][0] + 0.3, 3.6, ISLETS[1][1]), 0xfff0c0, 28, 13], // the lighthouse
-  [12, new THREE.Vector3(ISLETS[4][0], 4.4, ISLETS[4][1]), 0xff7a1a, 24, 14], // the volcano's lava
-  [13, new THREE.Vector3(0, FLOAT, 0), 0x8fc4ff, 14, 12], // the globe
-  ...chokes.map((ti, k): [number, THREE.Vector3, number, number, number, number] => [14 + k, at(ti, 0, 2.2, -0.45, 1), 0xffe494, 4.8, 6.5, ti]), // harbour twin lighthouses
-  ...oils.map((ti, k): [number, THREE.Vector3, number, number, number, number] => [18 + k, at(ti, 0.99, 2.95, -0.65, 1), 0xff8524, 6, 6.5, ti]), // oil-site flare stacks
-  [20, at(vegas, -0.3, 1.5, 0.45, 1), 0xffae52, 5.5, 6, vegas], // Fabulous Las Vegas sign & neon
-  [21, at(pyongyang, -0.26, 5.7, -0.35, 1), 0xff4d3b, 5, 6.5, pyongyang], // Juche Tower's glowing red torch
-  [22, at(zurich, 0, 0.85, 0.95, 1), 0xffbe66, 3.8, 5.5, zurich], // Bahnhofstrasse street lamps (the church stands 0.4 forward on its plot)
-  [23, at(devil, 0.72, 2.95, -0.15, 1), 0xffe494, 4.5, 6, devil], // Devil's Island lighthouse & searchlight
-  [24, at(hongkong, -0.4, 1.0, -0.15, 1), 0xdce8ff, 6, 7, hongkong], // Bank of China Tower's LED outline spilling over its podium: inside its lowest prism, so that no halo hangs in front of the glass
-];
-for (const [i, p, color, , reach] of FIXED) { lamps[i].position.copy(p); lamps[i].color.setHex(color); lamps[i].distance = reach; }
+// ---- Local lights: the warm pools of Octopath's streets. Four lamps are the tokens' lanterns, one is borrowed by missiles (strike.ts), the fixed slots stand at the glowing
+// landmarks — each declared by its own tile model and resolved over its lot (see ModelDef.lamps and lamps.ts, which also keeps the three lights off the board) — and each ordinary
+// city holds a key+fill pair when built. A slot is one point light, so where it stands, its colour and its reach are set once here and the frame loop only dims it. ----
+const FIXED = fixedLamps(defOf).map((l, slot) => ({ ...l, slot: LAMP.fixed + slot }));
+if (FIXED.length > LAMP.city - LAMP.fixed) throw new Error(`fixed lamps overflow the ${LAMP.city - LAMP.fixed} free slots (${FIXED.length} declared)`); // a lamp past the fixed range would sit on a city's slot
+for (const l of FIXED) { const lamp = lamps[l.slot]; lamp.position.copy(l.at); lamp.color.setHex(l.color); lamp.distance = l.reach; }
 
 const WARM = new THREE.Color(0xffd9a0);
 // Each ordinary city level gets a porch/apron key lamp (+z front, inset from the tile's sea cliff like START's ingot so water reflections stay soft)
@@ -46,7 +28,14 @@ const haloScale = new Float32Array(lamps.length).fill(1);
 // standing city buildings cast warm wrap-around pools, the lava, flares and lighthouse flicker, and a spot follows the active token.
 function lights(t: number) {
   const act = tokens.find((k) => k?.active), k = sky.lampK;
-  for (const [i, , , power, , ti] of FIXED) lamps[i].intensity = ti !== undefined && !lotVisible(ti) ? 0 : power * k;
+  const flk = 1 + 0.12 * Math.sin(t * 7) * Math.sin(t * 3.1), bcn = 0.92 + 0.08 * Math.sin(t * 2.2); // the flares' flicker and the lighthouse's slow sweep
+  for (const l of FIXED) {
+    const lamp = lamps[l.slot];
+    lamp.intensity = l.tile !== undefined && !lotVisible(l.tile) ? 0 : l.power * k;
+    if (l.pulse === 'flare') lamp.intensity *= flk;
+    else if (l.pulse === 'beacon') lamp.intensity *= bcn;
+    if (l.owned) lamp.intensity *= +lotLit(l.tile!); // an owned lamp is out while its lot is for sale or mortgaged
+  }
   for (let i = 0; i < 4; i++) {
     const token = tokens[i], l = lamps[i];
     l.intensity = token && lotVisible(token.tile) ? (token.active ? 8 : 3.5) * k : 0;
@@ -65,10 +54,6 @@ function lights(t: number) {
     key.distance = reach; fill.distance = reach * 0.9;
     haloScale[LAMP.city + i * 2] = 0.75; haloScale[LAMP.city + i * 2 + 1] = 0.35; // keep air haze subtle around dense rows of houses
   }
-  const flk = 1 + 0.12 * Math.sin(t * 7) * Math.sin(t * 3.1);
-  lamps[12].intensity *= flk; lamps[18].intensity *= flk; lamps[19].intensity *= flk;
-  lamps[11].intensity *= 0.92 + 0.08 * Math.sin(t * 2.2);
-  lamps[24].intensity *= +lotLit(hongkong); // the tower's outline is out while it is for sale or mortgaged
   spot.intensity = act && lotVisible(act.tile) ? 70 * k : 0;
   if (act) {
     spot.position.copy(act.g.position).add(new THREE.Vector3(-3, 11, 4));

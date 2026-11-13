@@ -9,6 +9,7 @@ const around = (g: THREE.Group, x: number, z: number) => [0, 1, 2, 3].map((k) =>
 
 export default {
   key: 'Zurich',
+  lamps: [{ at: [0, 0.85, 0.95], color: 0xffbe66, power: 3.8, reach: 5.5, final: true }], // the Bahnhofstrasse street lamps (the church stands 0.4 forward on its plot)
   props: [ // Grossmünster: twin sandstone towers on a plinth by the Limmat, each with a slate dome and gold cross, Charlemagne seated in a niche on the right one, a lattice window and the dark red ridge turret between them; swans and ripples on the river, lindens, lamps, and the flags of Zürich and Switzerland
     final((r) => {
       const g = new THREE.Group(); g.position.z = FWD; r.add(g);                                                                                                // the church stands FWD forward on its plot, which leaves its back for the two towers that rise behind it

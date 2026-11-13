@@ -16,7 +16,7 @@ const MODELS: Record<string, ModelDef> = {};
 for (const m of Object.values(defs)) MODELS[m.default.key] = m.default;
 
 // The static props of tile t, drawn into g: a model keyed by the tile's name wins over one keyed by its kind
-const defOf = (t: Tile) => MODELS[t.name] ?? MODELS[t.kind];
+export const defOf = (t: Tile) => MODELS[t.name] ?? MODELS[t.kind];
 export const modelKey = (t: Tile) => defOf(t)?.key;
 export const buildProps = (g: Group, t: Tile) => {
   const def = defOf(t);

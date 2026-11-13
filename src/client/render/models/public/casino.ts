@@ -2,6 +2,7 @@ import { plaque, GOLD, INK, type ModelDef } from '../../builder';
 
 export default {
   key: 'casino',
+  lamps: [{ at: [0, 1, 0.8], color: 0xff5de0, power: 12, reach: 7 }], // the marquee's glow
   props: [ // marquee, neon pillars and rooftop dice
     [0x7a1d4b, 1.7, 1.2, 1.1, 0, 0, 0], [0x5a1838, 1.9, 0.14, 1.3, 0, 1.2, 0], [GOLD, 1.9, 0.1, 0.1, 0, 1.2, 0.6], [GOLD, 0.1, 0.1, 1.3, -0.9, 1.2, 0], [GOLD, 0.1, 0.1, 1.3, 0.9, 1.2, 0],
     (g) => plaque(g, '♠ ♥ ♦', '#b02a6b', '#ffd23f', 1.5, 0.45, 0, 0.66, 0.56),

@@ -2,6 +2,7 @@ import { plaque, GOLD, type ModelDef } from '../../builder';
 
 export default {
   key: 'club',
+  lamps: [{ at: [0, 0.8, 0.8], color: 0x5dfff0, power: 10, reach: 7 }], // the neon
   props: [ // dark box, speakers, neon and a disco ball
     [0x2a2d3e, 1.8, 1.0, 1.1, 0, 0, 0], [0x111111, 0.4, 0.85, 0.36, -0.7, 0, 0.45], [0x111111, 0.4, 0.85, 0.36, 0.7, 0, 0.45],
     [0x444a6e, 0.22, 0.22, 0.04, -0.7, 0.12, 0.64], [0x444a6e, 0.22, 0.22, 0.04, 0.7, 0.12, 0.64], [0x444a6e, 0.12, 0.12, 0.04, -0.7, 0.5, 0.64], [0x444a6e, 0.12, 0.12, 0.04, 0.7, 0.5, 0.64],

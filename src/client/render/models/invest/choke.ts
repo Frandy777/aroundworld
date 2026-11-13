@@ -2,6 +2,7 @@ import { box, cyl, final, hip, plaque, GOLD, IRON, INK, type ModelDef } from '..
 
 export default {
   key: 'choke',
+  lamps: [{ at: [0, 2.2, -0.45], color: 0xffe494, power: 4.8, reach: 6.5, final: true }], // the twin lighthouses
   props: [ // a harbour mouth: twin lighthouses (port red, starboard green) at the back, a gas carrier held in the channel by the red-and-white boom, its toll booth and stop signal on the quays
     final((g) => {
       const WATER = 0x2c6fd2, FOAM = 0xdcefff, WHITE = 0xf4f6fa, RED = 0xd9423e, GREEN = 0x2fa84f, NAVY = 0x1a2250, STONE = 0xb4bccf, GLASS = 0x7db6ff, STEEL = 0xcfd6e6, Z = 0.3; // Z: the boom
