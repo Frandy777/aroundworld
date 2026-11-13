@@ -8,6 +8,7 @@ export interface Env { ROOM: DurableObjectNamespace<Room>; LIMITER: RateLimit }
 
 const SEAT_GRACE_MS = 30_000; // in the lobby, a seat whose player vanished is kept this long (a page reload must not cost it)
 const IDLE_MS = 5 * 60_000; // nobody connected for this long: the room is dissolved
+const LOBBY_MS = 20 * 60_000, OVER_MS = 10 * 60_000, LIFE_MS = 6 * 60 * 60_000; // hard deadlines, even with open tabs: waiting to start, viewing results, and the room's entire life
 const RATE_MS = 500, BURST_MS = 10_000; // a seat's `name`, `settings` and `bot` (each one is broadcast to the room): one is let through per RATE_MS, with up to BURST_MS worth of them at once; a connection that sends one over that is closed
 const FRAME_MAX = 256; // the longest message a client sends (an `answer` that picks every city) is under 200 bytes: a frame over this is not from our client, and is closed before it is parsed
 const DEV_ROOMS = import.meta.env.DEV; // dev rooms (bots, the dev panel) exist in development builds only: in production `?dev=1` makes a plain room (bots wake the object every 300ms, and the panel's commands grow the tape without limit)
@@ -19,7 +20,7 @@ interface Seat {
 }
 // What is written to storage of a room (see `save`), under two keys. 'room': the room, and what the turn in progress has taken so far (it changes at every step). 'ckpt': how that turn began (it changes once a turn, and it
 // is nearly all of the bytes: the whole state, with its log). The connections are not written: the runtime keeps them.
-interface Stored { code: string; host: string; dev: boolean; settings: Settings; idle: number; seats: Seat[]; game?: Omit<Saved, 'ckpt'> }
+interface Stored { code: string; host: string; dev: boolean; settings: Settings; idle: number; expires: number; linger: number; seats: Seat[]; game?: Omit<Saved, 'ckpt'> }
 
 const cleanName = (raw: string, seat: number) => Array.from(raw.replace(/[\u0000-\u001f\u007f]/g, '').trim()).slice(0, NAME_MAX).join('').trim() || PLAYER_DEFS[seat].name;
 
@@ -34,6 +35,8 @@ export class Room extends DurableObject<Env> implements Host {
   private settings: Settings = { ...DEFAULT_SETTINGS };
   private game: Game | null = null;
   private idle = 0; // when a room nobody is connected to is dissolved (epoch ms; 0: somebody is)
+  private expires = 0; // absolute lifetime: reconnecting or playing again never extends it
+  private linger = 0; // lobby/results deadline (epoch ms; 0 during a game)
   private batch: string[] = []; // events of this tick, already serialised: they go out together
   private next = new WeakMap<Seat, number>(); // per seat, when its next `name` or `settings` is due at the pace of RATE_MS (see `limited`; kept in memory only)
   private stored = ''; // what storage holds of the room ('room')
@@ -57,6 +60,10 @@ export class Room extends DurableObject<Env> implements Host {
       if (room.dev && !DEV_ROOMS) return this.dissolve(); // a dev room that storage holds from before they were shut off in production: it ends here
       this.stored = json;
       Object.assign(this, room);
+      const now = Date.now();
+      this.expires ||= now + LIFE_MS; // old rooms have no creation time: grant one bounded lifetime on their first wake
+      if (!game) this.linger ||= now + LOBBY_MS;
+      if (this.expired(now)) return this.dissolve(); // reclaim a stale code even when a create RPC, rather than its alarm, wakes it
       if (game) {
         const ckpt: Ckpt = JSON.parse(this.ctx.storage.kv.get<string>('ckpt')!);
         let g = (this.game = new Game(this, (this.ckpt = ckpt)));
@@ -69,6 +76,7 @@ export class Room extends DurableObject<Env> implements Host {
         for (const s of this.seats) if (s.left) g.forfeit(s.pi);
       }
       if (!this.anyOnline()) this.presence(); // the connections are gone (a restart cuts them): nobody can be waited for
+      this.save(); // presence and legacy deadline migration must survive another eviction, including a rejected create RPC
     } catch (err) {
       console.error('room lost', err);
       this.dissolve();
@@ -82,11 +90,12 @@ export class Room extends DurableObject<Env> implements Host {
    */
   save() {
     if (!this.code) return; // dissolved: nothing is kept
-    const { code, host, dev, settings, idle, seats } = this, saved = this.game?.saved;
+    if (this.game?.S.over) this.linger ||= Date.now() + OVER_MS;
+    const { code, host, dev, settings, idle, expires, linger, seats } = this, saved = this.game?.saved;
     if (saved && saved.ckpt !== this.ckpt) this.ctx.storage.kv.put('ckpt', JSON.stringify((this.ckpt = saved.ckpt))); // a checkpoint is never changed, only replaced (see `Game.mark`): it is written when it is a new one
-    const json = JSON.stringify({ code, host, dev, settings, idle, seats, game: saved && { tape: saved.tape, due: saved.due, lapsed: saved.lapsed } } satisfies Stored);
+    const json = JSON.stringify({ code, host, dev, settings, idle, expires, linger, seats, game: saved && { tape: saved.tape, due: saved.due, lapsed: saved.lapsed } } satisfies Stored);
     if (json !== this.stored) this.ctx.storage.kv.put('room', (this.stored = json));
-    const at = Math.min(...[idle, this.game?.due ?? 0, ...seats.map((s) => s.drop)].filter(Boolean)); // Infinity: nothing to wait for
+    const at = Math.min(expires, ...[idle, linger, this.game?.due ?? 0, ...seats.map((s) => s.drop)].filter(Boolean)); // every stored room has a finite alarm, even if a deploy cuts all sockets without a close event
     if (at >= this.alarmAt) return;
     void this.ctx.storage.setAlarm((this.alarmAt = at));
   }
@@ -96,7 +105,10 @@ export class Room extends DurableObject<Env> implements Host {
     if (this.code) return false;
     this.code = code;
     this.dev = dev && DEV_ROOMS;
-    this.idle = Date.now() + IDLE_MS; // nobody is connected yet: if nobody comes, the room must not stay for ever
+    const now = Date.now();
+    this.idle = now + IDLE_MS; // nobody is connected yet: if nobody comes, the room must not stay for ever
+    this.expires = now + LIFE_MS;
+    this.linger = now + LOBBY_MS;
     return true;
   }
 
@@ -118,11 +130,13 @@ export class Room extends DurableObject<Env> implements Host {
   webSocketClose(ws: WebSocket, code: number) { this.onClose(ws, code); }
   webSocketError(ws: WebSocket) { this.onClose(ws, 1006); }
 
-  /** A deadline has come: of a room nobody is in, of the seat of a player who vanished, or of the question that waits for an answer. */
+  private expired(now: number) { return [this.idle, this.expires, this.linger].some((at) => at > 0 && at <= now); }
+
+  /** A deadline has come: the room's lifetime or inactivity limit, a vanished player's seat, or a question waiting for an answer. */
   alarm() {
     this.alarmAt = Infinity; // spent
     const now = Date.now();
-    if (this.idle && this.idle <= now) return this.dissolve();
+    if (this.expired(now)) return this.dissolve();
     this.seats.filter((s) => s.drop && s.drop <= now).forEach((s) => this.leave(s));
     if (!this.game?.tick(now)) this.save(); // a question that answers itself is written by the game when it waits again, as one that was answered is
   }
@@ -227,6 +241,7 @@ export class Room extends DurableObject<Env> implements Host {
     this.settings = { ...DEFAULT_SETTINGS };
     this.code = '';
     this.idle = 0;
+    this.expires = this.linger = 0;
     this.stored = '';
     this.ckpt = undefined;
     this.alarmAt = Infinity; // `deleteAll` takes the alarm with it
@@ -277,6 +292,7 @@ export class Room extends DurableObject<Env> implements Host {
   }
 
   private start() {
+    this.linger = 0;
     [...this.seats].sort((a, b) => a.seat - b.seat).forEach((s, i) => (s.pi = i));
     const players = [...this.seats].sort((a, b) => a.pi - b.pi).map((s) => ({ name: s.name, color: PLAYER_DEFS[s.seat].color }));
     this.game = new Game(this, fresh(players, this.settings));
@@ -293,6 +309,7 @@ export class Room extends DurableObject<Env> implements Host {
     this.seats.forEach((s) => (s.pi = -1));
     if (!this.seats.some((s) => s.pid === this.host)) this.host = this.seats.find((s) => !s.bot)?.pid ?? '';
     if (!this.host) return this.dissolve(); // nobody but bots
+    this.linger = Date.now() + LOBBY_MS;
     this.changed();
   }
 }
