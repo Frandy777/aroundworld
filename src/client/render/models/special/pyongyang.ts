@@ -1,4 +1,21 @@
-import { box, cyl, decal, final, stone, GOLD, type ModelDef } from '../../builder';
+import * as THREE from 'three';
+import { box, cyl, decal, final, lamplit, mat, part, rnd, stone, GOLD, INK, type ModelDef } from '../../builder';
+import { canvas, shade } from '../../art';
+import { pixelTexture, toon } from '../../scene';
+
+// What the two upgrades are drawn in (see `levels`): one small palette between them, since the Juche Tower already takes more than half of a model's draw-call budget (every paint is a mesh once baked, see check.mjs): the pale granite of both monuments and its trim,
+// the grey of the paving, two greens (the lawns' stripes, the beds), the flowers' red, orange and yellow, the bronze of the statues in three tones, and the faces and coats of the people on the square
+const WALL = 0xdadcd6, TRIM = 0xeeeee8, PAVE = 0xb4b2a8, GRASS = 0x3f9a5c, DEEP = 0x2a6e3e, BLOOM = [0xe43b44, 0xf08a24, 0xf4c430], CAST = 0x9b6a3c, CAST_L = 0xc08a52, CAST_D = 0x5e3d22, SKIN = 0xf5b88c, COAT = 0x3b5dc9;
+// The mural on the Mansudae museum (see `levels`), MW x MH texels on the world's own grid: the range of Mount Paektu in tesserae from one end to the other, snow along its ridges and grey rock under them, a peach sky over it, every tessera a shade or two off its neighbour's. The statues
+// stand in front of the middle of it, so the snow runs the whole width and the peaks beside them are in sight. Drawn twice: the day's, and the night's, which is the emissive map (the same mural, dim: the floodlights on it)
+const MW = 33, MH = 6, RIM = [3, 3, 4, 4, 5, 4, 5, 6, 5, 4, 4, 5, 5, 6, 6, 6, 5, 6, 6, 5, 5, 4, 4, 5, 6, 5, 5, 4, 4, 3, 3, 3, 2]; // its size, how many rows of the mountain stand in each column
+const mural = (night: boolean) => pixelTexture(canvas(MW, MH, (g) => {
+  for (let x = 0; x < MW; x++) for (let y = 0; y < MH; y++) { // y counts down from the top
+    const d = y - (MH - RIM[x]), c = d < 0 ? (y < 2 ? 0xe9b88f : 0xf3cfaa) : d < 1 + +(RIM[x] > 4) ? (d ? 0xdfe6f2 : 0xffffff) : [0x7a8191, 0x656c7c, 0x8a91a0][(x + y) % 3]; // how far under the summit it is (negative: sky); sky, snow, rock
+    g.fillStyle = shade(c, (0.9 + 0.2 * rnd(x, y, 3)) * (night ? 0.35 : 1)); g.fillRect(x, y, 1, 1);
+  }
+}));
+const MURAL = toon(0xffffff, { map: mural(false), emissive: 0xffffff, emissiveMap: mural(true) }); // the mural's material: the tesserae by day, the floodlit ones after dusk (see `nightlit`)
 
 export default {
   key: 'Pyongyang',
@@ -38,5 +55,65 @@ export default {
       [[0.45, 0.45], [-0.6, 0.5]].forEach(([x, z]) => box(g, 0.14, 0.012, 0.025, JET, x, 0.1, z));                                                                // ripples
       [[-1.03, -0.7], [-1.03, -0.3]].forEach(([x, z]) => { box(g, 0.06, 0.3, 0.06, WOOD, x, 0.24, z); cyl(g, 0.2, 0.14, 0x2f7a4a, x, 0.5, z); cyl(g, 0.17, 0.12, 0x3f9a5c, x, 0.64, z); cyl(g, 0.11, 0.1, 0x4fb06a, x, 0.76, z); }); // two trees on the plaza
     }),
+  ],
+  levels: [ // the Juche Tower stands at every level; each upgrade adds a monument of Pyongyang round it: the Mansudae Grand Monument on the apron in front of the river, the Monument to Party Founding on a terrace behind the statue
+    [ // Lv 1, the Mansudae Grand Monument across the apron: a long museum of pale granite in two tiers, three pilasters at each end of its wall and between them the mural of the Paektu range (floodlit after dusk), and in front of it, on a base of stepped granite, the two bronze statues, the one in his long coat with his arm raised, the other in his jacket with his hands at his sides (floodlit as well); lawns in stripes either side of them, beds of red, orange and yellow flowers along the front and two visitors on the paving
+      final((g) => {
+        const [Y, MZ, SZ, BZ] = [0.1, 1.04, 1.55, 1.745]; // the square's height (flush with the river's edge), the museum's depth line, the statues', the flower beds'
+        const cast = (c: number) => lamplit(c, c, 0.2), side = mat(TRIM); // the bronze's floodlight, in its own colours (a warm one turns it yellow); the frame of the mural
+        const B = (w: number, h: number, d: number, c: number, x: number, y: number, z = SZ) => box(g, w, h, d, c, x, y, z, cast(c)); // a bronze part, x from the middle of the square
+        const rod = (x: number, y: number, len: number, a: number) => { B(0.045, len, 0.06, CAST, x - Math.sin(a) * len / 2, y + (Math.cos(a) - 1) * len / 2).rotation.z = a; return [x - Math.sin(a) * len, y + Math.cos(a) * len]; }; // a bronze arm from (x, y) tipped a to the left: where its tip is
+        stone(g, 2.3, Y, 0.84, PAVE, 0, 0, 1.38); // the square, flush with the river's edge
+        stone(g, 2.1, 0.32, 0.16, WALL, 0, Y, MZ); box(g, 2.14, 0.025, 0.19, TRIM, 0, Y + 0.32, MZ); // the museum: its long wall and the cornice over it
+        stone(g, 1.7, 0.1, 0.12, WALL, -0.1, Y + 0.345, MZ); box(g, 1.74, 0.02, 0.15, TRIM, -0.1, Y + 0.445, MZ); // its upper tier, set back, and its cornice
+        for (const s of [-1, 1]) for (const x of [0.84, 0.93, 1.02]) box(g, 0.035, 0.32, 0.02, TRIM, s * x, Y, MZ + 0.08); // three pilasters at each end of the wall
+        box(g, 1.5, 0.27, 0.03, TRIM, 0, Y + 0.025, MZ + 0.095, [side, side, side, side, MURAL, side]); // the mural of the Paektu range, on the world's own grid, in a frame of the trim
+        stone(g, 0.95, 0.045, 0.3, WALL, 0, Y, SZ); // the statues' base: a broad step
+        for (const s of [-1, 1]) { stone(g, 0.34, 0.09, 0.22, WALL, s * 0.23, Y + 0.045, SZ); box(g, 0.3, 0.02, 0.18, CAST_D, s * 0.23, Y + 0.135, SZ, cast(CAST_D)); } // a block of granite for each, capped in dark bronze
+        const [A, C, Y0] = [-0.23, 0.23, Y + 0.155]; // the two statues' middles, the top of their caps
+        B(0.11, 0.07, 0.07, CAST_D, A, Y0); B(0.16, 0.3, 0.09, CAST, A, Y0 + 0.07); B(0.19, 0.17, 0.095, CAST, A, Y0 + 0.37); B(0.035, 0.36, 0.01, CAST_D, A, Y0 + 0.12, SZ + 0.05); // the first: his shoes, the long coat, the chest and shoulders, the opening down its front
+        B(0.045, 0.035, 0.05, CAST_L, A, Y0 + 0.54); B(0.09, 0.105, 0.085, CAST_L, A, Y0 + 0.575); B(0.095, 0.03, 0.09, CAST_D, A, Y0 + 0.65); B(0.04, 0.24, 0.06, CAST, A + 0.115, Y0 + 0.25); // his neck, head and hair; the left arm at his side
+        const [hx, hy] = rod(A - 0.1, Y0 + 0.5, 0.3, 0.5); B(0.055, 0.07, 0.045, CAST_L, hx, hy - 0.01).rotation.z = 0.5; // the raised arm, and the hand open at its end
+        B(0.12, 0.17, 0.08, CAST_D, C, Y0); B(0.19, 0.3, 0.1, CAST, C, Y0 + 0.14); B(0.17, 0.022, 0.105, CAST_D, C, Y0 + 0.24); B(0.21, 0.07, 0.1, CAST, C, Y0 + 0.4); // the second: his trousers, the jacket, its belt, the shoulders
+        B(0.12, 0.03, 0.11, CAST_D, C, Y0 + 0.46); B(0.09, 0.105, 0.085, CAST_L, C, Y0 + 0.49); B(0.095, 0.03, 0.09, CAST_D, C, Y0 + 0.575); // his collar, head and hair
+        for (const s of [-1, 1]) B(0.045, 0.27, 0.07, CAST, C + s * 0.125, Y0 + 0.17); // both arms at his sides
+        for (const s of [-1, 1]) for (let k = 0; k < 4; k++) box(g, 0.5, 0.03, 0.1, k & 1 ? DEEP : GRASS, s * 0.84, Y, 1.25 + k * 0.1); // a lawn either side of the base, mown in stripes
+        const bed = (x: number, w: number, d: number, n: number) => { // a bed of flowers w wide and d deep, n layers high: leaves, then a flower to every texel, each layer a texel narrower at both ends
+          const [cx, cz] = [Math.round(w / 0.045), Math.round(d / 0.045)];
+          box(g, w, 0.03, d, DEEP, x, Y, BZ);
+          for (let l = 0; l < n; l++) for (let i = l; i < cx - l; i++) for (let j = 0; j < cz; j++) box(g, 0.045, 0.04, 0.045, BLOOM[Math.floor(rnd(i, j, l, Math.round(x * 100)) * 3)], x - w / 2 + (i + 0.5) * 0.045, Y + 0.03 + l * 0.04, BZ - d / 2 + (j + 0.5) * 0.045);
+        };
+        for (const s of [-1, 1]) { bed(s * 0.92, 0.3, 0.1, 2); bed(s * 0.6, 0.24, 0.1, 2); } // two beds either side, along the front of the lawns
+        bed(0, 0.7, 0.09, 1); // a low band across the middle, in front of the base
+        for (const [x, z, c] of [[-1.02, 1.64, COAT], [0.98, 1.64, TRIM]]) { box(g, 0.06, 0.1, 0.045, c, x, Y, z); box(g, 0.045, 0.045, 0.045, SKIN, x, Y + 0.1, z); } // two visitors on the paving: a coat and a head
+      }),
+    ],
+    [ // Lv 2, the Monument to Party Founding on a terrace behind the statue: a ring of pale granite over a dark base, with a band of gold characters across the front of it (they shine after dusk) and a short stair, and out of its middle the three raised fists of the party, the left one on a hammer, the middle one on a brush and the right one on a sickle
+      final((g) => {
+        const [CX, CZ, Y] = [0.8, -0.97, 0.46]; // the ring's centre line, the top of its terrace: high enough that the front of the ring clears the statue in front of it
+        const DRUM = new THREE.CylinderGeometry(1, 1, 1, 32, 1, false, Math.PI / 32); // a unit 32-gon slab with a flat face to the front
+        const drum = (r: number, h: number, c: number, y: number) => { part(g, DRUM, h, mat(c), CX, y, CZ).scale.set(r, h, r); }; // a round slab of radius r on the ring's axis
+        const S = (w: number, h: number, d: number, x: number, y: number, z = 0, c = WALL) => box(g, w, h, d, c, CX + x, y, CZ + z); // a block of the fists' granite, x and z from the ring's axis
+        const gold = lamplit(GOLD, 0xffcf60, 0.55), T = Y + 0.31, F = T + 0.3; // the gilding, which the floodlights pick out after dusk; the top of the podium the fists stand on, the top of the fists
+        stone(g, 0.8, 0.32, 0.91, PAVE, CX, 0, -0.905); stone(g, 0.76, 0.14, 0.84, WALL, CX, 0.32, -0.92); // the terrace in two tiers, spilling over the plaza's back edge
+        drum(0.3, 0.09, INK, Y); drum(0.35, 0.15, WALL, Y + 0.09); drum(0.37, 0.03, TRIM, Y + 0.24); drum(0.3, 0.04, TRIM, Y + 0.27); // the dark base, the ring's wall, its cornice, the podium on it
+        stone(g, 0.34, 0.09, 0.07, WALL, CX, Y, CZ + 0.335); stone(g, 0.38, 0.045, 0.07, WALL, CX, Y, CZ + 0.405); // the stair up to the base: two steps
+        for (let k = -6; k <= 6; k++) { // the inscription: a gold character on each facet of the ring's front, a block, two bars or a bar and a dot
+          const a = (k * Math.PI) / 16, p = new THREE.Group(), v = Math.floor(rnd(k + 9, 2) * 3);
+          p.position.set(CX + Math.sin(a) * 0.355, Y + 0.13, CZ + Math.cos(a) * 0.355); p.rotation.y = a; g.add(p);
+          if (v === 0) box(p, 0.05, 0.07, 0.014, GOLD, 0, 0, 0, gold);
+          else if (v === 1) [0, 0.044].forEach((y) => box(p, 0.05, 0.026, 0.014, GOLD, 0, y, 0, gold));
+          else { box(p, 0.02, 0.07, 0.014, GOLD, -0.015, 0, 0, gold); box(p, 0.024, 0.024, 0.014, GOLD, 0.014, 0.023, 0, gold); }
+        }
+        const fist = (x: number, z = 0) => { S(0.15, 0.09, 0.14, x, T, z); [0, 1, 2].forEach((i) => S(0.18, 0.07, 0.16, x + (i & 1) * 0.012, T + 0.09 + i * 0.07, z, i & 1 ? WALL : TRIM)); }; // a fist: the wrist and three fingers, staggered and in two tones
+        fist(-0.21); fist(0, -0.05); fist(0.21); // the three of them, a gap between, the middle one a little behind
+        S(0.09, 0.75, 0.09, -0.21, F); S(0.34, 0.2, 0.15, -0.23, F + 0.62); S(0.34, 0.035, 0.15, -0.23, F + 0.82, 0, TRIM); // the hammer: its handle, its head (wider than the handle, over it and left of it) and the light cap on it
+        S(0.09, 0.2, 0.09, 0, F, -0.05); // the brush's handle
+        [[0.15, 0.1], [0.13, 0.1], [0.09, 0.08], [0.05, 0.06], [0.025, 0.04]].reduce((y, [w, h]) => { S(w, h, w * 0.9, 0, y, -0.05); return y + h; }, F + 0.17); // and its head, swelling and then tapering to a point, shorter than the others
+        S(0.09, 0.66, 0.09, 0.21, F); // the sickle's handle
+        let [bx, by] = [0.25, F + 0.64]; // where its blade starts: the top of the handle
+        [[0.15, 0.08], [0.13, 0.55], [0.1, 1]].forEach(([len, a]) => { S(len, 0.1, 0.08, bx - (Math.cos(a) * len) / 2, by - (Math.sin(a) * len) / 2 - 0.05, 0.05).rotation.z = a; bx -= Math.cos(a) * len; by -= Math.sin(a) * len; }); // the blade: three bars, each leaning further down toward the left, in front of the brush
+      }),
+    ],
   ],
 } satisfies ModelDef;
