@@ -3,7 +3,7 @@ import { LEVEL_NAMES, REGIONS, TILES, depInterest, maxLevel } from '../../shared
 import { maxRounds } from '../../shared/state';
 import { leaveRoom } from '../controller';
 import { CAM, focusTok, lookAtTile } from '../stage';
-import { G, actionBtn, activeTab, cards, cashEls, floats, hudLive, lastRoll, selectedTile, session, state, statsOf, tip, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
+import { G, actionBtn, activeTab, cards, cashEls, floats, hudLive, lastRoll, peeking, selectedTile, session, state, statsOf, tip, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
 import { Die, Face, Flag, Icon, Named, Pips, Rich, hex, money, tileHead } from './bits';
 import { openMenu, openRules } from './open';
 import { TileBody } from './tile';
@@ -126,13 +126,14 @@ function Side() {
   );
 }
 
-// ---- Action bar: the last roll, the one button there is to press, or who the game is waiting for ----
+// ---- Action bar: the last roll, the one button there is to press (with the cards set aside, the way back to them), or who the game is waiting for ----
 function Actions() {
-  const chip = useCell(lastRoll), btn = useCell(actionBtn), waiting = useCell(waitingFor), who = waiting >= 0 ? state().players[waiting] : null;
+  const chip = useCell(lastRoll), btn = useCell(actionBtn), aside = useCell(peeking), waiting = useCell(waitingFor), who = waiting >= 0 ? state().players[waiting] : null;
   return (
     <footer id="actions">
       {chip && <div className="dice-chip box"><Die v={chip[0]} /><Die v={chip[1]} /><span>= {chip[0] + chip[1]}</span></div>}
       {btn && <button className="btn big primary" onClick={btn.click}>{btn.label}{btn.kbd && <> <kbd>SPACE</kbd></>}</button>}
+      {aside && <button className="btn big primary" onClick={() => peeking.set(false)}>SHOW CARD <kbd>SPACE</kbd></button>}
       {who && <div className="dice-chip box">WAITING FOR <b style={{ color: hex(who.color) }}>{who.name}</b></div>}
     </footer>
   );
@@ -171,13 +172,14 @@ export function Tip() {
   );
 }
 
+// Cards set aside (`peeking`) are hidden, not taken down: they keep what they hold (a pick, a bet, the dice in the air) until they are brought back.
 export function Overlays() {
-  const ts = useCell(toasts), fs = useCell(floats), cs = useCell(cards);
+  const ts = useCell(toasts), fs = useCell(floats), cs = useCell(cards), aside = useCell(peeking);
   return (
     <>
       <div id="toasts">{ts.map((t) => <div key={t.id} className={`toast box ${t.tone}`}><Rich m={t.m} /></div>)}</div>
       <div id="floats">{fs.map((f) => <div key={f.id} className={`float ${f.cls}`} style={{ left: f.x, top: f.y }}>{f.text}</div>)}</div>
-      <div id="modals">{cs.map((c) => <Fragment key={c.key}>{c.node}</Fragment>)}</div>
+      <div id="modals" hidden={aside}>{cs.map((c) => <Fragment key={c.key}>{c.node}</Fragment>)}</div>
     </>
   );
 }

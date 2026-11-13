@@ -5,7 +5,7 @@ import { canPick } from '../../shared/state';
 import type { CasinoView, NewsCard as News, Notice, OrderPass, Player, Prompt, RankRow } from '../../shared/types';
 import { reply } from '../asks';
 import { pace } from '../render/scene';
-import { state, useCell, G, type Cell } from '../store';
+import { state, useCell, G, peeking, type Cell } from '../store';
 import { Blocks, Die, Face, Flag, Icon, Pips, Rich, hex, money, tileHead } from './bits';
 import { TileBody } from './tile';
 
@@ -13,15 +13,17 @@ const d6 = () => 1 + Math.floor(Math.random() * 6);
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms / pace.speed));
 
 // ---- Card frame ----
-export function Card({ title, sub = '', tone = 0x333b66, ink = '#fff', cls = '', dismiss, foot, auto, children }: {
-  title: ReactNode; sub?: ReactNode; tone?: number; ink?: string; cls?: string; dismiss?: string; foot?: ReactNode; auto?: ReturnType<typeof useAuto>; children?: ReactNode;
+// A card covers the whole window, so the board and the panels can't be reached while it is up. One that has no button of its own to be taken down by (`dismiss`) can be set aside
+// instead (`peek`): VIEW BOARD, or Escape, puts every card away with its state kept, and SHOW CARD in the action bar (the HUD, see hud.tsx) brings them back. `peek={false}`: a card with no HUD behind it.
+export function Card({ title, sub = '', tone = 0x333b66, ink = '#fff', cls = '', dismiss, peek = !dismiss, foot, auto, children }: {
+  title: ReactNode; sub?: ReactNode; tone?: number; ink?: string; cls?: string; dismiss?: string; peek?: boolean; foot?: ReactNode; auto?: ReturnType<typeof useAuto>; children?: ReactNode;
 }) {
   return (
     <div className="modal" data-dismiss={dismiss}>
       <div className={`card box ${cls}`} onPointerEnter={auto?.hold} onPointerLeave={auto?.free}>
         <div className="hd" style={{ '--tone': hex(tone), color: ink } as CSSProperties}><span>{title}</span><small>{sub}</small></div>
         <div className="bd">{children}</div>
-        <div className="ft">{foot}</div>
+        <div className="ft">{peek && <Btn id="peek" cls="peek" onClick={() => { auto?.free(); peeking.set(true); }}>VIEW BOARD</Btn>}{foot}</div>
         {auto && <div className="bar fuse"><i style={{ width: `${auto.left}%` }} /></div>}
       </div>
     </div>
@@ -38,7 +40,7 @@ export function Check({ label, on }: { label: string; on: Cell<boolean> }) {
 const TICKS = 20; // the steps a card's wait is counted down in: its bar loses one at a time, like a 16-bit gauge
 /** Run `fn` once, `ms` after the card is up (less while the screen is catching up, see `pace`): a card with nothing to decide closes itself.
  *  The wait is counted down in TICKS steps, and `left` (percent) is what is still to go, for the card to show as a bar. The count stands still while the pointer
- *  is on the card, so a slow reader is not hurried, and goes on when it leaves. Without `ms` there is no count, and the card gets nothing back. */
+ *  is on the card, or while the card is set aside (see Card), so a slow reader is not hurried, and goes on when it leaves. Without `ms` there is no count, and the card gets nothing back. */
 function useAuto(ms: number, fn: () => void) {
   const f = useRef(fn);
   f.current = fn;
@@ -50,7 +52,7 @@ function useAuto(ms: number, fn: () => void) {
     const t = setInterval(() => {
       const now = performance.now(), dt = now - last;
       last = now;
-      if (held.current || document.hidden) return; // ... or while the tab is away
+      if (held.current || peeking.get() || document.hidden) return; // ... or while the cards are set aside, or the tab is away
       gone += (dt * pace.speed) / ms;
       setTicks(Math.max(0, Math.ceil((1 - gone) * TICKS)));
     }, 50);
@@ -233,7 +235,7 @@ export function OrderCard({ players, passes, order, close }: { players: Player[]
   }, []);
   useAuto(ready ? READ : 0, close);
   return (
-    <Card title="WHO GOES FIRST?" sub="Lowest total moves first" foot={<Btn id="go" cls="primary" disabled={!ready} onClick={close}>LET{'\u2019'}S GO</Btn>}>
+    <Card title="WHO GOES FIRST?" sub="Lowest total moves first" peek={false} foot={<Btn id="go" cls="primary" disabled={!ready} onClick={close}>LET{'\u2019'}S GO</Btn>}>
       <div className="list" id="ord">{players.map((p, i) => (
         <div className={`order-row ${tie.includes(i) ? 'tie' : ''}`} key={i}>
           <Face color={p.color} /><span className="nm" style={{ color: hex(p.color) }}>{p.name}</span>

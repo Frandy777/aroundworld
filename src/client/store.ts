@@ -83,6 +83,8 @@ export function openCard<T = void>(render: (close: (v: T) => void) => ReactNode)
   return { key, done, close };
 }
 export const clearCards = () => cards.set([]);
+export const peeking = cell(false); // the cards are set aside, to look at the board and the panels while a question stands (see Card)
+cards.sub(() => peeking.set(false)); // a card that comes or goes brings them back
 
 // The tile under the pointer
 export const tip = cell<{ i: number; x: number; y: number } | null>(null);

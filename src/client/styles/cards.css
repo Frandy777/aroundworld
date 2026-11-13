@@ -20,6 +20,7 @@
 .bd { padding: 12px 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
 .ft { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px; padding: 0 10px 8px; }
 .ft:empty { display: none; }
+.ft .peek { margin-right: auto; } /* VIEW BOARD stands apart from the answers, at the other end of the row */
 
 /* Deed / tile info */
 .rows { display: flex; flex-direction: column; gap: 4px; }

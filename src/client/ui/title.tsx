@@ -143,7 +143,7 @@ export function Lobby() {
   const put = (s: Partial<Settings>) => send({ t: 'settings', s: { ...set, ...s } });
   const step = (d: number) => put({ rounds: Math.max(ROUNDS_MIN, Math.min(ROUNDS_MAX, set.rounds + d)) });
   return (
-    <Card title="LOBBY" sub={`Room ${room.code}`} cls="wide" foot={<>
+    <Card title="LOBBY" sub={`Room ${room.code}`} cls="wide" peek={false} foot={<>
       <Btn id="leave" onClick={leaveRoom}>LEAVE</Btn>
       {host
         ? <Btn id="go" cls="primary" disabled={seats.length < 2} onClick={() => send({ t: 'start' })}>START GAME</Btn>
