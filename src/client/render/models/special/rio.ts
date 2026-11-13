@@ -1,5 +1,9 @@
 import * as THREE from 'three';
-import { box, cyl, decal, final, mat, part, stone, type ModelDef } from '../../builder';
+import { box, cyl, decal, final, mat, part, stone, INK, type ModelDef } from '../../builder';
+
+// What the two upgrades are drawn in (see `levels`): one small palette between them, since the mountain already takes most of a model's draw-call budget (every paint is a mesh once baked, see check.mjs): the pale concrete of the stadium and the core of the steps, snow white,
+// the blue, yellow and green of the Brazilian flag (the stadium's seats and the steps' tiles; a lighter green for the pitch's other stripe), a red for the tiles, and the lamp, which is unlit: it shines by day as by night
+const CONCRETE = 0xded8c6, SNOW = 0xf4f6fa, BLUE = 0x2b68d4, YELLOW = 0xf4c430, GREEN = 0x3ba35a, LIME = 0x55ca75, RED = 0xe43b44, LAMP = 0xfff6b0;
 
 export default {
   key: 'Rio',
@@ -55,5 +59,47 @@ export default {
       decal(g, ['.....w', '....ww', '....ww', '...www', '...www', '..wwww', '..wwww', '.wwwww', '.wwwww', 'wwwwww'], bx - 3 / 22 - 0.01, 0.2, bz); decal(g, ['R...', 'RR..', 'RR..', 'RRR.', 'RRR.', 'RRRR', 'RRRR'], bx + 2 / 22 + 0.02, 0.2, bz);  // the mainsail, the red jib
       [[-0.9, 0.85], [0.3, 0.9], [1.0, 0.65]].forEach(([x, z]) => box(g, 0.14, 0.012, 0.025, 0x9fd6ff, x, 0.1, z));                                             // ripples on the bay
     }),
+  ],
+  levels: [ // the Christ stands on his mountain at every level; each upgrade adds a landmark of Rio on the apron in front of the bay: the stadium on the left, the steps on the right
+    [ // Lv 1, the Maracanã on the apron's left: an oval bowl on a paved esplanade, a ring of white piers over dark glass round its foot, three tiers of blue and yellow seats inside and over them a wide white roof that leaves the striped pitch open to the sky, a ring of lights round the roof's inner edge
+      final((g) => {
+        const [MX, MZ, A, B, EY, PX, PZ] = [-0.5, 1.4, 0.62, 0.37, 0.27, 0.25, 0.115];                                                                                     // the stadium's centre line, the half-width and half-depth of its wall, the height of its eave; the pitch's half-width and half-depth
+        const oval = (a: number, b: number) => Array.from({ length: 40 }, (_, i) => new THREE.Vector2(a * Math.cos((i * Math.PI) / 20), b * Math.sin((i * Math.PI) / 20)));  // an ellipse a wide and b deep, in forty corners
+        const ring = (a0: number, b0: number, a1: number, b1: number, y: number, h: number, c: number) => {                                                                // a slab of the oval (a1, b1) with the oval (a0, b0) cut out of it (a0 = 0: none), h tall from y: the esplanade, the wall, the seats and the roof are all rings
+          const s = new THREE.Shape(oval(a1, b1)); if (a0) s.holes.push(new THREE.Path(oval(a0, b0)));
+          return part(g, new THREE.ExtrudeGeometry(s, { depth: h, bevelEnabled: false }).rotateX(-Math.PI / 2), 0, mat(c), MX, y, MZ);                                    // extruded up from the plan, turned to stand on y
+        };
+        ring(0, 0, A + 0.07, B + 0.04, 0, 0.04, CONCRETE);                                                                                                                 // the esplanade
+        ring(0.57, 0.33, A, B, 0.04, 0.09, CONCRETE); ring(0.57, 0.33, A - 0.005, B - 0.005, 0.13, 0.1, INK); ring(0.57, 0.33, A + 0.01, B + 0.01, 0.23, 0.04, CONCRETE);    // the wall: a concrete foot, a band of dark glass, the fascia under the eave
+        for (let k = 0; k < 32; k++) { const t = (k * Math.PI) / 16; box(g, 0.045, 0.1, 0.04, SNOW, MX + A * Math.cos(t), 0.13, MZ + B * Math.sin(t)).rotation.y = Math.atan2(-B * Math.cos(t), -A * Math.sin(t)); } // a white pier at every step round the glass, turned to stand along the wall
+        [[0.33, 0.185, 0.09, BLUE], [0.4, 0.23, 0.14, YELLOW], [0.47, 0.275, 0.19, BLUE]].forEach(([a, b, top, c]) => ring(a, b, A - 0.05, B - 0.04, 0.04, top - 0.04, c));  // the seats in three tiers that climb from the pitch to the wall
+        for (let i = 0; i < 8; i++) box(g, PX / 4, 0.02, 2 * PZ, i & 1 ? LIME : GREEN, MX - PX + (i + 0.5) * (PX / 4), 0.04, MZ);                                          // the pitch, mown in eight stripes across
+        const line = (w: number, d: number, x: number, z: number) => box(g, w, 0.008, d, SNOW, MX + x, 0.06, MZ + z);                                                      // a white line on it, from its centre
+        for (const s of [-1, 1]) { line(2 * PX, 0.025, 0, s * (PZ - 0.0125)); line(0.025, 2 * PZ, s * (PX - 0.0125), 0); line(0.1, 0.025, s * (PX - 0.05), 0.07); line(0.1, 0.025, s * (PX - 0.05), -0.07); line(0.025, 0.165, s * (PX - 0.1), 0); } // the touchlines and goal lines, the penalty areas
+        line(0.025, 2 * PZ, 0, 0); ring(0.035, 0.035, 0.06, 0.06, 0.06, 0.008, SNOW);                                                                                      // the halfway line, the centre circle
+        ring(0.43, 0.235, A + 0.03, B + 0.025, EY, 0.035, SNOW); ring(0.43, 0.235, 0.455, 0.26, EY + 0.035, 0.02, LAMP);                                                   // the roof, a broad white ring from over the wall to over the edge of the pitch, and the ring of lights round its inner rim
+      }),
+    ],
+    [ // Lv 2, the Selarón Steps on the apron's right: seven steps up from the street, tiled in the blue, yellow and green of the flag with the white and red that the artist broke them with, between two walls of tiles that climb with them; a lamp on the front of each wall and a pot of greenery at its foot, and more of it spilling over the walls
+      final((g) => {
+        const [SX, ZF, N, RUN, RISE, CW, WALL] = [0.74, 1.82, 7, 0.117, 0.085, 0.1, 0.12];                                                                                 // the steps' centre line and foot, how many, the depth and height of a step, the width of a tile and of a wall
+        const TILE: Record<string, number> = { B: BLUE, Y: YELLOW, G: GREEN, R: RED, W: SNOW };                                                                            // the tiles' paints
+        const STEPS = ['RWRWR', 'GYBGY', 'YBWRB', 'BGYBG', 'WRBYW', 'YGRGY', 'BYGBR'];                                                                                     // the tiles across each step, from the foot: a tile's top and its front are one paint
+        const WALLS = ['BGYRWBG', 'YRBGYWR'];                                                                                                                              // the two courses of tiles in a wall, from the foot: a tile to every step
+        const T = (RISE + 0.1) / 2, EDGE = 2.5 * CW + WALL / 2, top = (k: number) => (k + 1) * RISE + 0.1;                                                                  // the height of a wall's tile (the wall stands 0.1 over its step), how far a wall stands from the centre line, the height of its top at step k
+        for (let k = 0; k < N; k++) {
+          const z = ZF - RUN * (k + 0.5), y = k * RISE;                                                                                                                    // the step's centre line, the height it starts at
+          if (k) { box(g, 5 * CW, y, RUN, CONCRETE, SX, 0, z); for (const s of [-1, 1]) box(g, WALL, y, RUN, CONCRETE, SX + s * EDGE, 0, z); }                              // the solid under the step and under each wall
+          [...STEPS[k]].forEach((c, i) => box(g, CW, RISE, RUN, TILE[c], SX + (i - 2) * CW, y, z));                                                                        // the step's tiles
+          for (const s of [-1, 1]) [0, 1].forEach((j) => box(g, WALL, T, RUN, TILE[WALLS[s < 0 ? j : 1 - j][k]], SX + s * EDGE, y + j * T, z));                           // the wall's two courses, flipped on the other side
+        }
+        for (const s of [-1, 1]) {
+          const x = SX + s * EDGE, z = ZF - RUN / 2;
+          box(g, 0.02, 0.18, 0.02, INK, x, top(0), z); box(g, 0.05, 0.05, 0.05, LAMP, x, top(0) + 0.18, z);                                                                 // the lamp on the front of the wall
+          box(g, 0.09, 0.07, 0.09, RED, x + s * 0.12, 0, ZF - 0.07); box(g, 0.11, 0.09, 0.11, GREEN, x + s * 0.12, 0.07, ZF - 0.07); box(g, 0.07, 0.07, 0.07, LIME, x + s * 0.12, 0.16, ZF - 0.07);  // the pot at its foot, the shrub in it
+        }
+        [[-1, 2], [1, 4], [-1, 5], [1, 6]].forEach(([s, k]) => { const x = SX + s * EDGE, z = ZF - RUN * (k + 0.5); box(g, 0.1, 0.05, 0.1, k & 1 ? LIME : GREEN, x, top(k), z); box(g, 0.06, 0.05, 0.06, k & 1 ? GREEN : LIME, x + s * 0.02, top(k) + 0.05, z); });  // greenery spilling over the walls
+      }),
+    ],
   ],
 } satisfies ModelDef;
