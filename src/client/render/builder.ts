@@ -80,7 +80,7 @@ const facade = memo((cols: number, kind: string, L: number) => {
 // and clad upright boards of timber with a slot of window to each two columns (the block is made in the timber's colour, which tints its boards).
 // All of it is `villa` glass: aqua, lighter than a house's blue, with a pair of glints across each pane. By night a pane is a row of lamps in a house's amber, each lit or dark like any window: a long pane never glows as one sheet,
 // which in HD-2D would be the biggest, whitest thing in the scene (the others keep their light to small, saturated lamps).
-const rnd = (...k: number[]) => { let h = 0x811c9dc5; for (const v of k) { h = Math.imul(h ^ v, 0x01000193); h ^= h >>> 15; } return (h >>> 0) / 2 ** 32; }; // a hash of its arguments, in [0, 1)
+export const rnd = (...k: number[]) => { let h = 0x811c9dc5; for (const v of k) { h = Math.imul(h ^ v, 0x01000193); h ^= h >>> 15; } return (h >>> 0) / 2 ** 32; }; // a hash of its arguments, in [0, 1)
 const PLAIN: Record<string, string> = { door: 'win', lobby: 'flat', atrium: 'glass', foyer: 'ribbon', lounge: 'ribbon' }; // what a storey is on a face without the entrance
 const WHITE = [0xf4f6fb, 0xf4f6fb, 0xe6eefc, 0xfff3e0]; // a tower's lamps: neutral whites, a cool one and a warm one now and then
 const LAMPS: Record<string, number[]> = { // a kind's windows: the share of them that is lit by night, and the tones of their lamps (warm in a house, a blue screen now and then in the flats, white in a tower and its lobby)
@@ -263,7 +263,7 @@ export const prism = memo((a: number, h: number, r: number) => {
 // The tower's glass, a module m tall to every X of bracing: silver-blue panes (the one above the crossing lighter, with the sky in it, the one below darker), a belt over the module and posts down the edges, and floors of ribbon glazing, four to a module
 // (two far). A wall is drawn whole, its modules and then the cap of a slanted wall above the last one, which has the floors but no X. By night the glass is black but for the bracing, belts and posts, which are lit in LED white (the tower is outlined in
 // light), and the floors that are lit, in the warm white of an office: a floor is lit all through or hardly at all, a stretch of it at a time, from a hash of its place, so no two modules and no two prisms are the same.
-const OFFICE = [0xffc46a, 0xffd48a, 0xffe2b4, 0xf4f6fb]; // an office's lamps: amber, warm, soft white, and a cool one now and then
+export const OFFICE = [0xffc46a, 0xffd48a, 0xffe2b4, 0xf4f6fb]; // an office's lamps: amber, warm, soft white, and a cool one now and then
 const GLASS = ['#9bb9e6', '#7799d3', '#5f83bd', '#4a6ba3']; // the pane above the crossing, at the sides, below it, and the shadow under a brace (dark enough that the glass is still glass by night)
 const curtain = memo((w: number, H: number, m: number, seed: number, L: number, night: boolean) => {
   const W = texels(w, L), T = texels(H, L), M = (m * DENSITY) / 2 ** (2 - L), n = Math.floor(H / m + 1e-6), F = [2, 4, 4][L], P = M / F, row = (k: number) => Math.round(k * M); // texels across and up, a module's height (not a whole number), whole modules, floors to a module and a floor's height

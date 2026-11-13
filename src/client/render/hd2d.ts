@@ -27,7 +27,7 @@ const FIXED: [number, THREE.Vector3, number, number, number, number?][] = [
   ...oils.map((ti, k): [number, THREE.Vector3, number, number, number, number] => [18 + k, at(ti, 0.99, 2.95, -0.65, 1), 0xff8524, 6, 6.5, ti]), // oil-site flare stacks
   [20, at(vegas, -0.3, 1.5, 0.45, 1), 0xffae52, 5.5, 6, vegas], // Fabulous Las Vegas sign & neon
   [21, at(pyongyang, -0.26, 5.7, -0.35, 1), 0xff4d3b, 5, 6.5, pyongyang], // Juche Tower's glowing red torch
-  [22, at(zurich, 0, 0.85, 0.55, 1), 0xffbe66, 3.8, 5.5, zurich], // Bahnhofstrasse street lamps
+  [22, at(zurich, 0, 0.85, 0.95, 1), 0xffbe66, 3.8, 5.5, zurich], // Bahnhofstrasse street lamps (the church stands 0.4 forward on its plot)
   [23, at(devil, 0.72, 2.95, -0.15, 1), 0xffe494, 4.5, 6, devil], // Devil's Island lighthouse & searchlight
   [24, at(hongkong, -0.4, 1.0, -0.15, 1), 0xdce8ff, 6, 7, hongkong], // Bank of China Tower's LED outline spilling over its podium: inside its lowest prism, so that no halo hangs in front of the glass
 ];
