@@ -192,7 +192,9 @@ export class Game {
     pend.resolve(v);
   }
   private arm(pend: Pending) {
-    pend.due = this.host.anyOnline() ? Date.now() + (this.host.bot(pend.to) ? BOT_MS : this.host.online(pend.to) ? ASK_MS : OFFLINE_MS) : 0; // nobody is watching: the game waits
+    const bot = this.host.bot(pend.to), ms = this.host.anyOnline() ? (bot ? BOT_MS : this.host.online(pend.to) ? ASK_MS : OFFLINE_MS) : 0; // nobody is watching: the game waits
+    pend.due = ms && Date.now() + ms;
+    this.emit({ t: 'clock', ms: bot ? 0 : ms }); // everybody sees the time left (a bot's beat is not worth a gauge)
   }
   answer(pi: number, id: number, v: unknown) {
     const pend = this.pending;

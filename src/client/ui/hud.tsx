@@ -3,7 +3,7 @@ import { LEVEL_NAMES, REGIONS, TILES, depInterest, maxLevel } from '../../shared
 import { maxRounds } from '../../shared/state';
 import { leaveRoom } from '../controller';
 import { CAM, focusTok, lookAtTile } from '../stage';
-import { G, actionBtn, activeTab, cards, cashEls, floats, hudLive, lastRoll, peeking, selectedTile, session, state, statsOf, tip, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
+import { G, actionBtn, activeTab, cards, cashEls, countdown, floats, hudLive, lastRoll, peeking, selectedTile, session, state, statsOf, tip, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
 import { Die, Face, Flag, Icon, Named, Pips, Rich, hex, money, tileHead } from './bits';
 import { openMenu, openRules } from './open';
 import { TileBody } from './tile';
@@ -41,6 +41,14 @@ function useRoll(cash: number) {
   return shown;
 }
 
+// The time the game still gives a player to answer, as a gauge on their card that everybody sees (see `countdown`). A new clock (a new question, or the server setting it again) is a new gauge: it
+// starts from what was left of the time as it went up, and runs down by itself in CSS.
+function Clock({ i }: { i: number }) {
+  const c = useCell(countdown);
+  if (c?.pi !== i) return null;
+  return <div className="clock" key={c.end}><i style={{ '--w': `${(c.left * 100) / c.ms}%`, '--t': `${c.left}ms` } as CSSProperties} /></div>;
+}
+
 function PCard({ i, on, viewing }: { i: number; on: boolean; viewing: boolean }) {
   const S = useGame(), p = S.players[i], s = statsOf(i), v = useRoll(p.cash), room = useCell(session).room;
   const offline = room?.seats.find((x) => x.pi === i)?.online === false;
@@ -65,6 +73,7 @@ function PCard({ i, on, viewing }: { i: number; on: boolean; viewing: boolean })
         <span title="Cities"><Icon n="city" />{s.city}</span><span title="Investments"><Icon n="brief" />{s.inv}</span><span title="Mortgaged"><Icon n="lock" />{s.mort}</span>
         <span title="Total assets" className="gold"><Icon n="coin" />{money(s.net)}</span>
       </div>
+      <Clock i={i} />
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { clearDice, hideDice, hop, jump, placeAt, removeToken, rollDice, setActi
 import { POS } from './render/layout';
 import { finishTweens, pace, wait } from './render/scene';
 import { enterDemo, enterGame, focusTok, playStrike, selectTile, setOwner, showState, tokenSpot } from './stage';
-import { G, actionBtn, activeTab, autoFocus, bump, bumpAssets, cashEls, clearCards, floatText, floats, hudLive, lastRoll, selectedTile, session, tip, toast, toasts, viewedPlayer, waitingFor, type Button, type Open } from './store';
+import { G, actionBtn, activeTab, autoFocus, bump, bumpAssets, cashEls, clearCards, countdown, floatText, floats, hudLive, lastRoll, selectedTile, session, tip, toast, toasts, viewedPlayer, waitingFor, type Button, type Open } from './store';
 import { openAsk, openCasino, openNews, openNotice, openOrder, openResults } from './ui/open';
 import { money } from './ui/bits';
 
@@ -30,6 +30,13 @@ let shown: Open<void> | null = null; // the card being waited on that has nothin
 export const dismissShown = () => shown?.close();
 /** Wait for a card with nothing to decide. A hidden tab throttles the timer that closes it, and nobody sees it there: it comes down as the tab goes hidden. */
 const show = (card: Open<void>) => live((shown = card).done.then(() => { if (shown === card) shown = null; }));
+
+let tick: { ms: number; end: number } | null = null; // the open question's clock as the server last set it: how long it is, and when it runs out by this page's clock (null: none)
+let asked = -1; // who the question on screen is for
+/** Put the clock on the card of whoever is asked. The clock is the server's, not the screen's: the director may be well behind it, so the gauge goes up with what is left. */
+function showClock() {
+  countdown.set(asked >= 0 && tick ? { pi: asked, ms: tick.ms, end: tick.end, left: Math.max(0, tick.end - performance.now()) } : null);
+}
 
 let kept: NewsCard | null = null; // the story this player read on its Media redraw card and kept: the 'news' event that follows is the same one, already seen
 let casino: ReturnType<typeof openCasino> | null = null; // the card of the casino visit in progress, if any
@@ -56,6 +63,7 @@ function reset() {
   pace.speed = 1;
   forget();
   shown = null;
+  tick = null; asked = -1; showClock();
   kept = null;
   casino = null;
   clearCards();
@@ -75,7 +83,11 @@ export function exitToDemo() {
 }
 
 export function push(evs: Ev[]) {
-  for (const ev of evs) { if (ev.t === 'close') close(ev.id); else queue.push(ev); } // a closed question comes down at once, not when the director gets to it
+  for (const ev of evs) {
+    if (ev.t === 'close') close(ev.id); // a closed question comes down at once, not when the director gets to it
+    else if (ev.t === 'clock') { tick = ev.ms ? { ms: ev.ms, end: performance.now() + ev.ms } : null; showClock(); } // and its clock is counted from the moment it is told: the question it belongs to may be queued behind a long card
+    else queue.push(ev);
+  }
   void pump();
 }
 
@@ -234,9 +246,11 @@ async function ask(id: number, to: number, p: Prompt) {
   else if (p.k === 'roll') { if (me) actionBtn.set((btn = { label: 'ROLL DICE', kbd: true, click: () => reply(id, true), reply: (v) => reply(id, v) })); }
   else if (me) card = openAsk(id, p, (v) => { if (p.k === 'news' && v === false) kept = p.card; }); // the others only see who is being waited for
   waitingFor.set(me ? -1 : to);
+  asked = to; showClock();
   await live(over);
   card?.close();
   if (p.k === 'casino' && casino?.ask.get()?.id === id) casino.ask.set(null);
   if (btn && actionBtn.get() === btn) actionBtn.set(null);
   waitingFor.set(-1);
+  asked = -1; showClock();
 }

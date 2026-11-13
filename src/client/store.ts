@@ -43,6 +43,7 @@ export const activeTab = cell<Tab>('tile'); // which pane
 export const lastRoll = cell<[number, number] | null>(null); // the last roll, in the action bar
 export const actionBtn = cell<Button | null>(null); // the one button in the action bar
 export const waitingFor = cell(-1); // the player the game is waiting for
+export const countdown = cell<{ pi: number; ms: number; left: number; end: number } | null>(null); // the player on the clock (mine too): the time the question gave, what was left as the gauge went up, and when it runs out by this page's clock (a new `end` is a new gauge)
 
 // ---- Preferences: this client's own, kept in localStorage ----
 const FOCUS_KEY = 'autoFocus';

@@ -96,5 +96,6 @@ export type Ev =
   | { t: 'news'; card: NewsCard }
   | { t: 'casino'; view: CasinoView }
   | { t: 'ask'; id: number; to: number; p: Prompt }
+  | { t: 'clock'; ms: number } // the open prompt takes its default answer in `ms` if nobody answers first (set again when somebody connects or leaves; 0: no clock — the game waits, or the player is a bot)
   | { t: 'close'; id: number } // the prompt `id` was answered (or timed out)
   | { t: 'over'; rank: RankRow[] };
