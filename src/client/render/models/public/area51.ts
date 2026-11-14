@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { box, cyl, final, glass, mat, part, plaque, GOLD, IRON, INK, type ModelDef } from '../../builder';
+import { LAYER_FX, fxOf } from '../../scene';
 
 export default {
   key: 'area51',
@@ -27,9 +28,10 @@ export default {
       box(g, 0.02, 0.1, 0.02, IRON, UX, BY + 0.54, UZ); box(g, 0.05, 0.05, 0.05, 0xff5de0, UX, BY + 0.64, UZ);
       for (let k = 0; k < 10; k++) { const a = (k * Math.PI) / 5; box(g, 0.07, 0.06, 0.07, [0xfff6b0, 0xff5de0][k & 1], UX + 0.5 * Math.cos(a), BY + 0.18, UZ + 0.5 * Math.sin(a)); }
       // beam: a translucent cone from the belly to the circle, unlit and shadowless, with dust and straw round it
-      const BEAM = new THREE.MeshBasicMaterial({ color: 0xc8fff9, transparent: true, opacity: 0.42, depthWrite: false, side: THREE.BackSide }); // far wall only, so the cow in front is never tinted
+      const BEAM = fxOf(new THREE.MeshBasicMaterial({ color: 0xc8fff9, transparent: true, opacity: 0.42, depthWrite: false, side: THREE.BackSide })); // far wall only, so the cow in front is never tinted
       const beam = part(g, new THREE.CylinderGeometry(0.18, 0.5, BY - 0.12, 14, 1, true), BY - 0.12, BEAM, UX, 0.12, UZ);
       beam.castShadow = beam.receiveShadow = false;
+      beam.layers.set(LAYER_FX); beam.name = 'ufo-beam'; beam.geometry.userData.own = true; // the translucent layer (scene.ts): a name keeps it out of bake's batch, which has no layers, and `own` has freeBaked free its geometry
       [0.28, 0.4, 0.52, 1.3, 1.45, 1.6, 1.75].forEach((y, i) => { const r = 0.7 * (0.5 - (0.32 * (y - 0.12)) / (BY - 0.12)), a = i * 2.4; box(g, 0.05, 0.05, 0.05, i & 1 ? STRAW : 0xfff6b0, UX + r * Math.cos(a), y, UZ + r * Math.sin(a)); }); // clear of the cow
       // cow: white with black patches, pink udder and snout, golden horns, head thrown up, legs kicking, tail flicked
       const cow = new THREE.Group(); cow.position.set(UX, 0.85, UZ); cow.rotation.set(0, 0.2, 0.4); cow.scale.setScalar(0.9); g.add(cow);

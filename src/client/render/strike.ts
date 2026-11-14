@@ -4,7 +4,7 @@ import { flight } from './flight';
 import { LOT, PAD, POS } from './layout';
 import { LAMP, glow, lamps } from './light';
 import { LAUNCH_PAD, MISSILE_LENGTH, MISSILE_SCALE, missile } from './models/missile';
-import { scene, tween } from './scene';
+import { LAYER_FX, fxOf, scene, tween } from './scene';
 import { sky } from './sky';
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -28,7 +28,7 @@ export async function strike(from: number, to: number, start = launchPoint(from)
     const m = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, depthWrite: false,
       side: THREE.DoubleSide, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending });
     if (additive) glow(m);
-    owned.push(m); return m;
+    owned.push(m); return fxOf(m);
   };
   const puffs = (count: number, color: number) => Array.from({ length: count }, (_, i) => {
     const mesh = new THREE.Mesh(PUFF, material(color)); mesh.visible = false;
@@ -51,6 +51,7 @@ export async function strike(from: number, to: number, start = launchPoint(from)
   });
   const ringMaterial = material(0xffdc95, true);
   const ring = new THREE.Mesh(RING, ringMaterial); ring.position.y = -0.25; blast.add(ring);
+  effects.traverse((o) => o.layers.set(LAYER_FX)); // the translucent layer: HD-2D draws it over the finished composite (scene.ts)
   scene.add(rocket, effects);
 
   const p = new THREE.Vector3(), v = new THREE.Vector3(), tp = new THREE.Vector3(), tv = new THREE.Vector3();

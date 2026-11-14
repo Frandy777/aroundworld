@@ -154,10 +154,51 @@ export const pixelTexture = (src: HTMLCanvasElement, repeat?: number) => {
   return t;
 };
 
+// ---- The translucent layer: smoke, flames, flashes, a beam ----
+// The restrained look draws them with everything else (its camera has the layer on). HD-2D draws layer 0, composes the occlusion, the sea and the haze on it (hd2d.ts), and only then draws this layer over the result against the
+// scene's depth: a flame against the sky is not painted over by the composite's haze, and no wall's fog is printed on a puff of smoke in front of it. So that each fragment is seen through the air in front of it (not the air
+// behind the wall the composite fogged) it takes the fog of its own distance (`airOver`), and where it is seen (alpha over 0.05) it writes its depth, which the focus of the depth of field (hd2d.ts) is measured on.
+export const LAYER_FX = 1;
+export const AIR = {
+  aFog: { value: new THREE.Vector4(-1.2, 40, 0.07, 0.005) }, // the fog layer: its floor and ceiling, how fast it thins with height, its density at the floor (hd2d.ts sets the last)
+  aHor: { value: sky.horizon }, aLit: { value: sky.light }, aSun: { value: sky.sun }, aGlow: { value: 1 }, // the haze's colour, the way to the light that casts the shadows (the moon by night) and to the sun, the sun's share of the glow
+};
+// The air, as the composite (hd2d.ts) and a translucent fragment both look through it. The haze is the sky's own horizon colour, thickest at grazing angles and brighter on the side of the sun, which goes on under the horizon at
+// dusk, and by night on the side of the moon (`sky.glow` is the share of the sun's). `tau` is the optical depth of the fog layer along a ray: its density falls off as exp( - k h ), integrated in closed form. `airOver` is a colour
+// seen at the world point `wp` through the air in front of it, with that air's own haze put in front (an additive colour only dims: what it lights has the haze already).
+export const AIR_GLSL = /* glsl */`
+uniform vec3 aHor, aLit, aSun; uniform vec4 aFog; uniform float aGlow;
+float lobe( vec2 h, vec3 d ) { return pow( clamp( dot( h, normalize( d.xz ) ), 0.0, 1.0 ), 4.0 ); }
+vec3 haze( vec3 rd ) { vec2 h = normalize( rd.xz ); return aHor * ( 0.85 + 0.3 * mix( lobe( h, aLit ), lobe( h, aSun ), aGlow ) ); }
+float tau( vec3 ro, vec3 rd, float tm ) {
+	float k = aFog.z, y0 = aFog.x, ye = ro.y + rd.y * tm;
+	return aFog.w * abs( exp( - k * max( ro.y - y0, 0.0 ) ) - exp( - k * max( ye - y0, 0.0 ) ) ) / ( k * max( abs( rd.y ), 1e-3 ) );
+}
+vec4 airOver( vec4 c, vec3 wp, float add ) {
+	vec3 d = wp - cameraPosition; float tm = length( d ); vec3 rd = d / tm; float tr = exp( - tau( cameraPosition, rd, tm ) );
+	return vec4( c.rgb * tr + haze( rd ) * ( 1.0 - tr ) * ( 1.0 - add ), c.a );
+}
+`;
+/** A translucent MeshBasicMaterial for HD-2D's second pass (put its meshes on LAYER_FX): seen through the air in front of it, and writing depth where it is seen, in HD-2D only: the restrained look draws it as it ever did. Wraps the
+ * `onBeforeCompile` the material has (`glow`'s), so call it last. */
+export const fxOf = <M extends THREE.MeshBasicMaterial>(m: M) => {
+  const was = m.onBeforeCompile, key = `fx ${was}`;
+  m.onBeforeCompile = (sh, r) => {
+    was.call(m, sh, r);
+    Object.assign(sh.uniforms, AIR, { uFxHd: U.uHd, uFxAdd: { value: +(m.blending === THREE.AdditiveBlending) } });
+    sh.vertexShader = `varying vec3 vFx;\n${sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nvFx = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;')}`;
+    sh.fragmentShader = `${AIR_GLSL}\nuniform float uFxHd, uFxAdd; varying vec3 vFx;\n${sh.fragmentShader.replace('#include <opaque_fragment>', '#include <opaque_fragment>\nif ( uFxHd > 0.5 ) {\n\tif ( gl_FragColor.a <= 0.05 ) discard;\n\tgl_FragColor = airOver( gl_FragColor, vFx, uFxAdd );\n}')}`;
+  };
+  m.customProgramCacheKey = () => key; // three names a program by the text of onBeforeCompile, which is this wrapper's for every material (a glowing one or not): the text of what it wraps tells them apart
+  m.onBeforeRender = () => { m.depthWrite = hd.on; };
+  return m;
+};
+
 // ---- Camera & controls ----
 // The near plane lies as far behind the camera as the far plane lies before it: the view is orthographic, so the camera's own plane is no reason to cut the world. At the lowest
 // tilt and the farthest zoom the sea along the bottom of the screen is behind it, and a band of bare background would show there.
 export const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -600, 600);
+camera.layers.enable(LAYER_FX); // the restrained look draws both layers in one pass; HD-2D's camera (hdCam) takes them one at a time
 export const ELEV = THREE.MathUtils.degToRad(52);
 camera.position.set(0, Math.sin(ELEV) * 150, Math.cos(ELEV) * 150);
 
@@ -501,6 +542,7 @@ export function initScene() {
   renderer.shadowMap.type = THREE.BasicShadowMap; // hard, stair-stepped shadows
   renderer.shadowMap.autoUpdate = false;
   controls.connect(renderer.domElement);
+  for (const l of [hemi, sun, spot, ...lamps]) l.layers.enable(LAYER_FX); // HD-2D draws the translucent layer in a render of its own: with the lights in it, the light state three keeps (which every lit material is checked against) is the same as in the first
   scene.add(hemi, sun, sun.target, ...lamps, spot, spot.target);
   daylight();
   renderer.domElement.style.width = renderer.domElement.style.height = ''; // the page sizes the canvas (see resize): drop a size that an older hot update gave it
