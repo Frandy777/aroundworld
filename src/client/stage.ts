@@ -67,11 +67,13 @@ export function enterGame() {
 }
 
 // ---- Camera ----
+// The angle a focus swings the camera to: a 3/4 view of the token from low enough to read its face (its head leans back ~20° toward a low camera, see actors.ts TILT).
+const FOCUS_VIEW = { az: 50, elev: 25 };
 export const focusTok = (pi: number, zoom = 2) => {
   const t = tokens[pi];
   if (!t) return;
   cam.follow = pi;
-  focus(t.g.position.x, t.g.position.z, zoom);
+  focus(t.g.position.x, t.g.position.z, zoom, FOCUS_VIEW);
 };
 const lookAt = (x: number, z: number, zoom: number | 'fit' = 2) => { cam.follow = -1; focus(x, z, zoom); };
 const zoom = (k: number) => lookAt(controls.target.x, controls.target.z, THREE.MathUtils.clamp(camera.zoom * k, controls.minZoom, controls.maxZoom));
