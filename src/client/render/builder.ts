@@ -39,6 +39,7 @@ const PANELS: ((f: Fill, x: number) => void)[] = [
   (f, x) => { for (const y of [0, 5]) { f('#27479c', x, y, 4, 4, PANE); f('#4f86e8', x, y, 4, 1, PANE); f('#cfe8ff', x + 1, y + 1, 1, 1, PANE); } },
   (f, x) => { for (const y of [1, 10]) { f('#27479c', x + 1, y, 9, 8, PANE); f('#4f86e8', x + 1, y, 9, 3, PANE); f('#cfe8ff', x + 2, y + 1, 2, 1, PANE); } },
 ];
+const PANELS_LIT: [number, number, number, number][][] = [[[0, 0, 2, 3]], [[0, 0, 4, 4], [0, 5, 4, 4]], [[1, 1, 9, 8], [1, 10, 9, 8]]]; // the glass of those panels by night, far, mid, near: [x from the left of the column, y, w, h]
 const DOOR: ((f: Fill, w: number, dw: number) => void)[] = [ // dw = the door's width
   (f, w, dw) => { const x = (w - dw) / 2; f('#3a2008', x - 1, 2, dw + 2, 3, SEAM); f('#8a5a2b', x, 3, dw, 2); },
   (f, w, dw) => { const x = (w - dw) / 2; f('#3a2008', x - 1, 3, dw + 2, 7, SEAM); f('#7db6ff', x, 4, dw, 2, PANE); f('#8a5a2b', x, 6, dw, 3); f('#ffd23f', x + dw - 1, 7, 1, 1); f('#ffe9a0', (w >> 1) - 1, 1, 2, 1); f('#bdbdbd', x - 1, 9, dw + 2, 1); },
@@ -102,6 +103,7 @@ const HALL: ((f: Fill, w: number) => void)[] = [ // a flat's entrance: two glass
   },
 ];
 const HALL_LIT: ((w: number) => number[][])[] = [(w) => [[(w >> 1) - 1, 2, 2, 2]], (w) => [0, 5].map((d) => [(w >> 1) - 4 + d, 4, 3, 4]), (w) => [0, 9].map((d) => [(w >> 1) - 8 + d, 7, 7, 10])]; // what of it is lit: the glass of the leaves, all of it
+const LOBBY_LIT = HALL_LIT.map((leaves, L) => (w: number) => leaves(w).map(([x, y, bw]) => [x, y, bw, [2, 3, 7][L]])); // the same of a `floor`'s lobby (see LOBBY): the same doors, their glass not so tall
 const lamp = (f: Fill, L: number, x: number, y: number, w: number, h: number, tone: number) => { const k = L === 2 ? 3 : 2; f(hex(tone), x, y, w, h); if (L && h > k) f(shade(tone, 0.8), x, y + k, w, h - k); }; // a lit window: a lighter upper part over a darker one
 const PORTAL: [number, number, number, number][] = [[3, 3, 1, 1], [3, 4, 4, 3], [3, 5, 12, 9]]; // a tower's doors, far, mid, near: the top of their recess, the top and the height of the glass of the two leaves, the width of a leaf
 const portal = (f: Fill, L: number, night: boolean, x: number, w: number) => { // the lobby's doors in the w texels from x (its two middle columns, under the strip of the first floor): two glass leaves in a dark recess on a step, lit by night
@@ -128,19 +130,20 @@ const villa = (f: Fill, L: number, night: boolean, x: number, y: number, w: numb
   pane(f, L, false, x, y, w, h, undefined, AQUA);
   if (L) for (const [a, n] of L === 2 ? [[3, 6], [8, 3]] : [[2, 3]]) for (let k = 0; k < n && a + k < w - 1 && k < h - 1; k++) f(AQUA[2], x + a + k, y + h - 2 - k, 1, 1, PANE);
 };
+const tonesOf = (kind: string) => LAMPS[kind === 'lobby' ? 'flat' : kind === 'door' ? 'win' : kind]; // a storey's lamps: [the share lit, ...tones]; a lobby's windows are a flat's, a door's a house's
+const litOf = (seed: number, i: number, tones: number[]) => (p: number, ...k: number[]) => (rnd(seed, i, ...k) < p ? tones[Math.floor(rnd(seed, i, ...k, 1) * tones.length)] : undefined); // the tone of a window's lamp, if it is lit: of storey i of the face of that seed
+const entry = (f: Fill, L: number, night: boolean, x0: number, n: number) => { // the original door (see DOOR), centred in the n columns from x0 on, in a storey's own coordinates: by night its glass and the lamp over it
+  const sub: Fill = (c, x, y, bw, bh, m) => f(c, x0 + x, y, bw, bh, m), sw = n * STOREY[L][0], dw = [1, 3, 7][L] + (n % 2 ? 0 : 1), x = (sw - dw) / 2;
+  if (!night) DOOR[L](sub, sw, dw);
+  else if (L) { lamp(sub, L, L === 2 ? x + 1 : x, L === 2 ? 7 : 4, L === 2 ? dw - 2 : dw, L === 2 ? 4 : 2, 0xffc070); sub('#ffe9a0', (sw >> 1) - 1, L === 2 ? 3 : 1, 2, 1); }
+};
 const city = memo((cols: number, rows: string, L: number, night: boolean, seed: number) => {
   const kinds = rows.split(' '), [cw, h] = STOREY[L];
   return tex(cols * cw, kinds.length * h, (g, w, H) => {
     if (night) g('#000', 0, 0, w, H);
     kinds.forEach((kind, i) => {
-      const f: Fill = (c, x, y, bw, bh, m) => g(c, x, H - (i + 1) * h + y, bw, bh, m), [on, ...tones] = LAMPS[kind === 'lobby' ? 'flat' : kind === 'door' ? 'win' : kind]; // the storey's own coordinates, from its top
-      const lit = (p: number, ...k: number[]) => (rnd(seed, i, ...k) < p ? tones[Math.floor(rnd(seed, i, ...k, 1) * tones.length)] : undefined); // the tone of a window's lamp, if it is lit
+      const f: Fill = (c, x, y, bw, bh, m) => g(c, x, H - (i + 1) * h + y, bw, bh, m), [on, ...tones] = tonesOf(kind), lit = litOf(seed, i, tones); // the storey's own coordinates, from its top
       const base = () => { if (!night) { f('#fff', 0, 0, w, h); if (L === 2) f('#e2e2e2', 0, 18, w, 1); f('#c4c4c4', 0, h - 1, w, 1, SEAM); } }; // wall and ledge
-      const entry = (x0: number, n: number) => { // the original door (see DOOR), centred in the n columns from x0 on: by night its glass and the lamp over it
-        const sub: Fill = (c, x, y, bw, bh, m) => f(c, x0 + x, y, bw, bh, m), sw = n * cw, dw = [1, 3, 7][L] + (n % 2 ? 0 : 1), x = (sw - dw) / 2;
-        if (!night) DOOR[L](sub, sw, dw);
-        else if (L) { lamp(sub, L, L === 2 ? x + 1 : x, L === 2 ? 7 : 4, L === 2 ? dw - 2 : dw, L === 2 ? 4 : 2, 0xffc070); sub('#ffe9a0', (sw >> 1) - 1, L === 2 ? 3 : 1, 2, 1); }
-      };
       if (kind === 'glass' || kind === 'atrium') { // a tower's glazing, a strip to every floor; the lobby's two middle columns are its doors
         const [nf, ph, y0, gh] = RIBBON[L], door = (c: number) => kind === 'atrium' && Math.abs((c + 0.5) * cw - w / 2) < cw;
         if (!night) f('#dde6f5', 0, 0, w, h); // the spandrel
@@ -165,10 +168,10 @@ const city = memo((cols: number, rows: string, L: number, night: boolean, seed: 
           const a = m + Math.round((j * span) / n), b = m + Math.round(((j + 1) * span) / n) - gap;
           villa(f, L, night, a, y[L], b - a, gh[L], (c) => lit(on, j, c));
         }
-        if (kind === 'foyer') entry(gw * cw, 1);
+        if (kind === 'foyer') entry(f, L, night, gw * cw, 1);
       } else {
         base();
-        if (kind === 'door') entry(0, cols);
+        if (kind === 'door') entry(f, L, night, 0, cols);
         else {
           const [gx, gy, gw, gh] = GLAZING[kind === 'win' ? 'win' : 'flat'][L];
           for (let c = 0; c < cols; c++) if (kind !== 'lobby' || Math.abs(c * cw + cw / 2 - w / 2) >= [2, 4, 8][L]) pane(f, L, night, c * cw + gx, gy, gw, gh, lit(on, c)); // not in front of the entrance
@@ -176,6 +179,21 @@ const city = memo((cols: number, rows: string, L: number, night: boolean, seed: 
         }
       }
     });
+  });
+});
+// The night of a `floor`'s walls (see `facade`, which draws their day), lit as a city's are: the same lamps (`LAMPS`) in the same windows (`pane`), the lamp over a door (`entry`), the glass leaves of a lobby, and the panes of a curtain wall
+// lit like windows. A face is hashed by its width and kind, so it is lit the same on every storey and building that has it (7 is the seed with which no face of the models stays dark).
+const KINDS = ['win', 'door', 'lobby', 'glass'];
+const facadeLit = memo((cols: number, kind: string, L: number) => {
+  const [cw, h] = STOREY[L], [on, ...tones] = tonesOf(kind), lit = litOf(7, cols * KINDS.length + KINDS.indexOf(kind), tones), panes = kind === 'glass' ? PANELS_LIT[L] : [GLAZING.win[L]];
+  return tex(cols * cw, h, (f, w) => {
+    f('#000', 0, 0, w, h);
+    for (let c = 0; c < cols; c++) {
+      if ((kind === 'door' || kind === 'lobby') && Math.abs(c * cw + cw / 2 - w / 2) < [2, 4, 8][L]) continue; // not in front of the entrance
+      panes.forEach(([x, y, bw, bh], j) => pane(f, L, true, c * cw + x, y, bw, bh, lit(on, c, j)));
+    }
+    if (kind === 'door') entry(f, L, true, 0, cols);
+    if (kind === 'lobby') LOBBY_LIT[L](w).forEach(([x, y, bw, bh]) => lamp(f, L, x, y, bw, bh, 0xffe2ac));
   });
 });
 const ROOF = 8; // roof tile size in near texels (4 and 2 on the mid and far grids)
@@ -241,7 +259,7 @@ export const emissive = memo((c: THREE.ColorRepresentation) => glow(new THREE.Me
 export const metal = memo((c: THREE.ColorRepresentation, pbr: Pbr) => toon(c, {}, pbr));
 export const glass = memo((c: THREE.ColorRepresentation, night?: number, k: number = 1) => { const m = glassy(toon(c)); return night === undefined ? m : nightlit(m, night, k); }); // a plain colour that is glass (see `glassy`): the gloss of a window on a voxel, which has no texture for it to be found in; `night`: the light it shines in after dusk, k times over (see `lamplit`)
 export const lamplit = memo((c: number, night: number, k: number) => nightlit(toon(c, {}, METAL.get(c)), night, k)); // `mat(c)` by day, and by night it shines in `night` x k (see `nightlit`): a lit path, a strip of light
-const wallMat = memo((cols: number, kind: string, c: number) => lodMap(toon(c), (L) => facade(cols, kind, L)));
+const wallMat = memo((cols: number, kind: string, c: number) => lodMap(lodMap(toon(c, { emissive: 0xffffff }), (L) => facade(cols, kind, L)), (L) => facadeLit(cols, kind, L), 'emissiveMap')); // the night's drawing is the emissive map, as a city's is (see `cityMat`)
 const cityMat = memo((cols: number, rows: string, c: number, seed: number, lamps: boolean) => { // lamps: the night's drawing is the emissive map (white, so that the map alone says what is lit)
   const m = lodMap(toon(c, lamps ? { emissive: 0xffffff } : {}), (L) => city(cols, rows, L, false, seed));
   return lamps ? lodMap(m, (L) => city(cols, rows, L, true, seed), 'emissiveMap') : m;

@@ -2,6 +2,7 @@ import { box, final, floor, glass, hip, plaque, GOLD, IRON, INK, type ModelDef }
 
 export default {
   key: 'China Railway',
+  lamps: [{ at: [0.35, 0.8, -0.2], color: 0xffd9a0, power: 3.8, reach: 6.5, final: true }], // the platform's light on the station hall
   props: [ // a high-speed rail station: a white train at its platform under the overhead wire, a station hall with a stepped red roof, a signal shed, a signal and a second track
     final((g) => {
       const Z = 0.18, WHITE = 0xf4f6fa, RED = 0xd9423e, NAVY = 0x23338f, STEEL = 0x7b86a0, DARK = 0x333a52, CREAM = 0xf0e6c8, TILE = 0x9c2f2f; // Z: the train's centre line

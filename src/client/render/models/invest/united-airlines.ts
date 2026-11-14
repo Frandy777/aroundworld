@@ -2,6 +2,7 @@ import { box, cyl, final, floor, glass, plaque, GOLD, IRON, INK, type ModelDef }
 
 export default {
   key: 'United Airlines',
+  lamps: [{ at: [-0.35, 0.72, -0.12], color: 0xffd9a0, power: 3.6, reach: 6.5, final: true }], // the apron lights in front of the glass concourse
   props: [ // an airport apron: a jet at its stand between a glass terminal and the control tower, with a fuel truck, a baggage train, airstairs and traffic cones
     final((g) => {
       const Z = 0.25, WHITE = 0xf4f6fa, BLUE = 0x2447a8, NAVY = 0x1a2250, WING = 0xe3e8f2, GLASS = 0x7db6ff, DARK = 0x4a5170, YEL = 0xe0a020, RED = 0xd9423e; // Z: the jet's centre line

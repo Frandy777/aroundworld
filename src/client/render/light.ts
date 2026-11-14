@@ -16,7 +16,7 @@ export const U = {
 
 // The local lights: a fixed set, parked at zero intensity when idle, because a different count would make every material compile again (hd2d.ts places them).
 export const CITY_COUNT = TILES.filter((t) => t.type === 'city').length;
-export const LAMP = { strike: 4, fixed: 5, city: 29 }; // 0-3 tokens, 4 missile, 5-28 fixed landmark/scenery lamps (declared by the models and lamps.ts), 29+ two lamps (front-right key + back-left fill) per ordinary city
+export const LAMP = { strike: 4, fixed: 5, city: 37 }; // 0-3 tokens, 4 missile, 5-36 fixed landmark/scenery lamps (declared by the models and lamps.ts), 37+ two lamps (front-right key + back-left fill) per ordinary city
 export const lamps = Array.from({ length: LAMP.city + CITY_COUNT * 2 }, () => new THREE.PointLight(0xffffff, 0, 0, 2));
 export const spot = new THREE.SpotLight(0xffe2b0, 0, 0, 0.45, 0.8, 1.6);
 spot.shadow.mapSize.set(1024, 1024);

@@ -114,9 +114,9 @@ const kept = import.meta.hot?.data ?? {};
 export let renderer!: THREE.WebGLRenderer;
 // The 4096 x 4096 shadow map is drawn by the next render() after a dirtyShadow(), not every frame: the sun's frame moved (fitShadow), a tween, a tile or a landing token is still
 // moving, a plot's building changed. The endless loops (the globe's float, the tokens' bob) are no reason: their shadows catch up whenever the map is next drawn. HD-2D is the exception: it draws the map every
-// frame (see render), because its sun never steps (sky.ts) and so much of its world moves through it (the ships and the dolphin, the sails and the smoke, a token's bob, a rocket), with a spot's own map beside it.
+// frame (see render), because its sun never steps (sky.ts) and so much of its world moves through it (the ships and the dolphin, the sails, a token's bob, a rocket), with a spot's own map beside it.
 export const dirtyShadow = () => { if (renderer) renderer.shadowMap.needsUpdate = true; };
-/** What moves and casts a shadow in HD-2D only (scenery.ts adds its ships, its dolphin, the sails and the smoke), switched at the change of look: the restrained look draws its map only when something asks (see dirtyShadow),
+/** What moves and casts a shadow in HD-2D only (scenery.ts adds its ships, its dolphin and the sails), switched at the change of look: the restrained look draws its map only when something asks (see dirtyShadow),
  * so what moves would leave its shadow where the map was last drawn, and what it draws must stay what it was. */
 export const movers: THREE.Object3D[] = [];
 

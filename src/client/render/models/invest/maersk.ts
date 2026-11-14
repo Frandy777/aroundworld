@@ -2,6 +2,7 @@ import { box, final, floor, glass, plaque, GOLD, INK, type ModelDef } from '../.
 
 export default {
   key: 'Maersk',
+  lamps: [{ at: [-0.6, 0.72, -0.12], color: 0xffd9a0, power: 3.2, reach: 6, final: true }], // the quay light in front of the line's office
   props: [ // a container terminal: a ship at the quay under a gantry crane, a yard of stacked boxes, a truck and the line's office with its sign
     final((g) => {
       const Z = 0.25, NAVY = 0x1a2c5a, RED = 0xb02a2a, BLUE = 0x42b0d5, WHITE = 0xf2f2f2, DARK = 0x3a4056, GLASS = 0x7db6ff, BOX = [BLUE, 0xd9423e, 0xe0a020, WHITE, 0x3fa65a]; // Z: the ship's centre line

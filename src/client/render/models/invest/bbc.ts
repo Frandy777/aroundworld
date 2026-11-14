@@ -2,6 +2,7 @@ import { box, cyl, final, floor, glass, plaque, GOLD, IRON, INK, type ModelDef }
 
 export default {
   key: 'bbc',
+  lamps: [{ at: [0, 1.0, 0.5], color: 0xffd9a0, power: 4.2, reach: 6.5, final: true }], // the floodlight on the Portland stone of the lobby, from the forecourt
   props: [ // Broadcasting House: a stepped Art Deco tower in Portland stone (statue over the doors, the three black BBC squares on its frieze, a red ON AIR sign and a banded mast on top), on its forecourt an outside-broadcast van with a dish, a camera on its dolly and a studio light
     final((g) => {
       const Z = -0.45, STONE = 0xffffff, TRIM = 0xe4ddc8, WHITE = 0xf4f6fa, GREY = 0xcfd6e6, DARK = 0x3a4056, RED = 0xd9423e, GLASS = 0x7db6ff, BRONZE = 0xb89a5a; // Z: the tower's centre line

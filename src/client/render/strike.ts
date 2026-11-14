@@ -9,7 +9,7 @@ import { sky } from './sky';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const IGNITION_TIME = 0.24, BLAST_TIME = 1.3;
-const SMOKE_COUNT = 36, SMOKE_STEP = 0.035, SMOKE_LIFE = SMOKE_COUNT * SMOKE_STEP;
+const SMOKE_COUNT = 144, SMOKE_STEP = 0.009, SMOKE_LIFE = SMOKE_COUNT * SMOKE_STEP; // a puff every 9 ms of flight: at 15 u/s, one every 0.13 u, so they overlap into one trail
 const CUBE = new THREE.BoxGeometry(1, 1, 1);
 const PUFF = new THREE.IcosahedronGeometry(1, 1);
 const RING = new THREE.RingGeometry(0.86, 1, 48).rotateX(-Math.PI / 2);
@@ -54,7 +54,7 @@ export async function strike(from: number, to: number, start = launchPoint(from)
   effects.traverse((o) => o.layers.set(LAYER_FX)); // the translucent layer: HD-2D draws it over the finished composite (scene.ts)
   scene.add(rocket, effects);
 
-  const p = new THREE.Vector3(), v = new THREE.Vector3(), tp = new THREE.Vector3(), tv = new THREE.Vector3();
+  const p = new THREE.Vector3(), v = new THREE.Vector3(), tp = new THREE.Vector3(), tv = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3();
   const fire = lamps[LAMP.strike]; fire.distance = 24; // HD-2D: the flame lights the board as it flies, and the blast flashes it
   const cloud = (meshes: typeof smoke, origin: THREE.Vector3, age: number, duration: number, spread: number) => {
     const q = THREE.MathUtils.clamp(age / duration, 0, 1);
@@ -82,13 +82,17 @@ export async function strike(from: number, to: number, start = launchPoint(from)
         mesh.visible = cycle >= 0 && born < plan.duration && time >= IGNITION_TIME;
         if (!mesh.visible) return;
         plan.at(born, tp, tv);
-        if (tv.lengthSq() < 1e-8) tv.copy(UP); else tv.normalize();
+        const speed = tv.length();
+        if (speed < 1e-4) tv.copy(UP); else tv.divideScalar(speed);
         mesh.position.copy(tp).addScaledVector(tv, -MISSILE_LENGTH * MISSILE_SCALE);
         mesh.position.x += Math.sin(i * 2.399) * age * 0.18;
         mesh.position.z += Math.cos(i * 2.399) * age * 0.18;
         mesh.position.y += age * 0.28;
-        mesh.scale.setScalar(0.06 + age * 0.24);
-        mesh.material.opacity = 0.3 * Math.min(1, age / 0.1) * (1 - age / SMOKE_LIFE) ** 2;
+        e1.crossVectors(tv, UP); if (e1.lengthSq() < 1e-6) e1.set(1, 0, 0); e1.normalize(); e2.crossVectors(tv, e1); // across the path
+        const swirl = 12 * born + 2.5 * age, reach = 0.04 + 0.3 * age; // the trail winds in a helix: the phase a puff starts on is its birth time's (so it runs smoothly along the trail, not by index), and it turns as it ages
+        mesh.position.addScaledVector(e1, Math.cos(swirl) * reach).addScaledVector(e2, Math.sin(swirl) * reach);
+        mesh.scale.setScalar(Math.max(0.1, 0.6 * speed * SMOKE_STEP) + age * 0.3); // born wide enough to reach the puff before it (`speed * SMOKE_STEP` away, however fast it flies), and still growing
+        mesh.material.opacity = 0.15 * Math.min(1, age / 0.06) * (1 - age / SMOKE_LIFE) ** 0.5; // the root keeps it over the 0.05 the HD-2D FX layer discards under for most of its life, so the trail is as long there as in the pixel look
       });
       rocket.visible = hit < 0;
       aim.visible = hit < 0;

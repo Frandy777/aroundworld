@@ -1,7 +1,9 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { bake, box, cyl, hip, mat, part, GOLD, INK, IRON, LAVA } from './builder';
 import { hd } from './light';
-import { movers } from './scene';
+import { LAYER_FX, fxOf, movers } from './scene';
+import { sky } from './sky';
 
 // Life on the water, kept clear of the board: an islet in each corner room of the loop (a climate each: palms, a lighthouse, an ice floe, a pagoda) and a bigger one on each side (a volcano,
 // a village), three ships on lanes round the board and one round the drum (the sea draws their wakes, see world), and a dolphin that now and then leaps by the drum. On the far islets the windmill's sails turn and the volcano smokes. All of it is low and
@@ -157,22 +159,28 @@ const HOP = 1.4, HALF = 2.6, PEAK = 2.6; // seconds in the air, half the length 
 const from = new THREE.Vector2(), to = new THREE.Vector2();
 let age = 99, wait = 5; // seconds since the last leap began, until the next one
 
-// ---- Moving: what turns and drifts on the far islets, kept out of the islets' bake. The windmill's sails take about 12 s a turn; the volcano's smoke is six puffs, each born small in the crater, swelling
-// as it climbs the wind and gone at the top, turning as it goes (a 5 s life, each at its own point of it) ----
+// ---- Moving: what turns and drifts on the far islets, kept out of the islets' bake. The windmill's sails take about 12 s a turn; the volcano's smoke is six puffs, each born small and lava-lit in the crater, swelling
+// and greying as it climbs the wind and thinning out at the top, turning as it goes (a 5 s life, each at its own point of it). A puff is translucent, so it is on the translucent layer (see LAYER_FX), which the sun's
+// map is not drawn from: it casts no shadow (a translucent ball would cast that of a solid one), so it is no mover ----
 const [vx, vz] = ISLETS[4], [mx, mz] = ISLETS[5];
 const sails = moving((g) => { box(g, 3.6, 0.2, 0.08, WOOD, 0, -0.1); box(g, 0.2, 3.6, 0.08, WOOD, 0, -1.8); }); // a cross about its middle
 sails.position.set(mx - 1.5, 2.5, mz + 0.5); // on the front of the tower, over its hub
-const smoke = [0xa9a6bd, 0x948fab, 0xb8b6ca, 0x827e99, 0xa9a6bd, 0x9d9ab2].map((c) => moving((g) => box(g, 1, 1, 1, c, 0, -0.5)));
+const PUFF = mergeGeometries([[0, 0, 0, 0.5], [0.3, -0.12, 0.1, 0.34], [-0.28, 0.1, -0.12, 0.36], [0.08, 0.3, -0.22, 0.3], [-0.1, -0.2, 0.3, 0.3], [0.2, 0.18, 0.28, 0.26]].map(([x, y, z, r]) => new THREE.IcosahedronGeometry(r, 1).translate(x, y, z))); // six balls round one: about as big as the cube a puff was
+const GREY = [0xa9a6bd, 0x948fab, 0xb8b6ca, 0x827e99, 0xa9a6bd, 0x9d9ab2].map((c) => new THREE.Color(c)), HOT = new THREE.Color(0xff8a3a);
+const smoke = GREY.map(() => { const m = new THREE.Mesh(PUFF, fxOf(new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false }))); m.layers.set(LAYER_FX); return m; }); // colour and opacity are set as it climbs
 
 export const scenery = new THREE.Group().add(isles, sails, ...smoke, dolphin, ...fleet.map((b) => b.g));
 
 export function updateScenery(t: number, dt: number) {
   sails.rotation.z = t * 0.5;
+  const dim = THREE.MathUtils.mapLinear(sky.lampK, 0.12, 1, 1, 0.3); // an unlit grey goes dark with the night, as the shaded cubes did
   smoke.forEach((g, i) => {
     const p = (t * 0.2 + i / smoke.length) % 1; // how far along its life
     g.position.set(vx + 1.6 * p, 3.6 + 4.8 * p, vz);
     g.rotation.y = i + t * 0.3;
     g.scale.setScalar((0.6 + 1.2 * p) * Math.min(1, 5 * p, 5 * (1 - p)));
+    g.material.color.copy(GREY[i]).multiplyScalar(dim).lerp(HOT, 1 - THREE.MathUtils.smoothstep(p, 0, 0.35)); // lit by the lava as it leaves the crater (the night does not dim that), grey by a third of its climb
+    g.material.opacity = 0.85 * Math.min(1, 6 * p) * (1 - p);
   });
   fleet.forEach((b, i) => {
     b.s += b.v * dt;
