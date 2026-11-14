@@ -3,7 +3,7 @@ import { LEVEL_NAMES, REGIONS, TILES, depInterest, maxLevel } from '../../shared
 import { maxRounds } from '../../shared/state';
 import { leaveRoom } from '../controller';
 import { CAM, focusTok, lookAtTile } from '../stage';
-import { G, actionBtn, activeTab, cards, cashEls, countdown, floats, hudLive, lastRoll, paused, peeking, selectedTile, session, state, statsOf, tip, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
+import { G, actionBtn, activeTab, cards, cashEls, countdown, floats, hd2d, hudLive, lastRoll, paused, peeking, selectedTile, session, state, statsOf, tip, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
 import { Die, Face, Flag, Icon, Named, Pips, Rich, hex, money, tileHead } from './bits';
 import { openMenu, openRules } from './open';
 import { TileBody } from './tile';
@@ -148,11 +148,12 @@ function Actions() {
   );
 }
 
-// ---- Camera ----
-const CAMS = [['rotl', 'left', 'Rotate view left'], ['reset', 'home', 'Reset view'], ['in', 'plus', 'Zoom in'], ['out', 'minus', 'Zoom out'], ['follow', 'focus', 'Focus on current player'], ['map', 'globe', 'Whole board']] as const;
+// ---- Camera & the look of the light ----
+const CAMS = [['in', 'plus', 'Zoom in'], ['out', 'minus', 'Zoom out'], ['follow', 'focus', 'Focus on current player'], ['map', 'globe', 'Whole board']] as const;
+const LOOKS = [['pixel', 'pixel', 'Pixel look', false], ['hd2d', 'star', 'HD-2D look', true]] as const; // the light's two looks (see hd2d), in the rotl/reset buttons' place
 
 export function Hud() {
-  const live = useCell(hudLive);
+  const live = useCell(hudLive), hd = useCell(hd2d);
   if (!live) return null; // only whether it is up: each part below subscribes to what it shows
   return (
     <div id="hud">
@@ -162,7 +163,10 @@ export function Hud() {
         <Side />
       </div>
       <Actions />
-      <div id="camctl">{CAMS.map(([c, ic, title]) => <button key={c} className="btn sm" data-cam={c} title={title} onClick={CAM[c]}><Icon n={ic} /></button>)}</div>
+      <div id="camctl">
+        {LOOKS.map(([c, ic, title, v]) => <button key={c} className={`btn sm${hd === v ? ' on' : ''}`} data-cam={c} title={title} onClick={() => hd2d.set(v)}><Icon n={ic} /></button>)}
+        {CAMS.map(([c, ic, title]) => <button key={c} className="btn sm" data-cam={c} title={title} onClick={CAM[c]}><Icon n={ic} /></button>)}
+      </div>
     </div>
   );
 }
