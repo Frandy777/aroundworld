@@ -82,8 +82,8 @@ float bayer( vec2 p ) { ivec2 q = ivec2( mod( p, 4.0 ) ); return ( float( B4[ q.
 
 // What the passes share, and the knobs (exported: a tweak from the console shows at once)
 const D = u<THREE.Texture | null>(null), NF = u(new THREE.Vector2()), IP = u(new THREE.Matrix4()), IVP = u(new THREE.Matrix4()), EYE = u(new THREE.Vector3());
-// The sky of the hour (sky.ts): the way to the sun and to the light that casts the shadows (the moon by night), the light's colour times its strength, and the sky's own two colours
-const SUN = u(sky.sun), LIT = u(sky.light), SUNC = u(new THREE.Vector3()), ZEN = u(sky.zenith), HOR = u(sky.horizon);
+// The sky of the hour (sky.ts): the way to the sun and to the light that casts the shadows (the moon by night), the light's colour times its strength, the sky's own two colours, and the sun's share of the horizon's glow
+const SUN = u(sky.sun), LIT = u(sky.light), SUNC = u(new THREE.Vector3()), ZEN = u(sky.zenith), HOR = u(sky.horizon), GLOW = u(1);
 export const K = {
   ao: u(0.9), aoR: u(2.2), // occlusion: how much of it shows, the radius it looks for occluders in (world units)
   haze: u(0.0025), shaft: u(0.6), // fog density at the sea and the strength of the light shafts
@@ -176,11 +176,12 @@ void main() {
 }`, { tD: D, tSh: SHT, uIVP: IVP, uShM: SHM, uEye: EYE, uSun: LIT, uSunC: SUNC, uSpD: SPD, uSpC: SPC, uLC: LC, uFog: FOG, uSp: SP, uL: L, uK: K.shaft });
 
 // The composite: occlusion on the scene, then the air between it and the eye. The sky is a gradient with the glow of the light (the sun, by night the moon); the haze is the sky's own horizon colour,
-// thickest at grazing angles and brighter on the side of the sun, which goes on under the horizon at dusk.
+// thickest at grazing angles and brighter on the side of the sun, which goes on under the horizon at dusk, and by night on the side of the moon (`sky.glow` is the share of the sun's).
 const sceneTex = u<THREE.Texture | null>(null), aoTex = u<THREE.Texture | null>(null), volTex = u<THREE.Texture | null>(null);
 const compPass = fx(/* glsl */`
-uniform sampler2D tC, tD, tA, tV; uniform mat4 uIVP; uniform vec3 uEye, uSun, uLit, uSunC, uHor, uZen; uniform vec4 uFog; uniform float uAO;
-vec3 haze( vec3 rd ) { vec3 s = normalize( vec3( uSun.x, 0.0, uSun.z ) ); return uHor * ( 0.85 + 0.3 * pow( saturate( dot( normalize( vec3( rd.x, 0.0, rd.z ) ), s ) ), 4.0 ) ); }
+uniform sampler2D tC, tD, tA, tV; uniform mat4 uIVP; uniform vec3 uEye, uSun, uLit, uSunC, uHor, uZen; uniform vec4 uFog; uniform float uAO, uGlow;
+float lobe( vec2 h, vec3 d ) { return pow( saturate( dot( h, normalize( d.xz ) ) ), 4.0 ); }
+vec3 haze( vec3 rd ) { vec2 h = normalize( rd.xz ); return uHor * ( 0.85 + 0.3 * mix( lobe( h, uLit ), lobe( h, uSun ), uGlow ) ); }
 vec3 sky( vec3 rd ) { return mix( haze( rd ), uZen, pow( saturate( rd.y * 1.6 ), 0.6 ) ) + vec3( 1.0, 0.8, 0.5 ) * uSunC * pow( saturate( dot( rd, uLit ) ), 24.0 ) * 0.5; }
 float tau( vec3 ro, vec3 rd, float tm ) { // the optical depth of the layer along the ray: its density falls off as exp( - k h ), integrated in closed form
 	float k = uFog.z, y0 = uFog.x, ye = ro.y + rd.y * tm;
@@ -194,7 +195,7 @@ void main() {
 	if ( d >= 1.0 ) c = sky( rd ); else c *= mix( 1.0, texture2D( tA, v ).r, uAO * ( 1.0 - smoothstep( 0.85, 1.8, max( c.r, max( c.g, c.b ) ) ) ) );
 	float tr = exp( - tau( uEye, rd, tm ) );
 	gl_FragColor = vec4( c * tr + haze( rd ) * ( 1.0 - tr ) + texture2D( tV, v ).rgb, 1.0 );
-}`, { tC: sceneTex, tD: D, tA: aoTex, tV: volTex, uIVP: IVP, uEye: EYE, uSun: SUN, uLit: LIT, uSunC: SUNC, uHor: HOR, uZen: ZEN, uFog: FOG, uAO: K.ao });
+}`, { tC: sceneTex, tD: D, tA: aoTex, tV: volTex, uIVP: IVP, uEye: EYE, uSun: SUN, uLit: LIT, uSunC: SUNC, uHor: HOR, uZen: ZEN, uFog: FOG, uAO: K.ao, uGlow: GLOW });
 
 // Tilt-shift: the circle of confusion is none in a band across the middle of the screen and grows toward its top and bottom (the miniature look, for a close view: with the whole board in it, whose
 // outer rows are there, it is all in focus, see `zoomed`), and with the distance from the focus
@@ -289,7 +290,7 @@ const LAMP_SOFT = 0.65, LAMP_K = 0.0038, SPOT_K = 0.0009; // a lamp's halo: its 
 function uniforms() {
   IP.value.copy(hdCam.projectionMatrixInverse); IVP.value.multiplyMatrices(hdCam.matrixWorld, hdCam.projectionMatrixInverse);
   EYE.value.copy(hdCam.position); NF.value.set(hdCam.near, hdCam.far);
-  SUNC.value.set(sky.lightC.r, sky.lightC.g, sky.lightC.b).multiplyScalar(sky.lightK);
+  SUNC.value.set(sky.lightC.r, sky.lightC.g, sky.lightC.b).multiplyScalar(sky.lightK); GLOW.value = sky.glow;
   SHM.value.copy(sun.shadow.matrix); SHT.value = sun.shadow.map?.depthTexture ?? null;
   aoF.value = 0.5 * T!.ao[0].height * hdCam.projectionMatrix.elements[5];
   dofR.value = K.blur.value * renderer.getPixelRatio(); dofTilt.value = zoomed();
