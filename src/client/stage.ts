@@ -77,7 +77,7 @@ const lookAt = (x: number, z: number, zoom: number | 'fit' = 2) => { cam.follow 
 const zoom = (k: number) => lookAt(controls.target.x, controls.target.z, THREE.MathUtils.clamp(camera.zoom * k, controls.minZoom, controls.maxZoom));
 export const CAM = {
   rotl: () => rotateView(-1), reset: () => resetView(), in: () => zoom(1.5), out: () => zoom(1 / 1.5),
-  follow: () => focusTok(G.S!.order[G.S!.turn]), map: () => lookAt(0, 0, 'fit'),
+  follow: () => focusTok(G.S!.order[G.S!.turn]), map: () => { resetView(); lookAt(0, 0, 'fit'); },
 };
 export const lookAtTile = (i: number) => { selectTile(i); lookAt(POS[i].x, POS[i].z); };
 
