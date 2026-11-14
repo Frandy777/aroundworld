@@ -42,7 +42,7 @@ button, [data-tile], .pcard, .item { cursor: var(--cur-hand); }
 .btn:active { border-image-source: var(--fd); transform: translateY(2px); filter: brightness(0.95); }
 .btn.primary { --f: var(--fr-btn-green); --fd: var(--fr-btn-green-dn); --hi: #c8f8b0; --b1: #55d27a; --b2: #25985a; --sh: #0a4a2c; }
 .btn.danger { --f: var(--fr-btn-red); --fd: var(--fr-btn-red-dn); --hi: #ffb0b8; --b1: #f0485f; --b2: #b02a4e; --sh: #4a1030; }
-.btn.gold { --f: var(--fr-btn-gold); --fd: var(--fr-btn-gold-dn); --hi: #fffbd0; --b1: #ffd23f; --b2: #f0a020; --sh: #fff6b0; --tx: #5a2e08; }
+.btn.gold, .btn.on { --f: var(--fr-btn-gold); --fd: var(--fr-btn-gold-dn); --hi: #fffbd0; --b1: #ffd23f; --b2: #f0a020; --sh: #fff6b0; --tx: #5a2e08; }
 .btn.big { font: 34px / 36px var(--font-hd); padding: 6px 26px 4px; }
 .btn.sm { padding: 4px 8px 2px; }
 .btn[disabled] { opacity: 0.5; pointer-events: none; filter: grayscale(0.7); }

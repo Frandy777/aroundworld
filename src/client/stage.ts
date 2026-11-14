@@ -4,7 +4,7 @@ import type { GameState, Owned } from '../shared/types';
 import { addToken, clearTokens, initActors, placeAt, setActive, tokens, updateActors } from './render/actors';
 import { createBoard } from './render/board';
 import { POS } from './render/layout';
-import { camera, controls, finishTweens, focus, frame, initScene, overview, pan, pick, render, renderer, resetView, rotateView, setLighting, toScreen, updateCamera, updateTweens } from './render/scene';
+import { camera, controls, finishTweens, focus, frame, initScene, overview, pan, pick, render, renderer, resetView, setLighting, toScreen, updateCamera, updateTweens } from './render/scene';
 import { strike } from './render/strike';
 import { FLOAT, initWorld, updateWorld } from './render/world';
 import { SEED, SEED_AT } from './seed';
@@ -78,7 +78,7 @@ export const focusTok = (pi: number, zoom = 2) => {
 const lookAt = (x: number, z: number, zoom: number | 'fit' = 2) => { cam.follow = -1; focus(x, z, zoom); };
 const zoom = (k: number) => lookAt(controls.target.x, controls.target.z, THREE.MathUtils.clamp(camera.zoom * k, controls.minZoom, controls.maxZoom));
 export const CAM = {
-  rotl: () => rotateView(-1), reset: () => resetView(), in: () => zoom(1.5), out: () => zoom(1 / 1.5),
+  in: () => zoom(1.5), out: () => zoom(1 / 1.5),
   follow: () => focusTok(G.S!.order[G.S!.turn]), map: () => { resetView(); lookAt(0, 0, 'fit'); },
 };
 export const lookAtTile = (i: number) => { selectTile(i); lookAt(POS[i].x, POS[i].z); };

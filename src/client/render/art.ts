@@ -219,6 +219,12 @@ export const ICONS: Record<string, string[]> = {
     '...oyyyYYYYYo...', '...oyyYYYYYYo...', '..oyyYYYYYYYYo..', '..oyYYYYYYYYYo..',
     '.oyYYYYoooYYYYo.', '.oyYYYo...oYYYo.', '.oYYoo.....ooYo.', '..ooo.......ooo.',
   ],
+  pixel: [
+    '................', '................', '..ooooo..ooooo..', '..oYYYo..oLLLo..',
+    '..oYYYo..oLLLo..', '..oYYYo..oLLLo..', '..ooooo..ooooo..', '................',
+    '..ooooo..ooooo..', '..oRRRo..oNNNo..', '..oRRRo..oNNNo..', '..oRRRo..oNNNo..',
+    '..ooooo..ooooo..', '................', '................', '................',
+  ],
 };
 const CHECK = [
   '.........oo.', '........owwo', '.......owwo.', '.oo...owwo..', 'owwo.owwo...', '.owwowwo....', '..owwwo.....', '...owo......', '....o.......',
