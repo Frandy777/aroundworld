@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { lodMap, pixelTexture, texels, toon, DENSITY } from './scene';
-import { glassy, glow, nightlit, type Pbr } from './light';
+import { PAINT, flat, glassy, glow, nightlit, type Pbr } from './light';
 import { canvas, paint, hex, shade, ink, inkWidth, inkHeight } from './art';
 import { SZ, SLAB } from './layout';
 
@@ -201,15 +201,19 @@ const plate = memo((bg: string, fg: string, W: number, H: number, text: string, 
     if (sl >= 1 && tw + 2 <= w && th + (H > 8 ? 2 : 0) <= h) { g.fillStyle = fg; ink(g, text, (w - tw) >> 1, ((h - th) >> 1) + th, sl); }
   });
 });
-const plateMat = memo((bg: string, fg: string, W: number, H: number, text: string, s: number) => lodMap(new THREE.MeshBasicMaterial(), (L) => plate(bg, fg, W, H, text, s, L))); // unlit like the cards: colours stay the same in any light
+const plateMat = memo((bg: string, fg: string, W: number, H: number, text: string, s: number, neon: boolean) => {
+  const make = (L: number) => plate(bg, fg, W, H, text, s, L);
+  return neon ? glow(lodMap(new THREE.MeshBasicMaterial(), make), 1.2) : flat(glassy(lodMap(toon(0xffffff, {}, PAINT), make), 0));
+}); // a lightbox is unlit and glows after dusk (see `glow`); a board is lit like a card (see `flat`: the restrained look draws it unlit, as it always did), and its blue is paint, not glass
 
 // ---- Voxel helpers ----
 export const GOLD = 0xffd23f, IRON = 0x555a6e, INK = 0x23263a, LAVA = 0xff7a1a;
 const geo = memo((w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d));
 const cylGeo = memo((r: number, h: number) => new THREE.CylinderGeometry(r, r, h, 10));
-// hip roof: the 4-sided cone (shaded from its corners), each face laid flat in UV space so a roof texel is a world texel
+// hip roof: the 4-sided cone, each face flat-shaded (its own normal: the cone's smooth ones would bend a highlight round the roof) and laid flat in UV space so a roof texel is a world texel
 const roofGeo = memo((w: number, d: number, h: number) => {
   const g = new THREE.ConeGeometry(w * Math.SQRT1_2, h, 4, 1, true).rotateY(Math.PI / 4).scale(1, 1, d / w).toNonIndexed(), p = g.attributes.position;
+  g.computeVertexNormals(); // not indexed: every triangle (a face) has vertices of its own, so each gets the face's normal
   const [a, b, c, u, v] = [...Array(5)].map(() => new THREE.Vector3()), uv: number[] = [], k = DENSITY / ROOF;
   for (let i = 0; i < p.count; i += 3) { // every triangle is one face: eave corner a, next eave corner b, apex c
     a.fromBufferAttribute(p, i); b.fromBufferAttribute(p, i + 1).sub(a); c.fromBufferAttribute(p, i + 2).sub(a);
@@ -320,9 +324,9 @@ export const box = (g: THREE.Group, w: number, h: number, d: number, color: THRE
 export const cyl = (g: THREE.Group, r: number, h: number, color: THREE.ColorRepresentation, x = 0, y = 0, z = 0, m: THREE.Material = mat(color)) => part(g, cylGeo(r * K, h * K), h * K, m, x * K, y * K, z * K);
 export const hip = (g: THREE.Group, w: number, d: number, h: number, y: number, color: number, x = 0, z = 0) => part(g, roofGeo(w * K, d * K, h * K), h * K, roofMat(color), x * K, y * K, z * K);
 export const gable = (g: THREE.Group, w: number, d: number, h: number, y: number, color: number, wall: number, x = 0, z = 0, turn = false) => part(g, gableGeo(w * K, d * K, h * K, turn), h * K, [roofMat(color), mat(wall)], x * K, y * K, z * K);
-export const plaque = (g: THREE.Group, text: string, bg: string, fg: string, w: number, h: number, x: number, y: number, z: number, s = 1) => { // sized in whole texels; s: texels to a pixel of its text (see plate)
+export const plaque = (g: THREE.Group, text: string, bg: string, fg: string, w: number, h: number, x: number, y: number, z: number, lit: 'sign' | 'neon' = 'sign', back?: THREE.ColorRepresentation, s = 1) => { // sized in whole texels; lit: a board (wood, stone, metal) is lit like the rest and darkens at night, a lightbox is unlit and glows after dusk (see plateMat); back: the paint of its back, its edges' own by default; s: texels to a pixel of its text (see plate)
   const side = mat(bg), W = Math.max(texels(w * K), inkWidth(text) * s + 2), H = texels(h * K);
-  return part(g, geo(W / DENSITY, H / DENSITY, 0.12 * K), H / DENSITY, [side, side, side, side, plateMat(bg, fg, W, H, text, s), side], x * K, y * K, z * K);
+  return part(g, geo(W / DENSITY, H / DENSITY, 0.12 * K), H / DENSITY, [side, side, side, side, plateMat(bg, fg, W, H, text, s, lit === 'neon'), back === undefined ? side : mat(back)], x * K, y * K, z * K);
 };
 export const floor = (g: THREE.Group, cols: number, dcols: number, kind: string, color: number, y: number, x = 0, z = 0) => { // one storey, `cols` x `dcols` half-units, in final units; the entrance faces the viewer
   const alt = kind === 'glass' ? kind : 'win', side = wallMat(dcols, alt, color), plain = mat(color);

@@ -26,7 +26,7 @@ export default {
       box(g, 2.2, 0.1, 0.4, 0xd6d0c0, 0, 0.08, -0.26); box(g, 2.2, 0.01, 0.04, GOLD, 0, 0.18, -0.09);                                              // platform, its yellow edge
       floor(g, 3, 1, 'lobby', CREAM, 0.08, 0.35, -0.7); floor(g, 3, 1, 'win', CREAM, 0.98, 0.35, -0.7);                                             // station hall: doors below, windows above
       box(g, 1.7, 0.1, 0.7, TILE, 0.35, 1.88, -0.7); box(g, 1.3, 0.1, 0.54, RED, 0.35, 1.98, -0.7); box(g, 0.8, 0.1, 0.38, TILE, 0.35, 2.08, -0.7); box(g, 0.1, 0.16, 0.1, GOLD, 0.35, 2.18, -0.7); // stepped roof, gold finial
-      plaque(g, 'CRH', '#d9423e', '#fff', 0.7, 0.3, 0.35, 0.62, -0.5);                                                                              // its sign over the doors
+      plaque(g, 'CRH', '#d9423e', '#fff', 0.7, 0.3, 0.35, 0.62, -0.5, 'neon');                                                                      // its sign over the doors
       box(g, 0.6, 0.36, 0.36, 0xd8c08a, -0.75, 0.08, -0.72); hip(g, 0.76, 0.5, 0.2, 0.44, TILE, -0.75, -0.72); box(g, 0.14, 0.22, 0.02, 0x8a5a2b, -0.75, 0.08, -0.53); // signal shed: walls, roof, door
       [-0.2, -0.95].forEach((x) => { box(g, 0.04, 0.55, 0.04, IRON, x, 0.18, -0.2); box(g, 0.12, 0.04, 0.08, INK, x, 0.73, -0.2); box(g, 0.06, 0.03, 0.05, 0xfff6b0, x, 0.7, -0.2); }); // platform lamps
       box(g, 0.3, 0.05, 0.1, 0x8a5a2b, -0.55, 0.26, -0.33); box(g, 0.26, 0.08, 0.04, 0x8a5a2b, -0.55, 0.31, -0.37);                                // bench, with its back

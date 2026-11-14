@@ -21,7 +21,7 @@ export default {
       box(g, 0.04, 0.12, 0.04, IRON, 0.66, 0.08, Z); box(g, 0.1, 0.06, 0.12, INK, 0.66, 0.08, Z);                                                      // nose wheel
       for (let x = -0.6; x < 0.4; x += 0.11) box(g, 0.06, 0.06, 0.02, NAVY, x, 0.4, Z + 0.205, glass(NAVY)); // cabin windows
       box(g, 1.5, 0.04, 0.02, BLUE, 0, 0.28, Z + 0.205); box(g, 0.09, 0.16, 0.02, 0xaeb8d0, 0.55, 0.3, Z + 0.205);                                       // cheat line, forward door
-      floor(g, 3, 1, 'glass', 0xdce8ff, 0.08, -0.35, -0.7); box(g, 1.62, 0.08, 0.62, BLUE, -0.35, 0.98, -0.7); plaque(g, '⊕', '#fff', '#2447a8', 1.1, 0.3, -0.35, 1.06, -0.46); // terminal: glass concourse, blue roof, its sign (the globe of the tail)
+      floor(g, 3, 1, 'glass', 0xdce8ff, 0.08, -0.35, -0.7); box(g, 1.62, 0.08, 0.62, BLUE, -0.35, 0.98, -0.7); plaque(g, '⊕', '#fff', '#2447a8', 1.1, 0.3, -0.35, 1.06, -0.46, 'neon'); // terminal: glass concourse, blue roof, its sign (the globe of the tail)
       box(g, 0.5, 0.3, 0.46, 0xe8e8ee, 0.82, 0.08, -0.7); box(g, 0.24, 1.0, 0.24, WHITE, 0.82, 0.38, -0.7); box(g, 0.26, 0.08, 0.26, BLUE, 0.82, 0.7, -0.7); // control tower: base, shaft, blue band
       box(g, 0.56, 0.08, 0.56, IRON, 0.82, 1.38, -0.7); box(g, 0.5, 0.26, 0.5, GLASS, 0.82, 1.46, -0.7, glass(GLASS)); box(g, 0.52, 0.04, 0.52, NAVY, 0.82, 1.56, -0.7); box(g, 0.62, 0.06, 0.62, WHITE, 0.82, 1.72, -0.7); // its cab: deck, glass, frame, roof
       box(g, 0.04, 0.3, 0.04, INK, 0.82, 1.78, -0.7); box(g, 0.3, 0.05, 0.06, WING, 0.82, 1.98, -0.7); box(g, 0.08, 0.08, 0.08, 0xff3b3b, 0.82, 2.08, -0.7); // mast, radar bar, beacon

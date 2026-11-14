@@ -12,7 +12,7 @@ export default {
       box(g, 2.4, 0.1, 1.9, SAND); box(g, 1.2, 0.03, 0.55, CONCRETE, HX, 0.1, 0.17); box(g, 0.05, 0.02, 0.55, GOLD, HX, 0.13, 0.17); // desert, apron with its guide line
       const vault = (r: number, d: number) => new THREE.CylinderGeometry(r, r, d, 16, 1, false, Math.PI / 2, Math.PI).rotateX(Math.PI / 2).scale(1, 0.6, 1), rib = vault(0.615, 0.09); // flattened half cylinder along the hangar's depth
       box(g, 1.2, 0.5, 0.78, 0x8f9aa8, HX, 0.1, -0.5); part(g, vault(0.6, 0.84), 0, mat(0xb7c1cf), HX, 0.6, -0.5); for (let k = -2; k <= 2; k++) part(g, rib, 0, mat(0xa4afbf), HX, 0.6, -0.5 + k * 0.18); // hangar: walls, barrel roof, ribs
-      box(g, 0.74, 0.38, 0.05, 0x6f7a8c, HX, 0.1, -0.1); box(g, 0.64, 0.32, 0.04, 0x44546c, HX, 0.1, -0.08); plaque(g, 'AREA 51', '#1b2a3a', '#73eff7', 1.23, 0.3, HX, 0.5, -0.06); // door and its sign
+      box(g, 0.74, 0.38, 0.05, 0x6f7a8c, HX, 0.1, -0.1); box(g, 0.64, 0.32, 0.04, 0x44546c, HX, 0.1, -0.08); plaque(g, 'AREA 51', '#1b2a3a', '#73eff7', 1.23, 0.3, HX, 0.5, -0.06, 'neon'); // door and its sign
       for (const x of [-1.12, -0.08]) { box(g, 0.04, 0.4, 0.04, IRON, x, 0.1, 0.42); box(g, 0.1, 0.05, 0.1, 0xfff6b0, x, 0.5, 0.42); } // floodlights
       box(g, 0.05, 0.22, 0.05, IRON, HX + 0.15, 0.9, -0.5); cyl(g, 0.17, 0.035, 0xe8ecf4, HX + 0.15, 1.12, -0.5).rotation.z = -0.9; box(g, 0.03, 0.14, 0.03, 0xff3b3b, HX + 0.25, 1.13, -0.5).rotation.z = -0.9; // radar dish turned up to the saucer, feed horn
       // paddock: a crop circle under the beam, a rail fence behind and beside it, a hay bale

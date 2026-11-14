@@ -61,11 +61,12 @@ export const soft = <M extends THREE.Material>(m: M) => { m.onBeforeCompile = (s
 // uPbr: roughness, specular strength, metalness, relief. Glass is sharper and brighter than the rest: a texture's is found by its blue (the windows, the domes) unless `glassy` says otherwise.
 export type Pbr = [rough: number, spec: number, metal: number, relief: number];
 const PBR: Pbr = [0.8, 1, 0, 0.5];
+export const PAINT: Pbr = [0.88, 0.25, 0, 0]; // a painted board (a card, a sign): matte, a little sheen, flat: nothing in it to read a relief from
 const DARK = new THREE.Color(0); // the lamps of a material that has none (see `nightlit`)
 const TOON = /* glsl */`
 varying vec3 vViewPosition;
 uniform vec4 uPbr;
-uniform float uBacklit, uLamp, uSwitch, uGlass;
+uniform float uBacklit, uBacklitHd, uLamp, uSwitch, uGlass, uFlat;
 uniform vec3 uNight;
 float hdGloss;
 struct ToonMaterial { vec3 diffuseColor; };
@@ -125,7 +126,7 @@ hdGloss = max( uGlass, 0.0 );
 const NIGHT = /* glsl */`
 float night = smoothstep( 0.12, 1.0, uLamp ) * uSwitch;
 #ifdef USE_EMISSIVEMAP
-	totalEmissiveRadiance = totalEmissiveRadiance * ( 1.0 + 0.42 * uHd ) + diffuseColor.rgb * vec3( 0.08, 0.05, 0.022 ) * uHd;
+	totalEmissiveRadiance = totalEmissiveRadiance * ( 1.0 + 0.42 * uHd );
 	totalEmissiveRadiance *= night;
 #endif
 totalEmissiveRadiance += uNight * night * ( 1.0 + 0.45 * uHd );
@@ -145,13 +146,14 @@ const RELIEF = /* glsl */`
 `;
 /** onBeforeCompile of every `toon()` material (one function, so every program of the same kind is shared: three names a program by its text). */
 export function lit(this: THREE.Material, sh: THREE.WebGLProgramParametersWithUniforms) {
-  Object.assign(sh.uniforms, U, { uPbr: { value: new THREE.Vector4(...((this.userData.pbr as Pbr | undefined) ?? PBR)) }, uBacklit: { value: (this.userData.backlit as number | undefined) ?? 0 }, uGlass: { value: (this.userData.glass as number | undefined) ?? -1 }, uNight: { value: (this.userData.night as THREE.Color | undefined) ?? DARK }, uSwitch: switchOf(this) });
+  Object.assign(sh.uniforms, U, { uPbr: { value: new THREE.Vector4(...((this.userData.pbr as Pbr | undefined) ?? PBR)) }, uBacklit: { value: (this.userData.backlit as number | undefined) ?? 0 }, uBacklitHd: backlitOf(this), uGlass: { value: (this.userData.glass as number | undefined) ?? -1 }, uNight: { value: (this.userData.night as THREE.Color | undefined) ?? DARK }, uSwitch: switchOf(this), uFlat: { value: (this.userData.flat as number | undefined) ?? -1 } });
   sh.fragmentShader = sh.fragmentShader
     .replace('#include <lights_toon_pars_fragment>', '')
     .replace('#include <shadowmap_pars_fragment>', `#include <shadowmap_pars_fragment>\n${TOON}`)
     .replace('#include <map_fragment>', `#include <map_fragment>\n${GLOSS}`)
     .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${RELIEF}`)
-    .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${NIGHT}\ntotalEmissiveRadiance += diffuseColor.rgb * uBacklit * uLamp;`) // a nightlit one's lamps (the emissive map is gated before anything is added to it), and a backlit material's own colour (see `backlit`), unshadowed
+    .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${NIGHT}\ntotalEmissiveRadiance += diffuseColor.rgb * mix( uBacklit, uBacklitHd, uHd ) * uLamp;`) // a nightlit one's lamps (the emissive map is gated before anything is added to it), and a backlit material's own colour (see `backlit`), unshadowed
+    .replace('#include <opaque_fragment>', `if ( uHd < 0.5 && uFlat >= 0.0 ) outgoingLight = diffuseColor.rgb * mix( 1.0, uFlat, uLamp );\n#include <opaque_fragment>`) // a flat material (see `flat`) is unlit in the restrained look: its exact colour, dimmed as the lamp comes on
     .replace('reflectedLight.indirectDiffuse + totalEmissiveRadiance', 'reflectedLight.indirectDiffuse + totalEmissiveRadiance + reflectedLight.directSpecular + reflectedLight.indirectSpecular');
 }
 
@@ -161,7 +163,11 @@ export const glassy = <M extends THREE.Material>(m: M, share = 1) => { m.userDat
 
 /** The lamp inside a tile (artificial light, so it follows `uLamp`) shines up through this material: `t` of its own colour, texels and all, is added to what the sun and sky give it, in either look (see `lit`).
  * A dark material passes little of it and a white one a lot, so the light comes out tinted by what it went through; shadows do not reach it. */
-export const backlit = <M extends THREE.Material>(m: M, t: number) => { m.userData.backlit = t; return m; };
+export const backlit = <M extends THREE.Material>(m: M, t: number) => { m.userData.backlit = t; backlitOf(m).value = t; return m; };
+
+/** The share of a material's backlight that HD-2D uses (`t` of `backlit` until set), to be changed on its own: the restrained look keeps the `t` that `backlit` gave. A plot's lamp is lit while its lot stands and out while it is for sale
+ * or mortgaged (see board.ts): the pads are shared through memo by colour, and a colour is one state of a lot, so what is set on a pad's material is what every lot drawn with it has. */
+export const backlitOf = (m: THREE.Material) => (m.userData.backlitHd ??= { value: 0 }) as THREE.IUniform<number>;
 
 /** A surface with lamps of its own: they are out by day (`uLamp` is 0.12 then, see sky.ts: the day look is untouched) and come on with the dusk, in either look (see `lit`).
  * A plain material shines all over in `c` times `k` (past 1 is HDR, which blooms in HD-2D): a lit path, a strip of light. A textured one (the windows of a building) is lit where its `emissiveMap` is (see `lodMap`, which draws
@@ -172,20 +178,16 @@ export const nightlit = <M extends THREE.Material>(m: M, c: THREE.ColorRepresent
  * can be switched on its own (see ModelDef.owner). */
 export const switchOf = (m: THREE.Material) => (m.userData.on ??= { value: 1 }) as THREE.IUniform<number>;
 
-/** An unlit card is as bright by night as by day, so the lettering that the lamp lights (see `backlit`) stands out of it no better than by day: as the lamp (`uLamp`) comes on, the card is dimmed to `t` of its colours. */
-export const dusk = <M extends THREE.MeshBasicMaterial>(m: M, t: number) => {
-  m.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, { uLamp: U.uLamp, uDusk: { value: t } });
-    sh.fragmentShader = `uniform float uLamp, uDusk;\n${sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= mix(1.0, uDusk, uLamp);')}`;
-  };
-  return m;
-};
+/** A card or a sign that HD-2D lights like anything else (the sun's soft shadows by day, the lamps' tint and the dark by night) is drawn by the restrained look as it always was: unlit, in its exact colours, with no banding and no shadow
+ * smudges. An unlit card is as bright by night as by day, so the lettering that the lamp lights (see `backlit`) stands out of it no better than by day: as the lamp (`uLamp`) comes on, it is dimmed to `t` of its colours. */
+export const flat = <M extends THREE.Material>(m: M, t = 1) => { m.userData.flat = t; return m; };
 
-/** Neon, lamps and flames are unlit (see builder.ts); HD-2D gives them a little daylight colour and enough HDR light to bloom after dusk. */
-export const glow = <M extends THREE.MeshBasicMaterial>(m: M) => {
+/** Neon, lamps and flames are unlit (see builder.ts); HD-2D gives them a little daylight colour and enough HDR light to bloom after dusk: `k` times their colour on top of it at night, 1.8 for a lamp or a flame. A sign has lettering and bulbs
+ * to read, which the bloom of a big one swallows, so it takes less (see plateMat). Every glow shares a program, so `k` is a uniform. */
+export const glow = <M extends THREE.MeshBasicMaterial>(m: M, k = 1.8) => {
   m.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, { uHd: U.uHd, uLamp: U.uLamp });
-    sh.fragmentShader = `uniform float uHd, uLamp;\n${sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= 1.0 + 1.8 * uLamp * uHd;')}`;
+    Object.assign(sh.uniforms, { uHd: U.uHd, uLamp: U.uLamp, uGlow: { value: k } });
+    sh.fragmentShader = `uniform float uHd, uLamp, uGlow;\n${sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= 1.0 + uGlow * uLamp * uHd;')}`;
   };
   return m;
 };

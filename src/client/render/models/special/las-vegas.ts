@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { box, cyl, final, glass, part, rnd, sprite, stone, GOLD, type ModelDef } from '../../builder';
 import { canvas, shade } from '../../art';
-import { switchOf } from '../../light';
+import { glow, switchOf } from '../../light';
 import { lodMap, pixelTexture, texels, toon } from '../../scene';
 
 // The Sphere of Lv 2: the ball's radius, the radius it has where the top of its base meets it (the ball is drawn whole and sunk into the base, so this says how much of it is out: the nearer to its own radius, the more is buried), and the pole of its rings (see `led`): at the lower left edge of the side that the
@@ -65,7 +65,7 @@ export default {
       [-1, -0.55, -0.1, 0.35, 0.8].forEach((x) => box(g, 0.24, 0.01, 0.04, GOLD, x, 0.13, 0.75));                                                               // its dashed yellow centre line
       stone(g, 1.8, 0.07, 0.74, KERB, SX + 0.04, 0.1, 0.2); box(g, 1.68, 0.03, 0.62, GRAVEL, SX + 0.04, 0.17, 0.2);                                             // the median the sign stands on: its kerb, the gravel bed
       LENS.forEach((w, i) => box(g, w / 22, 2 / 22, 0.1, 0xffffff, SX, SY + (20 - 2 * i) / 22, SZ));                                                            // the board's thickness: a white slab behind every two rows of its outline
-      part(g, new THREE.PlaneGeometry(37 / 22, 24 / 22), 24 / 22, new THREE.MeshBasicMaterial({ map: sprite(SIGN), alphaTest: 0.5 }), SX, SY, SZ + 0.06).castShadow = false;  // its face, unlit: the sign is lit from inside
+      part(g, new THREE.PlaneGeometry(37 / 22, 24 / 22), 24 / 22, glow(new THREE.MeshBasicMaterial({ map: sprite(SIGN), alphaTest: 0.5 }), 1.2), SX, SY, SZ + 0.06).castShadow = false;  // its face, unlit: the sign is lit from inside
       for (const x of [-0.52, -0.16]) box(g, 0.08, 2.32, 0.05, POLE, SX + x, 0.17, SZ - 0.06);                                                                  // the two pale blue poles, off to the left of the board's middle
       box(g, 0.44, 0.07, 0.05, POLE, SX - 0.34, 2.42, SZ - 0.06);                                                                                               // the crossbar joining them above the board
       const arm = (w: number, h: number, a: number) => { box(g, w, h, 0.05, STAR, SX - 0.34, 2.17 - h / 2, SZ + 0.02).rotation.z = a; };                                                // a bar through the star's centre, tipped over by a

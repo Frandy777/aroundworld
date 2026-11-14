@@ -14,7 +14,7 @@ export default {
       ['B', 'B', 'C'].forEach((c, i) => plaque(g, c, '#14161f', '#fff', 0.41, 0.36, (i - 1) * 0.47, 1.95, Z + 0.56));                        // the logo: three black squares on the frieze
       box(g, 0.16, 0.06, 0.08, TRIM, 0, 1.2, Z + 0.54); box(g, 0.09, 0.26, 0.06, BRONZE, -0.03, 1.26, Z + 0.54); box(g, 0.06, 0.06, 0.06, BRONZE, -0.03, 1.52, Z + 0.54); box(g, 0.05, 0.16, 0.05, BRONZE, 0.05, 1.26, Z + 0.54); // Prospero and Ariel on the pier over the doors
       box(g, 0.05, 0.12, 0.05, GREY, 0.88, 2.48, -0.3); cyl(g, 0.14, 0.03, WHITE, 0.88, 2.7, -0.28).rotation.x = Math.PI / 4; box(g, 0.04, 0.04, 0.04, DARK, 0.88, 2.78, -0.2); // a satellite dish on the first terrace
-      for (const x of [-0.45, 0.45]) box(g, 0.06, 0.12, 0.06, DARK, x, 4.48, Z + 0.4); plaque(g, 'ON AIR', '#d9423e', '#fff', 1.1, 0.3, 0, 4.6, Z + 0.4); // the roof sign on two posts
+      for (const x of [-0.45, 0.45]) box(g, 0.06, 0.12, 0.06, DARK, x, 4.48, Z + 0.4); plaque(g, 'ON AIR', '#d9423e', '#fff', 1.1, 0.3, 0, 4.6, Z + 0.4, 'neon'); // the roof sign on two posts
       box(g, 0.3, 0.1, 0.3, TRIM, 0.2, 4.48, -0.6); for (let i = 0; i < 5; i++) box(g, 0.12, 0.34, 0.12, i & 1 ? WHITE : RED, 0.2, 4.58 + i * 0.34, -0.6); // the mast on its plinth, in red and white bands
       box(g, 0.5, 0.04, 0.04, WHITE, 0.2, 5.35, -0.6); [-0.05, 0.45].forEach((x) => box(g, 0.08, 0.16, 0.04, GREY, x, 5.19, -0.6));                // a crossarm with a panel antenna at each end
       box(g, 0.03, 0.26, 0.03, GREY, 0.2, 6.28, -0.6); box(g, 0.08, 0.08, 0.08, 0xff3b3b, 0.2, 6.54, -0.6);                                  // aerial and its red beacon

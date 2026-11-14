@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { scene, artH, camera, controls, lod, toon, lodMap, pixelTexture, texels, dirtyShadow, pxUnit, fitZoom, ELEV, DENSITY } from './scene';
-import { backlit, dusk, glassy } from './light';
+import { PAINT, backlit, backlitOf, flat, glassy, hd } from './light';
 import { TILES, type Tile } from '../../shared/data';
 import { canvas, codePixels, shade } from './art';
 import { CARD_SIZE, codeOf, drawCard, drawGround, drawPad } from './labels';
@@ -18,9 +18,11 @@ export const lotVisible = (i: number) => tileGroups[i]?.visible ?? true;
 export const lotLit = (i: number): boolean => tileGroups[i]?.userData.lit ?? false; // the lot is bought and standing (not for sale, not mortgaged): its landmark's lights may be on
 
 // The lamp inside every tile (see `backlit`), burning from dusk: how much of it comes up through the floor (the least), through the plot (enough to read its colour at a glance) and through the lettering
-// (nearly all of it, so a white code stands out of its card as a dark one does). The card is unlit, as bright by night as by day, so it is dimmed (see `dusk`) to the share of its colours that the lamp lets through:
+// (nearly all of it, so a white code stands out of its card as a dark one does). In the restrained look the card is unlit, as bright by night as by day, so it is dimmed (see `flat`) to the share of its colours that the lamp lets through:
 // the card of a white code well down, for the white to stand out of it as a dark code does of a light card, and the card of a dark code hardly at all, since the dark code has to stand out of it.
-const THROUGH = { floor: 0.1, plot: 0.5, ink: 0.9, card: { white: 0.3, dark: 0.85 } };
+// HD-2D lights the card like the ground, so it only needs a faint lamp through it to stay readable in the dark (`cardHd`), and it lights a plot from below only while its lot stands (`plotHd`): a lamp that shines through a lot for
+// sale or a mortgaged one, with no shadow, would wash out the foot of whatever stands on it.
+const THROUGH = { floor: 0.1, plot: 0.5, plotHd: 0.18, ink: 0.9, card: { white: 0.3, dark: 0.85 }, cardHd: 0.12 };
 
 // ---- Tile surfaces: the info card, the ground and the plot, one drawing per zoom level (see labels) ----
 const cardTex = (t: Tile, L: number) => pixelTexture(canvas(...CARD_SIZE[L], (g) => drawCard(g, t, L)));
@@ -55,9 +57,9 @@ export function createBoard() {
   cityLamps.length = tileGroups.length = 0;
   const root = new THREE.Group();
   scene.add(root);
-  const cursor = (color: number) => { // four brackets, each turned to its corner by a negative scale (arms pointing in)
+  const cursor = (color: number) => { // four brackets, each turned to its corner about the vertical (arms pointing in): a negative scale would turn its faces inside out
     const g = new THREE.Group(), m = toon(color);
-    CORNERS.forEach(([x, z]) => { const b = new THREE.Mesh(BRACKET, m); b.scale.set(-x, 1, -z); g.add(b); });
+    CORNERS.forEach((_, k) => { const b = new THREE.Mesh(BRACKET, m); b.rotation.y = [0, -Math.PI / 2, Math.PI, Math.PI / 2][k]; g.add(b); });
     g.visible = false; scene.add(g); return g;
   };
   const hoverCursor = cursor(0xffffff), selCursor = cursor(0xffe066);
@@ -71,7 +73,8 @@ export function createBoard() {
     slab.position.y = (TOP - 0.8) / 2;
     slab.receiveShadow = slab.castShadow = true;
     const [code, fg] = codeOf(t), letters = new THREE.Mesh(codeGeo(code), inkMat(fg, false));
-    const card = new THREE.Mesh(CARD_GEO, lodMap(dusk(new THREE.MeshBasicMaterial(), fg === 0xffffff ? THROUGH.card.white : THROUGH.card.dark), (L) => cardTex(t, L))); // unlit: exact colours by day, no shadow smudges
+    const card = new THREE.Mesh(CARD_GEO, flat(backlit(glassy(lodMap(toon(0xffffff, {}, PAINT), (L) => cardTex(t, L)), 0), THROUGH.cardHd), fg === 0xffffff ? THROUGH.card.white : THROUGH.card.dark)); // HD-2D lights it (soft shadows by day, the lamps' tint by night); the restrained look draws it unlit as before: exact colours, no shadow smudges. A region's blue is paint, not glass
+    card.receiveShadow = true;
     card.position.set(CARD.x, TOP + 0.03, CARD.z);
     letters.position.copy(card.position);
     const pad = t.type === 'public' ? null : new THREE.Mesh(slabGeo(PAD.w, PAD.h, PAD.d), padMats(VACANT)); // the plot: city tiles only
@@ -112,6 +115,7 @@ export function createBoard() {
     o.pad!.material = padMats(col);
     const lit = st && !st.m ? st.color : null; // a standing lot (bought, not mortgaged) has its lights on, its owner's colour in them: for sale or mortgaged they are out
     o.g.userData.lit = lit !== null; modelOwner(t, lit);
+    padMats(col).forEach((m) => (backlitOf(m).value = lit !== null ? THROUGH.plotHd : 0)); // HD-2D: the plot is lit from below while the lot stands, and not at all for sale or mortgaged (see `backlitOf`)
     if (!st) { if (opts?.sign !== false) sign(o.bld); }
     else if (t.type === 'special') buildLevels(o.bld, t, st.lv, st.m); // the landmark stands on its plot at every level: only the level is added, by what its model builds for the upgrades or else a small sign
     else if (t.type === 'city') st.lv ? building(o.bld, st.lv, st.m ? 0x8c8c8c : new THREE.Color(t.color).lerp(new THREE.Color(0xffffff), 0.6).getHex(), col, st.m) : flag(o.bld, st.m ? 0x666666 : st.color); // an investment adds nothing: its props stand on the owner's plot, the colour says it all, a flag would only hide them
@@ -178,10 +182,20 @@ export function createBoard() {
     // Card and code sit on the pixel lattice that render() puts the camera on (see snap), the code's edges between pixel centres: left to chance, an edge on a centre is taken for the pixel on either side by
     // a hair of relief. The code is 11 columns and 5 rows, so it is centred on a pixel, and so is the card, sized to an odd number of pixels (at most one off its true size): any other card would have
     // its middle on a pixel's edge, and the code, which can only be moved a whole pixel, would sit half a pixel to one side.
+    // HD-2D has no such lattice: its lens turns to any side and tilt, where a card stretched to the pixels of one view and a code shifted by its parallax would slide off the card. There the card stays where it lies and the code is centred on it,
+    // a font pixel square (the same size) and a thin relief of 0.06, so it is in the middle of its card from every side and never overhangs its frame.
     labels() {
       const u = Math.min(pxUnit(fitZoom), CARD.w / 11), p = pxUnit(), h = lod.n ? u / 2 : u / 25, s = Math.sin(ELEV), c = Math.cos(ELEV);
       const odd = (n: number) => 2 * Math.round((n - 1) / 2) + 1, w = odd(CARD.w / p), d = odd((CARD.d * s) / p); // the card's size in pixels, across and up the screen
       tiles.forEach((o) => {
+        if (hd.on) {
+          o.card.scale.set(1, 1, 1);
+          o.card.position.set(CARD.x, TOP + 0.015, CARD.z);
+          o.letters.visible = p <= 1.01 * u;
+          o.letters.scale.set(u, 0.06, u);
+          o.letters.position.copy(o.card.position);
+          return;
+        }
         const { x, y, z } = o.g.position, g = (y + TOP + 0.03) * c; // g: how high the card's plane is on the screen
         const mx = (Math.floor((x + CARD.x) / p) + 0.5) * p, my = (Math.floor((g - (z + CARD.z) * s) / p) + 0.5) * p; // its middle moved to the middle of the pixel it is in, across and up the screen
         o.card.scale.set((w * p) / CARD.w, 1, (d * p) / (s * CARD.d));

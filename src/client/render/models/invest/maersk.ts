@@ -26,7 +26,7 @@ export default {
       box(g, 0.28, 0.025, 0.14, DARK, 0.24, 0.9, 0.25); box(g, 0.26, 0.12, 0.2, 0xd9423e, 0.24, 0.78, 0.25);                                            // spreader, the box it is lifting
       [[0.58, 3], [0.86, 2]].forEach(([x, n], k) => stack(x, -0.7, n, k, 0.18));                                                                          // the yard beside the crane
       box(g, 0.14, 0.04, 0.44, INK, 0.95, 0.18, -0.26); box(g, 0.14, 0.1, 0.28, 0xe0a020, 0.95, 0.22, -0.34); box(g, 0.14, 0.12, 0.12, 0xd9423e, 0.95, 0.22, -0.1); box(g, 0.1, 0.05, 0.02, GLASS, 0.95, 0.28, -0.035, glass(GLASS)); // truck: chassis, box, cab, windscreen
-      floor(g, 2, 1, 'win', 0xe8ecf4, 0.18, -0.6, -0.68); box(g, 1.1, 0.08, 0.6, BLUE, -0.6, 1.08, -0.68); plaque(g, '★', '#42b0d5', '#fff', 1.0, 0.3, -0.6, 1.16, -0.5); // office, its roof and sign (the star of the funnel)
+      floor(g, 2, 1, 'win', 0xe8ecf4, 0.18, -0.6, -0.68); box(g, 1.1, 0.08, 0.6, BLUE, -0.6, 1.08, -0.68); plaque(g, '★', '#42b0d5', '#fff', 1.0, 0.3, -0.6, 1.16, -0.5, 'neon'); // office, its roof and sign (the star of the funnel)
       [-0.85, -0.35].forEach((x) => box(g, 0.2, 0.08, 0.16, 0xcfd6e6, x, 1.16, -0.75));                                                                  // roof air-conditioners
     }),
   ],
