@@ -328,18 +328,36 @@ function resize() {
 }
 
 // Smooth "go look at X" camera goal; any user drag/zoom cancels it. 'fit' is the whole board, whatever the canvas and the panels are: the view follows it as they change.
-let goal: { x: number; z: number; zoom?: number | 'fit' } | null = null;
+// `view` (degrees) also asks the camera to swing round to an azimuth and elevation while it goes: kept like `zoom` until a drag, an orbit or a jump says otherwise.
+let goal: { x: number; z: number; zoom?: number | 'fit'; view?: { az: number; elev: number } } | null = null;
 controls.addEventListener('start', () => (goal = null));
-export const focus = (x: number, z: number, zoom?: number | 'fit') => (goal = { x, z, zoom: zoom ?? goal?.zoom });
+export const focus = (x: number, z: number, zoom?: number | 'fit', view?: { az: number; elev: number }) =>
+  (goal = { x, z, zoom: zoom ?? goal?.zoom, view: view ?? goal?.view });
+// Held pan keys slide the view over the board (stage.ts binds WASD and the arrows): `x` right, `y` up the screen,
+// whatever the azimuth, at about the visible height a second — zoomed out it crosses more ground. Held, they cancel
+// any "go look at" goal, as a drag would.
+export const pan = { x: 0, y: 0 };
 
 export function updateCamera(dt: number) {
   const t = controls.target;
+  if (pan.x || pan.y) {
+    goal = null;
+    const a = Math.atan2(camera.position.x - t.x, camera.position.z - t.z), n = Math.hypot(pan.x, pan.y), v = (0.9 * dt * VIEW_H) / (camera.zoom * n);
+    const dx = (pan.x * Math.cos(a) - pan.y * Math.sin(a)) * v, dz = -(pan.x * Math.sin(a) + pan.y * Math.cos(a)) * v;
+    t.x += dx; t.z += dz; camera.position.x += dx; camera.position.z += dz;
+  }
   const cx = THREE.MathUtils.clamp(t.x, -45 * BOARD_K, 45 * BOARD_K), cz = THREE.MathUtils.clamp(t.z, -30 * BOARD_K, 30 * BOARD_K); // keep the board in reach
   if (cx !== t.x || cz !== t.z) { camera.position.x += cx - t.x; camera.position.z += cz - t.z; t.set(cx, t.y, cz); }
   if (goal) {
     const k = 1 - Math.pow(0.003, dt), dx = (goal.x - t.x) * k, dy = -t.y * k, dz = (goal.z - t.z) * k; // the view also comes down to the ground (the title orbits the globe in the air)
     t.x += dx; t.y += dy; t.z += dz; camera.position.x += dx; camera.position.y += dy; camera.position.z += dz;
     if (goal.zoom) { camera.zoom += ((goal.zoom === 'fit' ? fitZoom : goal.zoom) - camera.zoom) * k; camera.updateProjectionMatrix(); }
+    if (goal.view) { // the orbit keeps its distance; only the facing moves, taking the short way round to the asked azimuth
+      const off = camera.position.clone().sub(t), L = off.length(), a0 = Math.atan2(off.x, off.z), e0 = Math.atan2(off.y, Math.hypot(off.x, off.z));
+      const a1 = THREE.MathUtils.degToRad(goal.view.az), e1 = THREE.MathUtils.degToRad(THREE.MathUtils.clamp(goal.view.elev, 22, 68)); // the controls' tilt limits
+      const a = a0 + Math.atan2(Math.sin(a1 - a0), Math.cos(a1 - a0)) * k, e = e0 + (e1 - e0) * k;
+      camera.position.set(t.x + Math.sin(a) * Math.cos(e) * L, t.y + Math.sin(e) * L, t.z + Math.cos(a) * Math.cos(e) * L);
+    }
   }
   controls.update();
   lod.n = levelNow(); // when the texel size crosses a threshold, the other level's art is drawn from this frame on
@@ -350,6 +368,7 @@ export function updateCamera(dt: number) {
 
 // The title's view: the camera looks at a point `lift` above the ground (the globe), and the first focus brings it back down.
 export function overview(lift: number) {
+  goal = null; // the orbit is its own motion: nothing left over from a game should pull it
   controls.target.set(0, lift, 0);
   camera.position.set(0, Math.sin(ELEV) * 150 + lift, Math.cos(ELEV) * 150);
   camera.zoom = 1.1;
@@ -381,6 +400,7 @@ export function jumpTo(x: number, z: number, zoom: number | 'fit' = camera.zoom,
 // (resetView restores the default ELEV pitch after a free drag; rotateView keeps the height it has).
 const Q = Math.PI / 2;
 function orbitTo(pickAngle: (a: number) => number, pickY: (r: number, y: number) => number = (_r, y) => y) {
+  if (goal) goal.view = undefined; // an explicit orbit takes the camera's facing back from a goal's view
   const t = controls.target, off = camera.position.clone().sub(t);
   const a0 = Math.atan2(off.x, off.z), a1 = pickAngle(a0), r = Math.hypot(off.x, off.z);
   const y0 = off.y, y1 = pickY(r, y0);
