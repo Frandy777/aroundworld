@@ -64,7 +64,7 @@ function lights(t: number) {
 
 // ---- The passes. The scene is drawn once, in HDR with multisampling, to a colour and a depth texture; everything after works on those two:
 //  1. ambient occlusion (GTAO) from the depth alone, at half size, blurred along depth edges;
-//  2. light shafts at half size, marched through the sun's shadow map in the haze, plus a halo round every lamp and the spot's cone; blurred likewise;
+//  2. light shafts at half size, marched through the sun's shadow map in the haze, plus a halo round every lamp (not over what stands in front of it) and the spot's cone; blurred likewise;
 //  3. the composite: the occlusion on the lit scene, the sky and the haze by distance (a layer of fog hugging the sea), the shafts on top;
 //  4. tilt-shift: a gather blur that grows from a sharp band across the middle of the screen (for a close view), and with the distance from the focus;
 //  5. bloom: a threshold, then a pyramid of four dual-filter blurs;
@@ -81,7 +81,7 @@ float bayer( vec2 p ) { ivec2 q = ivec2( mod( p, 4.0 ) ); return ( float( B4[ q.
 `;
 
 // What the passes share, and the knobs (exported: a tweak from the console shows at once)
-const D = u<THREE.Texture | null>(null), NF = u(new THREE.Vector2()), IP = u(new THREE.Matrix4()), IVP = u(new THREE.Matrix4()), EYE = u(new THREE.Vector3());
+const D = u<THREE.Texture | null>(null), NF = u(new THREE.Vector2()), IP = u(new THREE.Matrix4()), IVP = u(new THREE.Matrix4()), VP = u(new THREE.Matrix4()), EYE = u(new THREE.Vector3());
 // The sky of the hour (sky.ts): the way to the sun and to the light that casts the shadows (the moon by night), the light's colour times its strength, the sky's own two colours, and the sun's share of the horizon's glow
 const SUN = u(sky.sun), LIT = u(sky.light), SUNC = u(new THREE.Vector3()), ZEN = u(sky.zenith), HOR = u(sky.horizon), GLOW = u(1);
 export const K = {
@@ -140,15 +140,26 @@ void main() {
 const aoSrc = u<THREE.Texture | null>(null), volSrc = u<THREE.Texture | null>(null), aoBlur = blur(aoSrc), volBlur = blur(volSrc);
 
 // The shafts: for each of 20 steps along the view ray through the haze layer (jittered, so the blur can average the steps away), the sunlight that reaches it (the sun's shadow map
-// says whether a building is in the way) scatters toward the eye, most of all toward the sun; the spot adds its cone. A lamp's halo is the closed form of its 1/r^2 falloff along the ray.
+// says whether a building is in the way) scatters toward the eye, most of all toward the sun; the spot adds its cone. A lamp's halo is the closed form of its 1/r^2 falloff along the ray, each part of it counted only where the depth buffer shows nothing between the air and the lamp: a lamp behind a wall does not glow over it.
 const nLamp = lamps.length;
 const L = u(Array.from({ length: nLamp }, () => new THREE.Vector4())), LC = u(Array.from({ length: nLamp }, () => new THREE.Vector3()));
 const SP = u(new THREE.Vector4()), SPD = u(new THREE.Vector3()), SPC = u(new THREE.Vector3()), SHM = u(new THREE.Matrix4()), SHT = u<THREE.Texture | null>(null);
 const FOG = u(new THREE.Vector4(-1.2, 40, 0.07, 0.005)); // the layer: its floor and ceiling, how fast it thins with height, its density at the floor
 const volPass = fx(/* glsl */`
-uniform sampler2D tD, tSh; uniform mat4 uIVP, uShM; uniform vec3 uEye, uSun, uSunC, uSpD, uSpC, uLC[ ${nLamp} ]; uniform vec4 uFog, uSp, uL[ ${nLamp} ]; uniform float uK;
+uniform sampler2D tD, tSh; uniform mat4 uIVP, uVP, uShM; uniform vec2 uNF; uniform vec3 uEye, uSun, uSunC, uSpD, uSpC, uLC[ ${nLamp} ]; uniform vec4 uFog, uSp, uL[ ${nLamp} ]; uniform float uK;
 ${BAYER}
 float hg( float c, float g ) { return ( 1.0 - g * g ) / ( 12.566 * pow( 1.0 + g * g - 2.0 * g * c, 1.5 ) ); }
+float lz( float d ) { return - perspectiveDepthToViewZ( d, uNF.x, uNF.y ); }
+// How much of the straight way from a to b the depth buffer leaves open: six steps along it, each one hidden where it lies behind the surface in view there, by a hair or more but not by more than 1.2 units (a wall is no thicker)
+float seen( vec3 a, vec3 b, float jit ) {
+	vec4 ca = uVP * vec4( a, 1.0 ), cb = uVP * vec4( b, 1.0 ); float vis = 1.0;
+	for ( int j = 0; j < 6; j ++ ) {
+		vec4 c = mix( ca, cb, ( float( j ) + jit ) / 6.0 ); vec2 q = c.xy / c.w * 0.5 + 0.5;
+		float gap = c.w - lz( textureLod( tD, q, 0.0 ).x );
+		vis *= 1.0 - step( 0.0, min( q.x, q.y ) ) * step( max( q.x, q.y ), 1.0 ) * smoothstep( 0.05, 0.4, gap ) * ( 1.0 - smoothstep( 0.8, 1.2, gap ) );
+	}
+	return vis;
+}
 void main() {
 	float d = texture2D( tD, v ).x;
 	vec4 w = uIVP * vec4( v * 2.0 - 1.0, d * 2.0 - 1.0, 1.0 ); w.xyz /= w.w;
@@ -169,11 +180,18 @@ void main() {
 	}
 	for ( int i = 0; i < ${nLamp}; i ++ ) {
 		if ( uL[ i ].w <= 0.0 ) continue;
-		vec3 o = uL[ i ].xyz - uEye; float tc = dot( o, rd ), h2 = dot( o, o ) - tc * tc + uL[ i ].w * uL[ i ].w, h = sqrt( h2 );
-		acc += uLC[ i ] * ( ( atan( ( tm - tc ) / h ) - atan( - tc / h ) ) / h * pow( clamp( 1.0 - h2 / 20.25, 0.0, 1.0 ), 2.0 ) );
+		vec3 lp = uL[ i ].xyz, o = lp - uEye; float tc = dot( o, rd ), h2 = dot( o, o ) - tc * tc + uL[ i ].w * uL[ i ].w, h = sqrt( h2 ), win = pow( clamp( 1.0 - h2 / 20.25, 0.0, 1.0 ), 2.0 );
+		if ( win <= 0.0 ) continue;
+		float a0 = atan( - tc / h ), da = atan( ( tm - tc ) / h ) - a0, vis = 0.0;
+		for ( int k = 0; k < 4; k ++ ) { // the closed form is the integral of 1 / ( h^2 + s^2 ) ds, which is flat in the angle atan( s / h ): four samples of that, each as bright as the lamp can be seen from there (what hides it stands within 6 units of it, and its own body is not counted)
+			vec3 p = uEye + rd * ( tc + h * tan( a0 + ( float( k ) + jit ) * da * 0.25 ) );
+			float dp = max( distance( p, lp ), 1e-3 );
+			vis += seen( mix( lp, p, min( 1.0, 6.0 / dp ) ), mix( lp, p, min( 1.0, uL[ i ].w / dp ) ), fract( jit * 5.37 ) ) * 0.25;
+		}
+		acc += uLC[ i ] * ( da / h * win * vis );
 	}
 	gl_FragColor = vec4( acc, 1.0 );
-}`, { tD: D, tSh: SHT, uIVP: IVP, uShM: SHM, uEye: EYE, uSun: LIT, uSunC: SUNC, uSpD: SPD, uSpC: SPC, uLC: LC, uFog: FOG, uSp: SP, uL: L, uK: K.shaft });
+}`, { tD: D, tSh: SHT, uIVP: IVP, uVP: VP, uNF: NF, uShM: SHM, uEye: EYE, uSun: LIT, uSunC: SUNC, uSpD: SPD, uSpC: SPC, uLC: LC, uFog: FOG, uSp: SP, uL: L, uK: K.shaft });
 
 // The composite: occlusion on the scene, then the air between it and the eye. The sky is a gradient with the glow of the light (the sun, by night the moon); the haze is the sky's own horizon colour,
 // thickest at grazing angles and brighter on the side of the sun, which goes on under the horizon at dusk, and by night on the side of the moon (`sky.glow` is the share of the sun's).
@@ -288,7 +306,7 @@ function pass(m: THREE.ShaderMaterial, to: RT | null, keep = false) { // keep: a
 
 const LAMP_SOFT = 0.65, LAMP_K = 0.0038, SPOT_K = 0.0009; // a lamp's halo: its softening radius (units), a 4.5-unit cutoff, and strength per unit of intensity; the spot's cone
 function uniforms() {
-  IP.value.copy(hdCam.projectionMatrixInverse); IVP.value.multiplyMatrices(hdCam.matrixWorld, hdCam.projectionMatrixInverse);
+  IP.value.copy(hdCam.projectionMatrixInverse); IVP.value.multiplyMatrices(hdCam.matrixWorld, hdCam.projectionMatrixInverse); VP.value.multiplyMatrices(hdCam.projectionMatrix, hdCam.matrixWorldInverse);
   EYE.value.copy(hdCam.position); NF.value.set(hdCam.near, hdCam.far);
   SUNC.value.set(sky.lightC.r, sky.lightC.g, sky.lightC.b).multiplyScalar(sky.lightK); GLOW.value = sky.glow;
   SHM.value.copy(sun.shadow.matrix); SHT.value = sun.shadow.map?.depthTexture ?? null;
