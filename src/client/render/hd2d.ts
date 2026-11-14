@@ -62,7 +62,8 @@ function lights(t: number) {
   }
 }
 
-// ---- The passes. The scene is drawn once, in HDR with multisampling, to a colour and a depth texture; everything after works on those two:
+// ---- The passes. The scene is drawn once, in HDR, to a colour and a depth texture; everything after works on those two. It is not multisampled: a multisampled depth resolves to a single sample a pixel (not every mobile
+// and Safari WebGL2 driver does that well), and beside a colour averaged from four, an edge pixel can be fogged and blurred as the wrong side of its silhouette, a 1px fringe. The passes:
 //  1. ambient occlusion (GTAO) from the depth alone, at half size, blurred along depth edges;
 //  2. light shafts at half size, marched through the sun's shadow map in the haze, plus a halo round every lamp (not over what stands in front of it) and the spot's cone; blurred likewise;
 //  3. the composite: the occlusion on the lit scene, the sky and the haze by distance (a layer of fog hugging the sea), the shafts on top;
@@ -287,7 +288,7 @@ let T: { main: RT; hdr: RT; dof: RT; ao: RT[]; vol: RT[]; bloom: RT[] } | null =
 export function release() { if (T) for (const t of [T.main, T.hdr, T.dof, ...T.ao, ...T.vol, ...T.bloom]) t.dispose(); T = null; }
 export function resize(w: number, h: number) {
   release();
-  const main = mk(w, h, { depthBuffer: true, depthTexture: new THREE.DepthTexture(w, h), samples: Math.min(4, renderer.capabilities.maxSamples) });
+  const main = mk(w, h, { depthBuffer: true, depthTexture: new THREE.DepthTexture(w, h) });
   T = {
     main, hdr: mk(w, h), dof: mk(w, h),
     ao: [mk(w / 2, h / 2, { type: THREE.UnsignedByteType }), mk(w / 2, h / 2, { type: THREE.UnsignedByteType })], vol: [mk(w / 2, h / 2), mk(w / 2, h / 2)],
