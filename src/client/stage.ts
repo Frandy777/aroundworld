@@ -4,7 +4,7 @@ import type { GameState, Owned } from '../shared/types';
 import { addToken, clearTokens, initActors, placeAt, setActive, tokens, updateActors } from './render/actors';
 import { createBoard } from './render/board';
 import { POS } from './render/layout';
-import { camera, controls, finishTweens, focus, frame, initScene, overview, pick, render, renderer, resetView, rotateView, setLighting, toScreen, updateCamera, updateTweens } from './render/scene';
+import { camera, controls, finishTweens, focus, frame, initScene, overview, pan, pick, render, renderer, resetView, rotateView, setLighting, toScreen, updateCamera, updateTweens } from './render/scene';
 import { strike } from './render/strike';
 import { FLOAT, initWorld, updateWorld } from './render/world';
 import { SEED, SEED_AT } from './seed';
@@ -116,6 +116,23 @@ function bindCanvas(signal: AbortSignal) {
   };
 }
 
+/** WASD and the arrow keys: held, they slide the view over the board (`pan` in scene.ts, stepped each frame by updateCamera);
+ * a press, like a drag, drops the follow and the "go look at" goal. Not on the orbiting title, nor while typing. */
+const PAN_KEYS: Record<string, [number, number]> = { KeyW: [0, 1], KeyA: [-1, 0], KeyS: [0, -1], KeyD: [1, 0], ArrowUp: [0, 1], ArrowLeft: [-1, 0], ArrowDown: [0, -1], ArrowRight: [1, 0] };
+const held = new Set<string>(), rePan = () => { pan.x = pan.y = 0; for (const k of held) { pan.x += PAN_KEYS[k][0]; pan.y += PAN_KEYS[k][1]; } };
+function bindPan(signal: AbortSignal) {
+  addEventListener('keydown', (e) => {
+    const k = e.code;
+    if (!(k in PAN_KEYS) || controls.autoRotate || (e.target as HTMLElement).matches('input, textarea, select')) return;
+    e.preventDefault(); // arrows, lest they scroll
+    if (held.has(k)) return; // an auto-repeat: the direction it adds is already in
+    held.add(k); rePan();
+    controls.dispatchEvent({ type: 'start' });
+  }, { signal });
+  addEventListener('keyup', (e) => { if (held.delete(e.code)) rePan(); }, { signal });
+  addEventListener('blur', () => { held.clear(); rePan(); }, { signal });
+}
+
 /**
  * Puts the stage on the page: the 3D world, the pointer and the frame loop. Returns what takes it all down again, whole or as far as it got, so that a
  * hot update can put a new stage in its place. A game under way is shown again as the screen had it (the server's snapshot, which follows, brings it up to date).
@@ -130,6 +147,7 @@ export function initStage() {
     board = createBoard();
     if (G.S) { showState(G.S); enterGame(); } else enterDemo();
     const off = new AbortController(), unfollow = () => (cam.follow = -1), hoverStep = bindCanvas(off.signal);
+    bindPan(off.signal);
     controls.addEventListener('start', unfollow);
     let last = 0, t = 0; // the frame clock: `t` is only ever fed bounded steps, so a stalled loop cannot leap the world forward
     const advance = (dt: number) => { t += dt; loop.time = t; updateTweens(dt); updateWorld(t, dt); updateActors(t, dt); board.update(t, dt); };
@@ -143,7 +161,7 @@ export function initStage() {
     loop.step = (dt: number) => { advance(Math.max(0, dt)); draw(0); };
     loop.scrub = (T: number) => { t = T; advance(0); draw(0); }; // seek the world clock outright: `tick`-driven parts pose at t, tweens are only stepped (see step/strike)
     document.addEventListener('visibilitychange', () => { if (document.hidden) { finishTweens(); last = 0; } }, { signal: off.signal }); // a hidden tab draws no frames: its animations end at once, and it comes back to a zero step, not one huge one
-    undo.push(() => { off.abort(); controls.removeEventListener('start', unfollow); loop.step = loop.draw = () => {}; });
+    undo.push(() => { off.abort(); controls.removeEventListener('start', unfollow); held.clear(); rePan(); loop.step = loop.draw = () => {}; });
     renderer.setAnimationLoop((now) => {
       const raw = last ? Math.min((now - last) / 1000, 0.1) : 0;
       last = now;

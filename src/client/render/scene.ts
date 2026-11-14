@@ -290,9 +290,19 @@ function resize() {
 let goal: { x: number; z: number; zoom?: number | 'fit' } | null = null;
 controls.addEventListener('start', () => (goal = null));
 export const focus = (x: number, z: number, zoom?: number | 'fit') => (goal = { x, z, zoom: zoom ?? goal?.zoom });
+// Held pan keys slide the view over the board (stage.ts binds WASD and the arrows): `x` right, `y` up the screen,
+// whatever the azimuth, at about the visible height a second — zoomed out it crosses more ground. Held, they cancel
+// any "go look at" goal, as a drag would.
+export const pan = { x: 0, y: 0 };
 
 export function updateCamera(dt: number) {
   const t = controls.target;
+  if (pan.x || pan.y) {
+    goal = null;
+    const a = Math.atan2(camera.position.x - t.x, camera.position.z - t.z), n = Math.hypot(pan.x, pan.y), v = (0.9 * dt * VIEW_H) / (camera.zoom * n);
+    const dx = (pan.x * Math.cos(a) - pan.y * Math.sin(a)) * v, dz = -(pan.x * Math.sin(a) + pan.y * Math.cos(a)) * v;
+    t.x += dx; t.z += dz; camera.position.x += dx; camera.position.z += dz;
+  }
   const cx = THREE.MathUtils.clamp(t.x, -45 * BOARD_K, 45 * BOARD_K), cz = THREE.MathUtils.clamp(t.z, -30 * BOARD_K, 30 * BOARD_K); // keep the board in reach
   if (cx !== t.x || cz !== t.z) { camera.position.x += cx - t.x; camera.position.z += cz - t.z; t.set(cx, t.y, cz); }
   if (goal) {
