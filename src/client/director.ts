@@ -28,6 +28,8 @@ const focusTurn = (pi: number) => { if (autoFocus.get()) focusTok(pi); };
 
 let shown: Open<void> | null = null; // the card being waited on that has nothing to decide
 export const dismissShown = () => shown?.close();
+/** Is something still being played: events waiting, or one under way (an animation, a card, a question)? */
+export const busy = () => running || queue.length > 0;
 /** Wait for a card with nothing to decide. A hidden tab throttles the timer that closes it, and nobody sees it there: it comes down as the tab goes hidden. */
 const show = (card: Open<void>) => live((shown = card).done.then(() => { if (shown === card) shown = null; }));
 

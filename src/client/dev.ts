@@ -3,6 +3,7 @@ import { TILES } from '../shared/data';
 import { command } from '../shared/state';
 import type { Cmd } from '../shared/types';
 import { leaveRoom, quickGame } from './controller';
+import { busy } from './director';
 import { send } from './net';
 import { LOT, PAD, POS } from './render/layout';
 import { U, hd } from './render/light';
@@ -10,11 +11,12 @@ import { camera, controls, dirtyShadow, finishTweens, fitZoom, hdCam, jumpTo, lo
 import { clock, sky, wallHour } from './render/sky';
 import { FLOAT } from './render/world';
 import { cam, isolateTile, loop, playStrike, rebuildTile, selectTile, setLot } from './stage';
-import { G, actionBtn, hd2d, paused, session, stageOnly } from './store';
+import { G, actionBtn, cards, hd2d, paused, peeking, session, stageOnly, waitingFor } from './store';
 
 // ---- Dev bridge (development builds only, loaded from main.tsx) ----
 // URL flags set the stage on boot (?dev=1&hd=1&hour=0&tile=1&zoom=2&autostart=1&clean=1&ui=0);
-// `window.__aw` gives scripts and browser tools one live handle to drive the scene without clicking UI or fighting HMR module copies.
+// `window.__aw` gives scripts and browser tools one live handle to drive the scene without clicking UI or fighting HMR module copies;
+// `until` / `idle` / `ui` / `click` / `cmd` (below) drive the HUD and cards the way a player does, with waits that follow the game instead of fixed sleeps.
 
 export interface ViewOpts {
   tile?: number;
@@ -120,6 +122,73 @@ function parseUrlView(): ViewOpts | null {
   return Object.keys(opts).length ? opts : null;
 }
 
+// ---- Driving the UI from a script ----
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+const label = (e: Element | null) => (e as HTMLElement | null)?.innerText.replace(/\s+/g, ' ').trim() ?? '';
+const norm = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
+
+/** Polls `pred` until it gives something truthy, and hands that back. Throws after `ms`, so a script never hangs on a state that does not come. */
+async function until<T>(pred: () => T, ms = 10_000): Promise<NonNullable<T>> {
+  for (const end = performance.now() + ms; ; await sleep(50)) {
+    const v = pred();
+    if (v) return v as NonNullable<T>;
+    if (performance.now() > end) throw new Error(`__aw.until: not met in ${ms} ms: ${String(pred).replace(/\s+/g, ' ').slice(0, 120)}`);
+  }
+}
+
+// The screen is at rest when nothing is being played, or what is playing waits on a decision (a card, the action button)
+const resting = () => !busy() || !!actionBtn.get() || cards.get().length > 0;
+/** Resolves once the screen has rested for 200 ms (the server's answer to a press takes a moment to come back), or throws after `ms`. The default holds a round of three bots. */
+async function idle(ms = 60_000) {
+  let since = 0;
+  await until(() => { const t = performance.now(); since = resting() ? since || t : 0; return since && t - since >= 200; }, ms).catch(() => { throw new Error(`__aw.idle: still playing after ${ms} ms: ${JSON.stringify(ui())}`); });
+}
+
+const topCard = () => [...document.querySelectorAll<HTMLElement>('.modal')].filter((m) => !m.closest('[hidden]')).pop(); // the card a key reaches (see keys.ts): not one set aside
+const reachable = (e: HTMLElement) => e.getClientRects().length > 0 && !(e as HTMLButtonElement).disabled;
+const pressable = (root: ParentNode) => [...root.querySelectorAll<HTMLElement>('button, .item, .pcard')].filter(reachable);
+/** What a press on `what` hits: a CSS selector, else a button by its data-id or its text (all of it, then the start of it), case aside. A card that is up covers the window, so only it is searched. */
+function find(what: string) {
+  const root = topCard() ?? document, all = pressable(root), w = norm(what);
+  let hit: HTMLElement | undefined;
+  try { hit = [...root.querySelectorAll<HTMLElement>(what)].find(reachable); } catch { /* not a selector: it is text */ }
+  return hit ?? all.find((e) => e.dataset.id === what || norm(label(e)) === w) ?? all.find((e) => norm(label(e)).startsWith(w));
+}
+/** Presses what `find` gives (waiting up to `ms` for it to be there); when nothing comes, the error says what can be pressed. */
+async function click(what: string, ms = 5000) {
+  const name = (e: HTMLElement) => `${label(e).slice(0, 30) || e.title || e.id}${e.dataset.id ? ` [${e.dataset.id}]` : ''}`;
+  const el = await until(() => find(what), ms).catch(() => { throw new Error(`__aw.click: nothing to press for "${what}"; pressable now: ${pressable(topCard() ?? document).map(name).join(' | ') || 'nothing'}`); });
+  el.click();
+  await nextFrame();
+}
+
+/** What is on screen, as the cards and the action bar say it: the top card with its buttons, the action button, who the game waits for. */
+function ui() {
+  const card = topCard(), btn = actionBtn.get(), who = waitingFor.get(), S = G.S;
+  return {
+    view: session.get().view,
+    busy: busy(), // the director is still playing something (`idle()` waits for this to end)
+    action: btn?.label ?? null, // the action bar's button: ROLL DICE, END TURN
+    waiting: who >= 0 && S ? S.players[who].name : null,
+    aside: peeking.get() && cards.get().length > 0, // cards are up but set aside: click 'SHOW CARD' to bring them back
+    modal: card ? { title: label(card.querySelector('.hd span')), sub: label(card.querySelector('.hd small')), buttons: [...card.querySelectorAll<HTMLButtonElement>('.ft .btn')].map((b) => ({ id: b.dataset.id, text: label(b), disabled: b.disabled })) } : null,
+    toasts: [...document.querySelectorAll('#toasts .toast')].map((t) => label(t)),
+  };
+}
+
+const runCmd = (c: Cmd) => {
+  const run = actionBtn.get()?.reply, S = G.S;
+  if (!run || !S || !command(S, c)) return false;
+  run(c);
+  return true;
+};
+/** The dev panel's commands ride on the roll question: with `{ wait }` ms the call holds on for it to open (and throws if it never does) instead of answering false at once. */
+function cmd(c: Cmd): boolean;
+function cmd(c: Cmd, o: { wait: number }): Promise<boolean>;
+function cmd(c: Cmd, o?: { wait: number }) {
+  return o ? until(() => actionBtn.get()?.reply, o.wait).then(() => runCmd(c), () => { throw new Error(`__aw.cmd: no roll question to answer within ${o.wait} ms`); }) : runCmd(c);
+}
+
 export function initDev() {
   const q = new URLSearchParams(location.search);
   const urlView = parseUrlView();
@@ -165,12 +234,11 @@ export function initDev() {
     },
     quickGame,
     leaveRoom,
-    cmd: (c: Cmd) => {
-      const run = actionBtn.get()?.reply, S = G.S;
-      if (!run || !S || !command(S, c)) return false;
-      run(c);
-      return true;
-    },
+    cmd,
+    until,
+    idle,
+    ui,
+    click,
     snapDataUrl: () => (loop.draw(), renderer.domElement.toDataURL('image/png')),
     refs: { G, TILES, POS, LOT, PAD, clock, sky, U, camera, hdCam, controls, renderer, scene, loop },
   };
