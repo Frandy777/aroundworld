@@ -3,7 +3,7 @@ import { tokens } from './actors';
 import { cityLamps, lotLit, lotVisible } from './board';
 import { LOT, PAD, POS } from './layout';
 import { fixedLamps } from './lamps';
-import { LAMP, lamps, spot } from './light';
+import { LAMP, U, lamps, spot } from './light';
 import { defOf } from './models';
 import { free, hdCam, LENS, renderer, scene, sun, zoomed } from './scene';
 import { sky } from './sky';
@@ -15,6 +15,7 @@ import { SEA_Y } from './world';
 const FIXED = fixedLamps(defOf).map((l, slot) => ({ ...l, slot: LAMP.fixed + slot }));
 if (FIXED.length > LAMP.city - LAMP.fixed) throw new Error(`fixed lamps overflow the ${LAMP.city - LAMP.fixed} free slots (${FIXED.length} declared)`); // a lamp past the fixed range would sit on a city's slot
 for (const l of FIXED) { const lamp = lamps[l.slot]; lamp.position.copy(l.at); lamp.color.setHex(l.color); lamp.distance = l.reach; }
+const BEACON = FIXED.find((l) => l.pulse === 'beacon')!; // the lighthouse: its beam is drawn with the shafts (volPass)
 
 const WARM = new THREE.Color(0xffd9a0);
 // Each ordinary city level gets a porch/apron key lamp (+z front, inset from the tile's sea cliff like START's ingot so water reflections stay soft)
@@ -37,6 +38,9 @@ function lights(t: number) {
     else if (l.pulse === 'beacon') lamp.intensity *= bcn;
     if (l.owned) lamp.intensity *= +lotLit(l.tile!); // an owned lamp is out while its lot is for sale or mortgaged
   }
+  const lh = lamps[BEACON.slot];
+  BM.value.set(BEACON.at.x, BEACON.at.y, BEACON.at.z, (t * 0.8) % (2 * Math.PI)); // the beam turns 0.8 rad/s about the lantern (a turn in 7.9 s: the angle is kept small, a float is coarse far from zero), and shines with it: none by day, when the lamps are only a hint of their night
+  BMC.value.set(lh.color.r, lh.color.g, lh.color.b).multiplyScalar(lh.intensity * BEAM_K * THREE.MathUtils.smoothstep(k, 0.3, 1));
   for (let i = 0; i < 4; i++) {
     const token = tokens[i], l = lamps[i];
     l.intensity = token && lotVisible(token.tile) ? (token.active ? 8 : 3.5) * k : 0;
@@ -66,7 +70,7 @@ function lights(t: number) {
 // ---- The passes. The scene is drawn once, in HDR, to a colour and a depth texture; everything after works on those two. It is not multisampled: a multisampled depth resolves to a single sample a pixel (not every mobile
 // and Safari WebGL2 driver does that well), and beside a colour averaged from four, an edge pixel can be fogged and blurred as the wrong side of its silhouette, a 1px fringe. The passes:
 //  1. ambient occlusion (GTAO) from the depth alone, at half size, blurred along depth edges;
-//  2. light shafts at half size, marched through the sun's shadow map in the haze, plus a halo round every lamp (not over what stands in front of it) and the spot's cone; blurred likewise;
+//  2. light shafts at half size, marched through the sun's shadow map in the haze, plus a halo round every lamp (not over what stands in front of it), the spot's cone (cut by its own shadow map) and the lighthouse's beam; blurred likewise;
 //  3. the composite: the occlusion on the lit scene, the sky and the haze by distance (a layer of fog hugging the sea, and the sea itself out to the horizon), the shafts on top;
 //  4. tilt-shift: a gather blur that grows from a sharp band across the middle of the screen (for a close view), and with the distance from the focus;
 //  5. bloom: a threshold, then a pyramid of four dual-filter blurs;
@@ -141,26 +145,46 @@ void main() {
 }`, { tS: src, tD: D, uPx: hPx, uNF: NF });
 const aoSrc = u<THREE.Texture | null>(null), volSrc = u<THREE.Texture | null>(null), aoBlur = blur(aoSrc), volBlur = blur(volSrc);
 
-// The shafts: for each of 20 steps along the view ray through the haze layer (jittered, so the blur can average the steps away), the sunlight that reaches it (the sun's shadow map
-// says whether a building is in the way) scatters toward the eye, most of all toward the sun; the spot adds its cone. A lamp's halo is the closed form of its 1/r^2 falloff along the ray, each part of it counted only where the depth buffer shows nothing between the air and the lamp: a lamp behind a wall does not glow over it.
+// The shafts: for each of 64 steps along the view ray through the haze layer (jittered, so the blur can average the steps away), the sunlight that reaches it (the sun's shadow map
+// says whether a building is in the way) scatters toward the eye, most of all toward the sun; the spot adds its cone, cut by its own shadow map where a token or a building is in the way, and the lighthouse its beam, two
+// cones back to back that turn about it. A lamp's halo is the closed form of its 1/r^2 falloff along the ray, each part of it counted only where the depth buffer shows nothing between the air and the lamp: a lamp behind a wall does not glow over it.
 const nLamp = lamps.length;
 const L = u(Array.from({ length: nLamp }, () => new THREE.Vector4())), LC = u(Array.from({ length: nLamp }, () => new THREE.Vector3()));
 const SP = u(new THREE.Vector4()), SPD = u(new THREE.Vector3()), SPC = u(new THREE.Vector3()), SHM = u(new THREE.Matrix4()), SHT = u<THREE.Texture | null>(null);
+const SPM = u(new THREE.Matrix4()), SPSH = u<THREE.Texture | null>(null), SPS = u(new THREE.Vector2()), BM = u(new THREE.Vector4()), BMC = u(new THREE.Vector3()), vPx = u(new THREE.Vector2()); // the spot's shadow map, its near and far; the beam's origin and bearing, its light; a pixel of the buffer
 const FOG = u(new THREE.Vector4(-1.2, 40, 0.07, 0.005)); // the layer: its floor and ceiling, how fast it thins with height, its density at the floor
 const volPass = fx(/* glsl */`
-uniform sampler2D tD, tSh; uniform mat4 uIVP, uVP, uShM; uniform vec2 uNF; uniform vec3 uEye, uSun, uSunC, uSpD, uSpC, uLC[ ${nLamp} ]; uniform vec4 uFog, uSp, uL[ ${nLamp} ]; uniform float uK;
+uniform sampler2D tD, tSh, tSpSh; uniform mat4 uIVP, uVP, uShM, uSpM; uniform vec2 uNF, uPx, uSpS; uniform vec3 uEye, uSun, uSunC, uSpD, uSpC, uBmC, uLC[ ${nLamp} ]; uniform vec4 uFog, uSp, uBm, uL[ ${nLamp} ]; uniform float uK;
 ${BAYER}
 float hg( float c, float g ) { return ( 1.0 - g * g ) / ( 12.566 * pow( 1.0 + g * g - 2.0 * g * c, 1.5 ) ); }
 float lz( float d ) { return - perspectiveDepthToViewZ( d, uNF.x, uNF.y ); }
-// How much of the straight way from a to b the depth buffer leaves open: six steps along it, each one hidden where it lies behind the surface in view there, by a hair or more but not by more than 1.2 units (a wall is no thicker)
+vec3 wp( vec2 q ) { vec4 w = uIVP * vec4( q * 2.0 - 1.0, textureLod( tD, q, 0.0 ).x * 2.0 - 1.0, 1.0 ); return w.xyz / w.w; }
+// The way the surface in view at q faces (toward the eye), read off the depth beside it, on each axis the side that is nearer, so as not to straddle an edge
+vec3 facing( vec2 q ) {
+	vec3 p = wp( q ), l = wp( q - vec2( uPx.x, 0.0 ) ), r = wp( q + vec2( uPx.x, 0.0 ) ), d = wp( q - vec2( 0.0, uPx.y ) ), u = wp( q + vec2( 0.0, uPx.y ) );
+	float e = distance( p, uEye );
+	return normalize( cross( abs( distance( r, uEye ) - e ) < abs( e - distance( l, uEye ) ) ? r - p : p - l, abs( distance( u, uEye ) - e ) < abs( e - distance( d, uEye ) ) ? u - p : p - d ) );
+}
+// How much of the straight way from a to b (b is the lamp's end) the depth buffer leaves open: twelve steps along it, each one hidden where it lies behind the surface in view there by a hair or more. How thick that surface is, the buffer does not say:
+// a wall is as thick as the air behind it is deep, up to 14 units (a tower, the globe), so a step is hidden from a hair behind it to 11 units and fades out by 14. Where the surface faces away from the way to the lamp, the lamp is behind it and it hides it
+// at any depth: a light never shows through what it stands behind.
 float seen( vec3 a, vec3 b, float jit ) {
-	vec4 ca = uVP * vec4( a, 1.0 ), cb = uVP * vec4( b, 1.0 ); float vis = 1.0;
-	for ( int j = 0; j < 6; j ++ ) {
-		vec4 c = mix( ca, cb, ( float( j ) + jit ) / 6.0 ); vec2 q = c.xy / c.w * 0.5 + 0.5;
-		float gap = c.w - lz( textureLod( tD, q, 0.0 ).x );
-		vis *= 1.0 - step( 0.0, min( q.x, q.y ) ) * step( max( q.x, q.y ), 1.0 ) * smoothstep( 0.05, 0.4, gap ) * ( 1.0 - smoothstep( 0.8, 1.2, gap ) );
+	vec4 ca = uVP * vec4( a, 1.0 ), cb = uVP * vec4( b, 1.0 ); vec3 m = normalize( b - a ); float vis = 1.0;
+	for ( int j = 0; j < 12; j ++ ) {
+		vec4 c = mix( ca, cb, ( float( j ) + jit ) / 12.0 ); vec2 q = c.xy / c.w * 0.5 + 0.5;
+		if ( c.w <= 0.0 || min( q.x, q.y ) < 0.0 || max( q.x, q.y ) > 1.0 ) continue;
+		float gap = c.w - lz( textureLod( tD, q, 0.0 ).x ), hid = smoothstep( 0.05, 0.4, gap );
+		if ( gap > 11.0 ) hid *= max( 1.0 - smoothstep( 11.0, 14.0, gap ), step( dot( facing( q ), m ), 0.0 ) );
+		vis *= 1.0 - hid;
+		if ( vis < 0.01 ) break;
 	}
 	return vis;
+}
+// The share of the spot's light that gets to p: its shadow map (a perspective one: the depth in it is not linear) says how far from the spot the first thing it lit was
+float spotLit( vec3 p ) {
+	vec4 c = uSpM * vec4( p, 1.0 ); vec3 q = c.xyz / c.w;
+	if ( c.w <= 0.0 || min( q.x, q.y ) < 0.0 || max( q.x, q.y ) > 1.0 || q.z > 1.0 ) return 1.0;
+	return step( c.w - 0.25, uSpS.x * uSpS.y / ( uSpS.y - textureLod( tSpSh, q.xy, 0.0 ).x * ( uSpS.y - uSpS.x ) ) );
 }
 void main() {
 	float d = texture2D( tD, v ).x;
@@ -169,15 +193,24 @@ void main() {
 	float tm = d >= 1.0 ? 4000.0 : length( w.xyz - uEye ), t0 = 0.0, t1 = tm, jit = bayer( gl_FragCoord.xy );
 	if ( abs( rd.y ) > 1e-4 ) { float a = ( uFog.x - uEye.y ) / rd.y, b = ( uFog.y - uEye.y ) / rd.y; t0 = max( t0, min( a, b ) ); t1 = min( t1, max( a, b ) ); }
 	if ( t1 > t0 ) {
-		float dt = ( t1 - t0 ) / 20.0, ph = 0.08 + 0.9 * hg( dot( rd, uSun ), 0.6 );
-		for ( int i = 0; i < 20; i ++ ) {
+		float dt = ( t1 - t0 ) / 64.0, ph = 0.08 + 0.9 * hg( dot( rd, uSun ), 0.6 );
+		bool spOn = dot( uSpC, vec3( 1.0 ) ) > 0.0, bmOn = dot( uBmC, vec3( 1.0 ) ) > 0.0;
+		vec3 bx = vec3( cos( uBm.w ), 0.0, sin( uBm.w ) ); // the beam's axis: level, turning
+		for ( int i = 0; i < 64; i ++ ) {
 			vec3 p = uEye + rd * ( t0 + ( float( i ) + jit ) * dt );
 			float rho = uFog.w * exp( - max( p.y - uFog.x, 0.0 ) * uFog.z ) * dt, lit = 1.0;
 			vec4 sc = uShM * vec4( p, 1.0 );
 			if ( sc.x >= 0.0 && sc.x <= 1.0 && sc.y >= 0.0 && sc.y <= 1.0 && sc.z <= 1.0 ) lit = step( sc.z - 0.0008, textureLod( tSh, sc.xy, 0.0 ).x );
 			acc += uSunC * ( lit * ph * rho * uK );
-			vec3 sv = p - uSp.xyz; float sl = length( sv );
-			acc += uSpC * ( smoothstep( uSp.w, mix( uSp.w, 1.0, 0.4 ), dot( sv / max( sl, 1e-3 ), uSpD ) ) * rho * 30.0 / ( 1.0 + 0.04 * sl * sl ) );
+			if ( spOn ) {
+				vec3 sv = p - uSp.xyz; float sl = length( sv ), cone = smoothstep( uSp.w, mix( uSp.w, 1.0, 0.4 ), dot( sv / max( sl, 1e-3 ), uSpD ) );
+				if ( cone > 0.0 ) acc += uSpC * ( cone * spotLit( p ) * rho * 30.0 / ( 1.0 + 0.04 * sl * sl ) );
+			}
+			if ( bmOn ) {
+				vec3 bv = p - uBm.xyz; float bl = length( bv ), tight = 1.0 - dot( bv, bx ) * dot( bv, bx ) / max( dot( bv, bv ), 1e-3 ); // tight: 1 - cos^2 of the angle to the axis, either way
+				float beam = ( 1.0 - smoothstep( 0.0004, 0.012, tight ) ) * smoothstep( 0.7, 3.0, bl ) * exp( - bl / 30.0 ); // within about 6 degrees of it, soft at the edge, not in the lantern itself, thinning with the distance
+				if ( beam > 0.002 ) acc += uBmC * ( beam * seen( p, uBm.xyz + bv / bl, fract( jit * 7.31 + float( i ) * 0.618 ) ) * rho );
+			}
 		}
 	}
 	for ( int i = 0; i < ${nLamp}; i ++ ) {
@@ -192,8 +225,8 @@ void main() {
 		}
 		acc += uLC[ i ] * ( da / h * win * vis );
 	}
-	gl_FragColor = vec4( acc, 1.0 );
-}`, { tD: D, tSh: SHT, uIVP: IVP, uVP: VP, uNF: NF, uShM: SHM, uEye: EYE, uSun: LIT, uSunC: SUNC, uSpD: SPD, uSpC: SPC, uLC: LC, uFog: FOG, uSp: SP, uL: L, uK: K.shaft });
+	gl_FragColor = vec4( acc, tm ); // the distance goes with it, for the composite to tell what each texel belongs to
+}`, { tD: D, tSh: SHT, tSpSh: SPSH, uIVP: IVP, uVP: VP, uNF: NF, uPx: vPx, uShM: SHM, uSpM: SPM, uSpS: SPS, uEye: EYE, uSun: LIT, uSunC: SUNC, uSpD: SPD, uSpC: SPC, uBm: BM, uBmC: BMC, uLC: LC, uFog: FOG, uSp: SP, uL: L, uK: K.shaft });
 
 // The composite: occlusion on the scene, then the air between it and the eye. The sky is a gradient with the glow of the light (the sun, by night the moon); the haze is the sky's own horizon colour,
 // thickest at grazing angles and brighter on the side of the sun, which goes on under the horizon at dusk, and by night on the side of the moon (`sky.glow` is the share of the sun's).
@@ -201,6 +234,15 @@ void main() {
 const sceneTex = u<THREE.Texture | null>(null), aoTex = u<THREE.Texture | null>(null), volTex = u<THREE.Texture | null>(null), SEAY = u(SEA_Y);
 const compPass = fx(/* glsl */`
 uniform sampler2D tC, tD, tA, tV; uniform mat4 uIVP; uniform vec3 uEye, uSun, uLit, uSunC, uHor, uZen; uniform vec4 uFog; uniform float uAO, uGlow, uSea;
+// The shafts are made at half size: at full size, of the four texels round the pixel the ones on its own surface (their alpha is their distance) weigh the most, so a shaft or a halo does not spill over an edge
+vec3 vol( float tm ) {
+	vec2 sz = vec2( textureSize( tV, 0 ) ), f = v * sz - 0.5, i = floor( f ), fr = f - i; vec4 sum = vec4( 0.0 );
+	for ( int k = 0; k < 4; k ++ ) {
+		vec2 o = vec2( float( k & 1 ), float( k >> 1 ) ); vec4 s = texture2D( tV, ( i + o + 0.5 ) / sz );
+		sum += vec4( s.rgb, 1.0 ) * ( ( o.x > 0.5 ? fr.x : 1.0 - fr.x ) * ( o.y > 0.5 ? fr.y : 1.0 - fr.y ) * ( exp( - abs( s.a - tm ) / tm * 80.0 ) + 0.002 ) );
+	}
+	return sum.rgb / sum.a;
+}
 float lobe( vec2 h, vec3 d ) { return pow( saturate( dot( h, normalize( d.xz ) ) ), 4.0 ); }
 vec3 haze( vec3 rd ) { vec2 h = normalize( rd.xz ); return uHor * ( 0.85 + 0.3 * mix( lobe( h, uLit ), lobe( h, uSun ), uGlow ) ); }
 vec3 sky( vec3 rd ) { return mix( haze( rd ), uZen, pow( saturate( rd.y * 1.6 ), 0.6 ) ) + uSunC * pow( saturate( dot( rd, uLit ) ), 24.0 ) * 0.5; }
@@ -214,10 +256,10 @@ void main() {
 	vec4 w = uIVP * vec4( v * 2.0 - 1.0, d * 2.0 - 1.0, 1.0 ); w.xyz /= w.w;
 	vec3 rd = normalize( w.xyz - uEye ), c = texture2D( tC, v ).rgb;
 	bool wet = d < 1.0 || rd.y < - 1e-4; // the ray ends on the water, drawn or not
-	float tm = d < 1.0 ? length( w.xyz - uEye ) : wet ? ( uSea - uEye.y ) / rd.y : 4000.0;
+	float tm = d < 1.0 ? length( w.xyz - uEye ) : wet ? ( uSea - uEye.y ) / rd.y : 4000.0, tv = d < 1.0 ? tm : 4000.0; // tv: the distance the shafts were made to
 	if ( d >= 1.0 ) c = sky( rd ); else c *= mix( 1.0, texture2D( tA, v ).r, uAO * ( 1.0 - smoothstep( 0.85, 1.8, max( c.r, max( c.g, c.b ) ) ) ) );
 	float tr = exp( - tau( uEye, rd, tm ) - ( wet ? melt( tm ) : 0.0 ) );
-	gl_FragColor = vec4( c * tr + haze( rd ) * ( 1.0 - tr ) + texture2D( tV, v ).rgb, 1.0 );
+	gl_FragColor = vec4( c * tr + haze( rd ) * ( 1.0 - tr ) + vol( tv ), 1.0 );
 }`, { tC: sceneTex, tD: D, tA: aoTex, tV: volTex, uIVP: IVP, uEye: EYE, uSun: SUN, uLit: LIT, uSunC: SUNC, uHor: HOR, uZen: ZEN, uFog: FOG, uAO: K.ao, uGlow: GLOW, uSea: SEAY });
 
 // Tilt-shift: the circle of confusion is none in a band across the middle of the screen and grows toward its top and bottom (the miniature look, for a close view: with the whole board in it, whose
@@ -299,7 +341,7 @@ export function resize(w: number, h: number) {
     bloom: [2, 4, 8, 16].map((k) => mk(w / k, h / k)),
   };
   D.value = main.depthTexture; sceneTex.value = main.texture;
-  aoPx.value.set(2 / w, 2 / h); hPx.value.set(2 / w, 2 / h); dofPx.value.set(1 / w, 1 / h);
+  aoPx.value.set(2 / w, 2 / h); hPx.value.set(2 / w, 2 / h); dofPx.value.set(1 / w, 1 / h); vPx.value.set(1 / w, 1 / h);
   endAsp.value.set(w / h, 1);
 }
 
@@ -309,12 +351,13 @@ function pass(m: THREE.ShaderMaterial, to: RT | null, keep = false) { // keep: a
   quad.material = m; renderer.autoClear = !keep; renderer.setRenderTarget(to); renderer.render(qScene, qCam);
 }
 
-const LAMP_SOFT = 0.65, LAMP_K = 0.0038, SPOT_K = 0.0009; // a lamp's halo: its softening radius (units), a 4.5-unit cutoff, and strength per unit of intensity; the spot's cone
+const LAMP_SOFT = 0.65, LAMP_K = 0.0038, SPOT_K = 0.0009, BEAM_K = 0.65, SPOT_R = 1; // a lamp's halo: its softening radius (units), a 4.5-unit cutoff, and strength per unit of intensity; the spot's cone; the lighthouse's beam per unit of the lantern's; the spot's size (its shadows' penumbra, see light.ts)
 function uniforms() {
   IP.value.copy(hdCam.projectionMatrixInverse); IVP.value.multiplyMatrices(hdCam.matrixWorld, hdCam.projectionMatrixInverse); VP.value.multiplyMatrices(hdCam.projectionMatrix, hdCam.matrixWorldInverse);
   EYE.value.copy(hdCam.position); NF.value.set(hdCam.near, hdCam.far);
   SUNC.value.set(sky.lightC.r, sky.lightC.g, sky.lightC.b).multiplyScalar(sky.lightK); GLOW.value = sky.glow;
-  SHM.value.copy(sun.shadow.matrix); SHT.value = sun.shadow.map?.depthTexture ?? null;
+  SPS.value.set(spot.shadow.camera.near, spot.distance || spot.shadow.camera.far); // the far plane of its map is its reach (three's), or the camera's own while it has none
+  U.uSp.value.set(SPS.value.x, SPS.value.y, 2 * Math.tan(spot.angle * spot.shadow.focus), SPOT_R);
   aoF.value = 0.5 * T!.ao[0].height * hdCam.projectionMatrix.elements[5];
   dofR.value = K.blur.value * renderer.getPixelRatio(); dofTilt.value = zoomed();
   FOG.value.w = K.haze.value;
@@ -336,6 +379,8 @@ export function render() {
   renderer.autoClear = true;
   renderer.setRenderTarget(T.main);
   renderer.render(scene, hdCam);
+  SHM.value.copy(sun.shadow.matrix); SHT.value = sun.shadow.map?.depthTexture ?? null; // the shadow maps are drawn by that render, matrices and all: taken before it they would be the last frame's (a token's hop is half a unit a frame)
+  SPM.value.copy(spot.shadow.matrix); SPSH.value = spot.shadow.map?.depthTexture ?? null;
   pass(aoPass, T.ao[0]); aoSrc.value = T.ao[0].texture; pass(aoBlur, T.ao[1]); aoTex.value = T.ao[1].texture;
   pass(volPass, T.vol[0]); volSrc.value = T.vol[0].texture; pass(volBlur, T.vol[1]); volTex.value = T.vol[1].texture;
   pass(compPass, T.hdr); compTex.value = T.hdr.texture;

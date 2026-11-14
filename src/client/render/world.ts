@@ -186,6 +186,28 @@ const planet = (L: number) => canvas(texels(2 * Math.PI * BALL, L), texels(Math.
   g.putImageData(img, 0, 0);
 });
 
+// The planet by night, the emissive map of the ball (see `nightlit`) on the grid of `planet`: the lights of cities as golden pixels, sprawls of a few texels where a fine noise clears a bar, and the bar is lower where more people live.
+// Where that is comes from the land grid: along the coasts, at the middle latitudes, in the patches a slow noise makes, and not on the ice, in the desert or the jungle. Every level reads the same noise at its own texels, so each has the same cities.
+const CITY = [0xffe9a8, 0xffc25a, 0xff9f3a], BUILT = [0.5, 0.12, 1, 0.3, 0]; // a city's core, its edge and its fringe; how built over each of BIOME's grounds is
+let people: Float32Array | undefined; // how many live in each cell of the land grid, 0..1
+const populated = () => people ??= Float32Array.from(LAND, (land, c) => {
+  const i = c % EW, j = Math.floor(c / EW), u = (i + 0.5) / EW, v = (j + 0.5) / EH, a = 2 * Math.PI * u, b = Math.PI * (0.5 - v), X = Math.cos(b) * Math.cos(a), Y = Math.sin(b), Z = Math.cos(b) * Math.sin(a), ss = THREE.MathUtils.smoothstep;
+  const pole = Math.abs(v - 0.5) * 2, lat = pole + (fbm(X, Y, Z, 1.5) - 0.5) * 0.6; // as `planet` has them
+  return land ? BUILT[BIOME.findIndex(([k]) => lat < k)] * (1 - ss(pole, 0.5, 0.78)) * (1.25 - 0.7 * ss(NEAR[c], 0.6, 0.95)) * ss(fbm(X, Y, Z, 3, 21), 0.35, 0.65) : 0;
+});
+const planetNight = (L: number) => canvas(texels(2 * Math.PI * BALL, L), texels(Math.PI * BALL, L), (g, w, h) => {
+  const img = g.createImageData(w, h), px = new Uint32Array(img.data.buffer).fill(0xff000000), pop = populated();
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const u = x / w, v = y / h, p = grid(pop, u, v);
+    if (p < 0.03 || grid(LAND, u, v) <= 0.5) continue; // no one, or a texel of the sea (the same test as `planet`'s)
+    const a = 2 * Math.PI * u, b = Math.PI * (0.5 - v), n = fbm(Math.cos(b) * Math.cos(a), Math.sin(b), Math.cos(b) * Math.sin(a), 26, 33) - (0.74 - 0.1 * p); // how far over the bar this texel is
+    if (n > 0.05) px[y * w + x] = rgba(CITY[0]);
+    else if (n > 0) px[y * w + x] = rgba(CITY[1]);
+    else if (n > -0.025) px[y * w + x] = rgba(CITY[2]);
+  }
+  g.putImageData(img, 0, 0);
+});
+
 // The dial on the drum's top, seen from above: a rim, a ring of 32 alternating blocks, a gold line, and a compass rose (long rays N, E, S, W, short ones between)
 const DIAL = [0x95a0be, 0xaeb8d0, 0xcdd5e8, 0xdcae3e, 0x6f7a9a]; // field, block, rim, gold, shade
 const dial = (L: number) => canvas(texels(2 * DAIS, L), texels(2 * DAIS, L), (g, n) => {
@@ -213,11 +235,26 @@ const stone = (R: number, h: number) => lodMap(toon(0xc4cee8), (L) => { // the s
   t.needsUpdate = true;
   return t;
 });
-const globe = new THREE.Group(), ball = new THREE.Mesh(new THREE.SphereGeometry(BALL, 48, 32), glassy(lodMap(toon(0xffffff), (L) => { // its seas are blue texels but water, not glass: they would throw the sun back as a hard dot
-  const map = pixelTexture(planet(L));
+const wrapped = (draw: (L: number) => HTMLCanvasElement) => (L: number) => {
+  const map = pixelTexture(draw(L));
   map.wrapS = THREE.RepeatWrapping;
   return map;
-}), 0));
+};
+// The planet's own light, which only HD-2D has (both terms are 0 in the restrained look): its cities' lamps, which light on the side the sun is not, and a rim of atmosphere, a blue that thickens toward the limb, brightest on the sun's side.
+// The ball is no lamp's to light the whole of (its fill stands low in front, see lamps.ts): the rim is what lights the rest of its edge.
+const GLOBE = /* glsl */`
+vec3 gn = inverseTransformDirection( normal, viewMatrix );
+float gs = dot( gn, uSunW );
+totalEmissiveRadiance *= uHd * smoothstep( 0.35, - 0.15, gs ) * 1.4;
+totalEmissiveRadiance += uHd * vec3( 0.42, 0.68, 1.0 ) * ( pow( 1.0 - saturate( dot( normal, normalize( vViewPosition ) ) ), 3.0 ) * ( 0.25 + 0.75 * smoothstep( - 0.3, 0.5, gs ) ) );
+#include <lights_toon_fragment>`;
+const globeMat = glassy(lodMap(lodMap(toon(0xffffff, { emissive: 0xffffff }), wrapped(planet)), wrapped(planetNight), 'emissiveMap'), 0); // its seas are blue texels but water, not glass: they would throw the sun back as a hard dot
+globeMat.onBeforeCompile = (sh) => {
+  lit.call(globeMat, sh);
+  sh.uniforms.uSunW = { value: sky.sun };
+  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec3 uSunW;').replace('#include <lights_toon_fragment>', GLOBE); // after `lit` has put the night's emissive in: that is all there is to scale
+};
+const globe = new THREE.Group(), ball = new THREE.Mesh(new THREE.SphereGeometry(BALL, 48, 32), globeMat);
 {
   const dais = new THREE.Mesh(new THREE.CylinderGeometry(DAIS, DAIS, SLAB, 64), [stone(DAIS, SLAB), glassy(lodMap(toon(0xffffff), (L) => pixelTexture(dial(L))), 0), toon(0x6a7898)]);
   dais.position.y = TOP - SLAB / 2;

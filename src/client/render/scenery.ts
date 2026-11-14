@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { bake, box, cyl, hip, mat, part, GOLD, INK, IRON, LAVA } from './builder';
+import { hd } from './light';
+import { movers } from './scene';
 
 // Life on the water, kept clear of the board: an islet in each corner room of the loop (a climate each: palms, a lighthouse, an ice floe, a pagoda) and a bigger one on each side (a volcano,
 // a village), three ships on lanes round the board and one round the drum (the sea draws their wakes, see world), and a dolphin that now and then leaps by the drum. On the far islets the windmill's sails turn and the volcano smokes. All of it is low and
@@ -97,12 +99,12 @@ const lane = (h: number, r: number) => {
 };
 const ring = (h: number) => lane(h, h - 44); // round the board (its slabs reach 48): straight along each side, turning at the corners
 
-// ---- Ships: built round the waterline (y = 0) with the bow to +x. What moves casts no shadow (the sun's map is not drawn again for it), and is baked into a few meshes like the models on the tiles ----
+// ---- Ships: built round the waterline (y = 0) with the bow to +x. What moves casts a shadow in HD-2D only (the restrained look does not draw the sun's map again for it: see `movers`), and is baked into a few meshes like the models on the tiles ----
 const moving = (build: (g: THREE.Group) => void) => {
   const g = new THREE.Group();
   build(g);
-  g.traverse((o) => (o.castShadow = false));
   bake(g);
+  g.traverse((o) => { if (o instanceof THREE.Mesh) { o.castShadow = hd.on; movers.push(o); } }); // after the bake, which tells meshes apart by their shadow flags: all alike here
   return g;
 };
 const afloat = (build: (g: THREE.Group) => void, k = 1) => {

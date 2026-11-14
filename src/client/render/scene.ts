@@ -113,8 +113,12 @@ const levelNow = () => {
 const kept = import.meta.hot?.data ?? {};
 export let renderer!: THREE.WebGLRenderer;
 // The 4096 x 4096 shadow map is drawn by the next render() after a dirtyShadow(), not every frame: the sun's frame moved (fitShadow), a tween, a tile or a landing token is still
-// moving, a plot's building changed. The endless loops (the globe's float, the tokens' bob) are no reason: their shadows catch up whenever the map is next drawn.
+// moving, a plot's building changed. The endless loops (the globe's float, the tokens' bob) are no reason: their shadows catch up whenever the map is next drawn. HD-2D is the exception: it draws the map every
+// frame (see render), because its sun never steps (sky.ts) and so much of its world moves through it (the ships and the dolphin, the sails and the smoke, a token's bob, a rocket), with a spot's own map beside it.
 export const dirtyShadow = () => { if (renderer) renderer.shadowMap.needsUpdate = true; };
+/** What moves and casts a shadow in HD-2D only (scenery.ts adds its ships, its dolphin, the sails and the smoke), switched at the change of look: the restrained look draws its map only when something asks (see dirtyShadow),
+ * so what moves would leave its shadow where the map was last drawn, and what it draws must stay what it was. */
+export const movers: THREE.Object3D[] = [];
 
 export const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x14213d);
@@ -243,7 +247,7 @@ function snap() {
   lim.value = Math.max(0.72, 1.25 * u * (t + 1 / t));
 }
 export function render() {
-  if (hd.on && hdMod) return hdMod.render();
+  if (hd.on && hdMod) { dirtyShadow(); return hdMod.render(); } // every frame: see dirtyShadow
   snap();
   renderer.setRenderTarget(rt);
   renderer.render(scene, camera);
@@ -457,6 +461,7 @@ let hdMod: typeof import('./hd2d') | null = null, wanted = false;
 function look(on: boolean) {
   hd.on = on; U.uHd.value = +on;
   setLamps(on);
+  for (const o of movers) o.castShadow = on;
   renderer.domElement.style.imageRendering = on ? 'auto' : ''; // the restrained look is magnified with nearest-neighbour (see style.css)
   resize(); // the buffer takes its other size
   dirtyShadow();

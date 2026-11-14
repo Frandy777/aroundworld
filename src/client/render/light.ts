@@ -11,6 +11,7 @@ export const U = {
   uHd: { value: 0 }, // 1 while HD-2D is on
   uLamp: { value: 1 }, // artificial light's share of its night strength (sky.ts)
   uSh: { value: new THREE.Vector2(439, 0.045) }, // the sun's shadow map as the soft shadows need it: the depth it spans and one texel of it, in world units (see fitShadow)
+  uSp: { value: new THREE.Vector4(0.5, 24, 0.97, 1) }, // the spot's, a perspective map: its near and far planes, the width it spans one unit out, the lamp's size (see hd2d.ts uniforms)
 };
 
 // The local lights: a fixed set, parked at zero intensity when idle, because a different count would make every material compile again (hd2d.ts places them).
@@ -18,27 +19,37 @@ export const CITY_COUNT = TILES.filter((t) => t.type === 'city').length;
 export const LAMP = { strike: 4, fixed: 5, city: 29 }; // 0-3 tokens, 4 missile, 5-28 fixed landmark/scenery lamps (declared by the models and lamps.ts), 29+ two lamps (front-right key + back-left fill) per ordinary city
 export const lamps = Array.from({ length: LAMP.city + CITY_COUNT * 2 }, () => new THREE.PointLight(0xffffff, 0, 0, 2));
 export const spot = new THREE.SpotLight(0xffe2b0, 0, 0, 0.45, 0.8, 1.6);
-export const setLamps = (on: boolean) => [...lamps, spot].forEach((l) => (l.visible = on)); // a hidden light is not in the shaders at all
+spot.shadow.mapSize.set(1024, 1024);
+Object.assign(spot.shadow, { bias: -0.0004, normalBias: 0.03, radius: 2 }); // radius: no blur (a plain depth map takes none) but the flag that tells pcss this map is a perspective one
+export const setLamps = (on: boolean) => { // a hidden light is not in the shaders at all, nor is its shadow map drawn: the restrained look has no spot and no shadow of it
+  [...lamps, spot].forEach((l) => (l.visible = on));
+  spot.castShadow = on;
+};
 setLamps(false);
 
 // Soft shadows: the sun's map is a plain depth map (BasicShadowMap), so a lookup can be made as wide as it likes. PCSS: a search for the blockers in front of the pixel
 // gives how far the light travelled past them, which sets the width of the filter, sharp at the foot of a wall and soft at the end of its shadow. The depth of a sloped
-// receiver is followed across the filter (from the screen-space derivatives), so a wide filter does not shadow the ground with itself.
+// receiver is followed across the filter (from the screen-space derivatives, kept to what a real slope can be: where a quad straddles an edge of the voxels they are garbage, and a
+// wide filter on a garbage slope speckles the ground), so a wide filter does not shadow the ground with itself. The filter is cut in world units, not texels (the sun's map doubles its
+// texel when the view is far out, see fitShadow): the blur is the same width at either scale. The spot's map is a perspective one, whose texel and depth grow with the distance from the lamp: `spot`.
 const PCSS = /* glsl */`
 uniform float uHd;
 uniform vec2 uSh;
-float pcss( sampler2D sm, vec3 c, vec3 dx, vec3 dy, vec2 size ) {
-	float det = dx.x * dy.y - dx.y * dy.x;
-	vec2 g = abs( det ) > 1e-14 ? vec2( dy.y * dx.z - dx.y * dy.z, dx.x * dy.z - dy.x * dx.z ) / det : vec2( 0.0 );
-	float tx = 1.0 / size.x, rot = fract( 52.9829189 * fract( dot( gl_FragCoord.xy, vec2( 0.06711056, 0.00583715 ) ) ) ) * 6.2831853, gap = 0.0, n = 0.0, lit = 0.0;
+uniform vec4 uSp;
+float pcss( sampler2D sm, vec3 c, vec3 dx, vec3 dy, vec2 size, bool spot ) {
+	float dr = spot ? uSp.x * uSp.y / ( uSp.y - c.z * ( uSp.y - uSp.x ) ) : 0.0; // the spot's distance from the pixel
+	float wt = spot ? uSp.z * dr / size.x : uSh.y, zw = spot ? dr * dr * ( uSp.y - uSp.x ) / ( uSp.x * uSp.y ) : uSh.x; // world units a texel spans here, and one unit of the map's depth
+	float det = dx.x * dy.y - dx.y * dy.x, ms = 8.0 * size.x * wt / zw; // ms: the depth a receiver sloping 8 to 1 gains across the map (a roof, the ground at dusk, a wall the light barely grazes)
+	vec2 g = abs( det ) > 1e-14 ? clamp( vec2( dy.y * dx.z - dx.y * dy.z, dx.x * dy.z - dy.x * dx.z ) / det, - ms, ms ) : vec2( 0.0 );
+	float tx = 1.0 / size.x, rot = fract( 52.9829189 * fract( dot( gl_FragCoord.xy, vec2( 0.06711056, 0.00583715 ) ) ) ) * 6.2831853, gap = 0.0, n = 0.0, lit = 0.0, sr = ( spot ? 0.6 : 1.2 ) / wt * tx; // sr: the radius the blockers are searched in, 1.2 units (the spot's: 0.6)
 	for ( int i = 0; i < 12; i ++ ) {
 		float a = float( i ) * 2.39996323 + rot;
-		vec2 o = vec2( cos( a ), sin( a ) ) * sqrt( ( float( i ) + 0.5 ) / 12.0 ) * 12.0 * tx;
+		vec2 o = vec2( cos( a ), sin( a ) ) * sqrt( ( float( i ) + 0.5 ) / 12.0 ) * sr;
 		float z = c.z + dot( g, o ) - texture2D( sm, c.xy + o ).r;
 		if ( z > 0.0002 ) { gap += z; n += 1.0; }
 	}
 	if ( n < 0.5 ) return 1.0;
-	float rad = clamp( gap / n * uSh.x * 0.09 / uSh.y, 1.5, 14.0 ) * tx;
+	float pw = gap / n * zw, rad = max( clamp( spot ? pw * uSp.w / max( dr - pw, 0.5 ) : pw * 0.09, 0.06, 0.75 ) / wt, 1.0 ) * tx; // the penumbra, in world units: 9% of the way the light travelled past the blockers (the spot's: its size over their distance from it)
 	for ( int i = 0; i < 20; i ++ ) {
 		float a = float( i ) * 2.39996323 + rot;
 		vec2 o = vec2( cos( a ), sin( a ) ) * sqrt( ( float( i ) + 0.5 ) / 20.0 ) * rad;
@@ -51,7 +62,7 @@ const SHADOW = THREE.ShaderChunk.shadowmap_pars_fragment;
 if (!SHADOW.includes('pcss')) { // three keeps its chunks across a hot update: patch them once
   THREE.ShaderChunk.shadowmap_pars_fragment = PCSS + SHADOW
     .replace(/bool inFrustum =/g, 'vec3 sdx = dFdx( shadowCoord.xyz ), sdy = dFdy( shadowCoord.xyz );\n\t\t\tbool inFrustum =') // before any branch: derivatives need every pixel of the quad
-    .replace('shadow = step( shadowCoord.z, depth );', 'shadow = uHd > 0.5 ? pcss( shadowMap, shadowCoord.xyz, sdx, sdy, shadowMapSize ) : step( shadowCoord.z, depth );');
+    .replace('shadow = step( shadowCoord.z, depth );', 'shadow = uHd > 0.5 ? pcss( shadowMap, shadowCoord.xyz, sdx, sdy, shadowMapSize, shadowRadius > 1.5 ) : step( shadowCoord.z, depth );');
 }
 /** A material that only receives the sun's shadow (the dimming of the sea) takes the soft ones too. */
 export const soft = <M extends THREE.Material>(m: M) => { m.onBeforeCompile = (sh) => void Object.assign(sh.uniforms, U); return m; };

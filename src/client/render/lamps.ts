@@ -22,7 +22,7 @@ export interface Fixed {
 export const SCENERY: Fixed[] = [
   { at: new THREE.Vector3(ISLETS[1][0] + 0.3, 3.6, ISLETS[1][1]), color: 0xfff0c0, power: 28, reach: 13, pulse: 'beacon' }, // the lighthouse
   { at: new THREE.Vector3(ISLETS[4][0], 4.4, ISLETS[4][1]), color: 0xff7a1a, power: 24, reach: 14, pulse: 'flare' },      // the volcano's lava
-  { at: new THREE.Vector3(0, FLOAT, 0), color: 0x8fc4ff, power: 14, reach: 12 },                                          // the globe
+  { at: new THREE.Vector3(0, FLOAT - 5, 5.6), color: 0x8fc4ff, power: 14, reach: 12 }, // the globe's fill: out of the solid ball (its faces turn away from its centre), low in front, on the plinth, the compass and the ball's lower rim
 ];
 
 // Every tile's lamps (see ModelDef.lamps), resolved over its lot the way its props are drawn: `at` in the model's authored units times its
