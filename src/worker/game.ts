@@ -672,7 +672,7 @@ export class Game {
 
   // The Media owner is paid for every story and may throw their own away once.
   private async news(pi: number) {
-    this.bonus('BBC', [500], m`${P(pi)} triggered News`);
+    this.bonus('BBC', [200], m`${P(pi)} triggered News`);
     let story = this.pick(NEWS)(this, pi);
     if (this.spOf(pi, 'BBC') && (await this.ask(pi, { k: 'news', card: story.card })) === true) story = this.pick(NEWS)(this, pi);
     this.emit({ t: 'news', card: story.card }); // kept or drawn again, the story is read by everyone (the ask only decided which)

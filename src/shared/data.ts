@@ -32,7 +32,7 @@ export const INVEST: Record<InvestKind, { label: string; price: number; fx: stri
   military: { label: 'Military Base', price: 3000, fx: 'When the owner lands here, pay $500 to lower any city by 1 building level.' },
   choke: { label: 'Chokepoint', price: 1500, fx: 'Players passing or stopping here pay $200 / $300 / $400 / $500 when the owner holds 1 / 2 / 3 / 4 chokepoints.' },
   oil: { label: 'Oil Co.', price: 2000, fx: 'Owner earns $400 whenever they pass this tile.' },
-  bbc: { label: 'Media', price: 3000, fx: 'Whenever anyone triggers News, owner earns $500. When the owner triggers News, they may discard it and draw again.' },
+  bbc: { label: 'Media', price: 3000, fx: 'Whenever anyone triggers News, owner earns $200. When the owner triggers News, they may discard it and draw again.' },
   devil: { label: 'Prison Island', price: 3000, fx: 'Whenever anyone goes to jail, owner earns $700. If the owner is jailed, they may pay $700 bail and skip the stay.' },
 };
 
