@@ -1,16 +1,16 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { block, box, cyl, final, memo, stone, INK, type ModelDef } from '../../builder';
-import { glow, nightlit, switchOf } from '../../light';
+import { glassy, glow, nightlit, switchOf } from '../../light';
 import { toon } from '../../scene';
 
 const WARM = 0xffd9a0; // the warm light of a window
-// What shines once the hotel is bought, and only then (see `shine`): the glass of its slabs (gathered as they are built: `block` makes them) and every other lamp of the island (`lit`: a part that shines after dusk, k times its light; made here, never shared, so that
+// What shines once the hotel is bought, and only then (see `shine`): the glass of its slabs (gathered as they are built: `block` makes them) and every other lamp of the island (`lit`: a part that shines after dusk, k times its light, glass if it is a pane (see `glassy`); made here, never shared, so that
 // switching it cannot reach another tile), and a beacon at each end of the SkyPark that takes the colour of its owner (unlit like any lamp, but this one is the hotel's own material, so that its colour can be set).
 // `own` is who owns it now, so that what is drawn after a change of hands (an upgrade's landmarks, a model saved while developing) is lit as the rest is
 const LIT = new Set<THREE.Material>(), beacon = glow(new THREE.MeshBasicMaterial({ color: INK }));
 let own: number | null = null;
-const lit = memo((c: number, k: number, light: number = WARM) => { const m = nightlit(toon(c), light, k); LIT.add(m); switchOf(m).value = +(own !== null); return m; });
+const lit = memo((c: number, k: number, light: number = WARM, pane: boolean = false) => { const m = nightlit(toon(c), light, k); LIT.add(m); switchOf(m).value = +(own !== null); return pane ? glassy(m) : m; });
 const shine = (c: number | null) => { own = c; LIT.forEach((m) => (switchOf(m).value = +(c !== null))); beacon.color.set(c ?? INK); }; // c: the owner's colour while the hotel stands, null while it is for sale or mortgaged: its lights are out and its beacons dark
 
 export default {
@@ -21,7 +21,7 @@ export default {
       const BASE = 0.46, H = 1.8, ZC = -0.26, OFF = 0.4, LEAN = 0.11, TOP = BASE + H, DY = TOP + 0.08, LX = -0.08, TW = 0.88, TD = 0.8;                         // the towers' foot and height, their centre line, how far each slab stands off it and leans (so that the two meet at the top), the SkyPark's underside and its walking level, the middle tower's (and the lobby's) x, how much a slab is narrowed and thinned
       const WATER = 0x3a86e0, PLAZA = 0xd8d2c0, WHITE = 0xf4f6fa, GLASS = 0x8fa4cc, HULL = 0x8d97ab, POOL = 0x4da3ff, AQUA = 0x6cc8ff, LEAF = 0x3f9a5c, LEAF2 = 0x2f7a4a, BULB = 0xfff6b0, WOOD = 0x6e3a12, CREAM = 0xf0e8d4; // paints
       box(g, 2.4, 0.1, 1.9, WATER); box(g, 2.4, 0.06, 1.5, PLAZA, 0, 0.1, -0.2); box(g, 2.4, 0.03, 0.05, 0xe6e9f0, 0, 0.16, 0.5);                               // the bay, the promenade on it, its kerb
-      box(g, 2.3, 0.3, 1.38, 0xdfe3ec, 0, 0.16, ZC); for (const s of [-1, 1]) box(g, 0.75, 0.08, 0.03, 0x3f6fd0, LX + s * 0.62, 0.3, ZC + 0.7, lit(0x3f6fd0, 0.5));                   // the podium the towers stand on, the band of glass along its front, either side of the lobby (lit by night)
+      box(g, 2.3, 0.3, 1.38, 0xdfe3ec, 0, 0.16, ZC); for (const s of [-1, 1]) box(g, 0.75, 0.08, 0.03, 0x3f6fd0, LX + s * 0.62, 0.3, ZC + 0.7, lit(0x3f6fd0, 0.5, WARM, true)); // the podium the towers stand on, the band of glass along its front, either side of the lobby (lit by night)
       [LX - 0.75, LX, LX + 0.75].forEach((x, k) => [1, -1].forEach((s) => { // the three towers, a gap of 0.31 between them, each two slabs leaning on one another: the front one (s = 1) and the back one
         const p = new THREE.Group(); p.position.set(x, BASE, ZC + s * OFF); p.rotation.x = -s * LEAN; p.scale.set(TW, 1, TD); g.add(p);
         [block(p, 1, 1, 'glass glass', GLASS, 0, 0, 0, true, 10 * (k + 1)).material].flat().forEach((m) => m.userData.maps && (LIT.add(m), switchOf(m).value = +(own !== null)));     // a slab of ribbon glazing, in the lamps of its tower
@@ -34,7 +34,7 @@ export default {
       for (let i = 0; i < 9; i++) box(g, 0.1, i & 1 ? 0.14 : 0.1, 0.1, i & 1 ? LEAF2 : LEAF, -1 + i * 0.22, DY - 0.02, ZC - 0.36);                              // trees along its back edge
       box(g, 0.16, 0.08, 0.22, 0xe6e9f0, 1, DY - 0.02, ZC);                                                                                                     // the bar at its tip
       for (const x of [-1.16, 1.21]) { box(g, 0.025, 0.2, 0.025, INK, x, DY - 0.02, ZC); box(g, 0.06, 0.06, 0.06, INK, x, DY + 0.18, ZC, beacon); }             // a mast at each end of it, a beacon on each
-      box(g, 0.46, 0.22, 0.03, 0xe8edf6, LX, 0.16, ZC + 0.7); box(g, 0.38, 0.18, 0.04, 0x1d2c4d, LX, 0.16, ZC + 0.705, lit(0x1d2c4d, 0.85)); box(g, 0.025, 0.18, 0.045, 0xe8edf6, LX, 0.16, ZC + 0.71); // the lobby: frame, dark glass doors (lit by night), the bar between them
+      box(g, 0.46, 0.22, 0.03, 0xe8edf6, LX, 0.16, ZC + 0.7); box(g, 0.38, 0.18, 0.04, 0x1d2c4d, LX, 0.16, ZC + 0.705, lit(0x1d2c4d, 0.85, WARM, true)); box(g, 0.025, 0.18, 0.045, 0xe8edf6, LX, 0.16, ZC + 0.71); // the lobby: frame, dark glass doors (lit by night), the bar between them
       const mx = -0.78, mz = 0.7;                                                                                                                               // the museum's centre
       box(g, 0.8, 0.06, 0.48, PLAZA, mx, 0.1, mz); cyl(g, 0.2, 0.14, CREAM, mx, 0.16, mz).material = lit(CREAM, 0.4);                                           // its quay, the drum (lit by night)
       for (let k = 0; k < 8; k++) { // the lotus: eight petals round it, each leaning out
@@ -139,7 +139,7 @@ export default {
         on(box(g, 0.51, 0.04, 0.07, 0xe6e9f0, 0.785, 0.72, 0.8), 0xe6e9f0, 0.3, 0xffd9a0).rotation.y = 0.402; on(box(g, 0.49, 0.012, 0.04, GOLD, 0.785, 0.76, 0.8), GOLD, 0.9, 0xffa94d).rotation.y = 0.402; // the OCBC Skyway, between the two tallest, its lamps along it
         const dome = (x: number, z: number, r: number, h: number, n: number, c: number) => { // a glass dome of n slices, r wide at its foot and h tall
           cyl(g, r + 0.03, 0.04, PALE, x, 0.16, z);                                                                                                             // its footing
-          for (let i = 0; i < n; i++) cyl(g, r * Math.sqrt(1 - ((i + 0.5) / n) ** 2.2), h / n, c, x, 0.2 + (i * h) / n, z).material = lit(c, 0.5);              // the glass in slices, lit from within by night
+          for (let i = 0; i < n; i++) cyl(g, r * Math.sqrt(1 - ((i + 0.5) / n) ** 2.2), h / n, c, x, 0.2 + (i * h) / n, z).material = lit(c, 0.5, WARM, true); // the glass in slices, lit from within by night
         };
         dome(0.52, 1.52, 0.28, 0.26, 5, SKY); dome(0.98, 1.5, 0.18, 0.4, 7, MINT);                                                                              // the Flower Dome, wide and low, the Cloud Forest, small and tall
       }),

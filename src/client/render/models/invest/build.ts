@@ -1,4 +1,4 @@
-import { box, final, floor, IRON, INK, type ModelDef } from '../../builder';
+import { box, final, floor, glass, IRON, INK, type ModelDef } from '../../builder';
 
 export default {
   key: 'build',
@@ -16,12 +16,12 @@ export default {
       for (let y = 0.5; y < jy; y += 0.4) box(g, 0.26, 0.06, 0.26, 0xe0a020, mx, y, mz);                          // rungs
       for (const y of [jy, jy + 0.24]) box(g, 2.15, 0.06, 0.2, YEL, 0.125, y, mz);                                // jib chords
       for (let x = -0.9; x < 1.2; x += 0.25) box(g, 0.05, 0.3, 0.2, YEL, x, jy, mz);                              // jib struts
-      box(g, 0.2, 0.3, 0.26, IRON, 1.05, jy - 0.3, mz); box(g, 0.3, 0.3, 0.3, 0xf4f6fa, mx - 0.3, jy - 0.3, mz); box(g, 0.2, 0.14, 0.04, 0x7db6ff, mx - 0.3, jy - 0.2, mz + 0.16); // counterweight, cab
+      box(g, 0.2, 0.3, 0.26, IRON, 1.05, jy - 0.3, mz); box(g, 0.3, 0.3, 0.3, 0xf4f6fa, mx - 0.3, jy - 0.3, mz); box(g, 0.2, 0.14, 0.04, 0x7db6ff, mx - 0.3, jy - 0.2, mz + 0.16, glass(0x7db6ff)); // counterweight, cab
       box(g, 0.14, 0.45, 0.14, YEL, mx, jy + 0.3, mz); box(g, 0.14, 0.14, 0.14, 0xff3b3b, mx, jy + 0.75, mz);    // apex, beacon
       box(g, 0.18, 0.1, 0.24, DARK, hx, jy - 0.1, mz); box(g, 0.04, 0.36, 0.04, DARK, hx, jy - 0.46, mz); box(g, 0.14, 0.14, 0.14, 0xd9423e, hx, jy - 0.6, mz); // trolley, cable, hook
       for (let i = 0; i < 3; i++) box(g, 0.8, 0.1, 0.14, i & 1 ? 0xd9684a : 0xc2523a, hx, jy - 0.9 + i * 0.1, mz); // the bundle of beams hung from it
       box(g, 2.1, 0.07, 0.1, YEL, 0, 0.08, 0.75); for (const x of [-0.8, -0.4, 0, 0.4, 0.8]) box(g, 0.2, 0.08, 0.1, INK, x, 0.08, 0.75); // hazard kerb
-      box(g, 0.55, 0.38, 0.38, 0xdfe3ee, -0.72, 0.08, 0.42); box(g, 0.62, 0.05, 0.44, 0x4f6fc0, -0.72, 0.46, 0.42); box(g, 0.2, 0.12, 0.03, 0x7db6ff, -0.8, 0.26, 0.62); // cabin: body, roof, window
+      box(g, 0.55, 0.38, 0.38, 0xdfe3ee, -0.72, 0.08, 0.42); box(g, 0.62, 0.05, 0.44, 0x4f6fc0, -0.72, 0.46, 0.42); box(g, 0.2, 0.12, 0.03, 0x7db6ff, -0.8, 0.26, 0.62, glass(0x7db6ff)); // cabin: body, roof, window
       box(g, 0.44, 0.3, 0.3, 0xc86b3c, 0.1, 0.08, 0.42); box(g, 0.44, 0.04, 0.3, 0xe0906a, 0.1, 0.38, 0.42); box(g, 0.45, 0.02, 0.31, 0xa8503c, 0.1, 0.23, 0.42); // bricks
       [[0.56, 0.4], [0.4, 0.3], [0.22, 0.18]].forEach(([w, d], i) => box(g, w, 0.1, d, 0xd8c08a, 0.82, 0.08 + i * 0.1, 0.45)); // sand heap
     }),

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { scene, artH, camera, controls, lod, toon, lodMap, pixelTexture, texels, dirtyShadow, pxUnit, fitZoom, ELEV, DENSITY } from './scene';
-import { backlit, dusk } from './light';
+import { backlit, dusk, glassy } from './light';
 import { TILES, type Tile } from '../../shared/data';
 import { canvas, codePixels, shade } from './art';
 import { CARD_SIZE, codeOf, drawCard, drawGround, drawPad } from './labels';
@@ -27,7 +27,7 @@ const cardTex = (t: Tile, L: number) => pixelTexture(canvas(...CARD_SIZE[L], (g)
 const groundTex = memo((type: string, kind: string, color: number, L: number) => pixelTexture(canvas(32 << L, 32 << L, (g) => drawGround(g, type, kind, color, L))));
 // the plot, in whole texels of each level: top face carries the carpet, the walls are a darker tone of the same colour
 const padMats = memo((color: number) => {
-  const side = backlit(toon(shade(color, 0.6)), THROUGH.plot), top = lodMap(backlit(toon(0xffffff), THROUGH.plot), (L) => pixelTexture(canvas(texels(PAD.w, L), texels(PAD.d, L), (g, w, h) => drawPad(g, color, w, h, L))));
+  const side = backlit(toon(shade(color, 0.6)), THROUGH.plot), top = glassy(lodMap(backlit(toon(0xffffff), THROUGH.plot), (L) => pixelTexture(canvas(texels(PAD.w, L), texels(PAD.d, L), (g, w, h) => drawPad(g, color, w, h, L)))), 0); // an owner's blue is paint, not glass
   return [side, top];
 });
 
@@ -66,7 +66,7 @@ export function createBoard() {
     g.position.set(POS[t.i].x, 0, POS[t.i].z);
     g.userData = { lift: 0, lit: false };
     const side = lodMap(toon(t.color), sideTex);
-    const ground = lodMap(backlit(toon(0xffffff), THROUGH.floor), (L) => groundTex(t.type, t.kind, t.color, L)); // lit: buildings and tokens cast their shadows on it
+    const ground = glassy(lodMap(backlit(toon(0xffffff), THROUGH.floor), (L) => groundTex(t.type, t.kind, t.color, L)), 0); // lit: buildings and tokens cast their shadows on it; a region's blue is paving, not glass
     const slab = new THREE.Mesh(slabGeo(SZ, SLAB, SZ), [side, ground]);
     slab.position.y = (TOP - 0.8) / 2;
     slab.receiveShadow = slab.castShadow = true;

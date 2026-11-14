@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { bake, box, cyl, final, mat, part, INK, IRON, LAVA, type ModelDef } from '../../builder';
+import { bake, box, cyl, final, glass, mat, part, INK, IRON, LAVA, type ModelDef } from '../../builder';
 import { glow } from '../../light';
 
 type V3 = [number, number, number];
@@ -87,7 +87,7 @@ function oil(g: THREE.Group) {
   box(g, 0.66, 0.06, 0.66, 0x8a8fa3, dx, 0.4, dz);                                                                       // drill floor
   box(g, 0.07, 3.5, 0.07, DARK, dx, 0.08, dz); box(g, 0.2, 0.2, 0.2, RED, dx, 2.2, dz);                                   // drill pipe, travelling block
   box(g, 0.28, 0.14, 0.28, DARK, dx, 3.58, dz); box(g, 0.1, 0.1, 0.1, 0xff3b3b, dx, 3.72, dz);                            // crown block, beacon
-  box(g, 0.22, 0.26, 0.26, 0xe8e8e8, -0.5, 0.08, -0.1); box(g, 0.28, 0.05, 0.32, RED, -0.5, 0.34, -0.1); box(g, 0.08, 0.1, 0.02, 0x7db6ff, -0.5, 0.2, 0.04); // doghouse: walls, roof, window
+  box(g, 0.22, 0.26, 0.26, 0xe8e8e8, -0.5, 0.08, -0.1); box(g, 0.28, 0.05, 0.32, RED, -0.5, 0.34, -0.1); box(g, 0.08, 0.1, 0.02, 0x7db6ff, -0.5, 0.2, 0.04, glass(0x7db6ff)); // doghouse: walls, roof, window
 
   // The tanks, the header that brings in the well's flow and feeds both, and the vent line over their roofs to the flare
   tank(0.02, 0.9); tank(0.58, 0.74);

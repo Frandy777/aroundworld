@@ -58,14 +58,14 @@ export const soft = <M extends THREE.Material>(m: M) => { m.onBeforeCompile = (s
 
 // The lit materials. Everything the restrained look does stays in the `uHd < 0.5` branches, untouched; HD-2D is Lambert with a GGX highlight per light, the sky in the mirror
 // direction by Fresnel, and a bump read off the texture's own brightness, so a pixel-art brick has mortar you can feel in a raking light.
-// uPbr: roughness, specular strength, metalness, relief. Glass is found by its blue (the windows, the domes): sharper and brighter than the rest.
+// uPbr: roughness, specular strength, metalness, relief. Glass is sharper and brighter than the rest: a texture's is found by its blue (the windows, the domes) unless `glassy` says otherwise.
 export type Pbr = [rough: number, spec: number, metal: number, relief: number];
 const PBR: Pbr = [0.8, 1, 0, 0.5];
 const DARK = new THREE.Color(0); // the lamps of a material that has none (see `nightlit`)
 const TOON = /* glsl */`
 varying vec3 vViewPosition;
 uniform vec4 uPbr;
-uniform float uBacklit, uLamp, uSwitch;
+uniform float uBacklit, uLamp, uSwitch, uGlass;
 uniform vec3 uNight;
 float hdGloss;
 struct ToonMaterial { vec3 diffuseColor; };
@@ -74,6 +74,19 @@ struct ToonMaterial { vec3 diffuseColor; };
 #endif
 float hdRough() { return mix( uPbr.x, 0.14, hdGloss ); }
 vec3 hdF0( vec3 albedo ) { return mix( vec3( 0.04 ), albedo, uPbr.z ); }
+#if NUM_HEMI_LIGHTS > 0
+	// What a mirror sees in direction r: the sky over a ground that the sun lights (warm, and the brighter the higher the sun), split at the horizon by a blend as wide as the surface is rough. A smooth one shows the line itself,
+	// cool over warm, which the hemisphere's own cosine blend (getHemisphereLightIrradiance, the light a wall takes in) smears into one flat tone: a metal that reflects only that cannot be told from a painted one. Twice what a wall takes in: a metal has little paint left to carry its light.
+	vec3 hdEnv( vec3 r, float rough ) {
+		vec3 up = hemisphereLights[ 0 ].direction, ground = hemisphereLights[ 0 ].groundColor, sky = hemisphereLights[ 0 ].skyColor;
+		#if NUM_DIR_LIGHTS > 0
+			ground += directionalLights[ 0 ].color * ( 0.1 * saturate( dot( directionalLights[ 0 ].direction, up ) ) );
+		#endif
+		sky = mix( vec3( dot( sky, vec3( 0.2126, 0.7152, 0.0722 ) ) ), sky, 0.5 ); // dulled toward white: a gold that mirrored the full blue of the sky would turn green
+		float w = mix( 0.04, 0.9, rough );
+		return 2.0 * mix( ground, sky, smoothstep( - w, w, dot( r, up ) ) );
+	}
+#endif
 void RE_Direct_Toon( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in ToonMaterial material, inout ReflectedLight reflectedLight ) {
 	if ( uHd < 0.5 ) {
 		vec3 irradiance = getGradientIrradiance( geometryNormal, directLight.direction ) * directLight.color;
@@ -97,16 +110,16 @@ void RE_IndirectDiffuse_Toon( const in vec3 irradiance, const in vec3 geometryPo
 	#if NUM_HEMI_LIGHTS > 0
 		vec3 r = reflect( - geometryViewDir, geometryNormal ), f0 = hdF0( material.diffuseColor );
 		float nv = saturate( dot( geometryNormal, geometryViewDir ) ), gloss = 1.0 - hdRough();
-		reflectedLight.indirectSpecular += ( f0 + ( max( vec3( gloss ), f0 ) - f0 ) * pow( 1.0 - nv, 5.0 ) ) * getHemisphereLightIrradiance( hemisphereLights[ 0 ], r ) * ( RECIPROCAL_PI * uPbr.y );
+		reflectedLight.indirectSpecular += ( f0 + ( max( vec3( gloss ), f0 ) - f0 ) * pow( 1.0 - nv, 5.0 ) ) * hdEnv( r, hdRough() ) * ( RECIPROCAL_PI * uPbr.y );
 	#endif
 }
 #define RE_Direct RE_Direct_Toon
 #define RE_IndirectDiffuse RE_IndirectDiffuse_Toon
 `;
 const GLOSS = /* glsl */`
-hdGloss = 0.0;
+hdGloss = max( uGlass, 0.0 );
 #ifdef USE_MAP
-	hdGloss = smoothstep( 0.1, 0.4, sampledDiffuseColor.b - max( sampledDiffuseColor.r, sampledDiffuseColor.g ) );
+	if ( uGlass < 0.0 ) hdGloss = smoothstep( 0.1, 0.4, sampledDiffuseColor.b - max( sampledDiffuseColor.r, sampledDiffuseColor.g ) );
 #endif
 `;
 const NIGHT = /* glsl */`
@@ -132,7 +145,7 @@ const RELIEF = /* glsl */`
 `;
 /** onBeforeCompile of every `toon()` material (one function, so every program of the same kind is shared: three names a program by its text). */
 export function lit(this: THREE.Material, sh: THREE.WebGLProgramParametersWithUniforms) {
-  Object.assign(sh.uniforms, U, { uPbr: { value: new THREE.Vector4(...((this.userData.pbr as Pbr | undefined) ?? PBR)) }, uBacklit: { value: (this.userData.backlit as number | undefined) ?? 0 }, uNight: { value: (this.userData.night as THREE.Color | undefined) ?? DARK }, uSwitch: switchOf(this) });
+  Object.assign(sh.uniforms, U, { uPbr: { value: new THREE.Vector4(...((this.userData.pbr as Pbr | undefined) ?? PBR)) }, uBacklit: { value: (this.userData.backlit as number | undefined) ?? 0 }, uGlass: { value: (this.userData.glass as number | undefined) ?? -1 }, uNight: { value: (this.userData.night as THREE.Color | undefined) ?? DARK }, uSwitch: switchOf(this) });
   sh.fragmentShader = sh.fragmentShader
     .replace('#include <lights_toon_pars_fragment>', '')
     .replace('#include <shadowmap_pars_fragment>', `#include <shadowmap_pars_fragment>\n${TOON}`)
@@ -141,6 +154,10 @@ export function lit(this: THREE.Material, sh: THREE.WebGLProgramParametersWithUn
     .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${NIGHT}\ntotalEmissiveRadiance += diffuseColor.rgb * uBacklit * uLamp;`) // a nightlit one's lamps (the emissive map is gated before anything is added to it), and a backlit material's own colour (see `backlit`), unshadowed
     .replace('reflectedLight.indirectDiffuse + totalEmissiveRadiance', 'reflectedLight.indirectDiffuse + totalEmissiveRadiance + reflectedLight.directSpecular + reflectedLight.indirectSpecular');
 }
+
+/** How much of a material is glass, the sharp bright gloss of `lit`: `glassy(m)` says all of it (a pane of plain colour, which has no texture to find its glass in), `glassy(m, 0)` none (a blue floor, the sea of the globe, a player's colour:
+ * those blues are paint and water, not windows). Left alone, a textured material has glass where its texture is blue (the windows of a wall) and a plain one has none. */
+export const glassy = <M extends THREE.Material>(m: M, share = 1) => { m.userData.glass = share; return m; };
 
 /** The lamp inside a tile (artificial light, so it follows `uLamp`) shines up through this material: `t` of its own colour, texels and all, is added to what the sun and sky give it, in either look (see `lit`).
  * A dark material passes little of it and a white one a lot, so the light comes out tinted by what it went through; shadows do not reach it. */

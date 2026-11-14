@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { box, box as solid, cyl, decal, final, lamplit, memo, metal, part, rnd, sprite, stone, GOLD, INK, IRON, OFFICE, type ModelDef } from '../../builder';
+import { box, box as solid, cyl, decal, final, glass, lamplit, memo, metal, part, rnd, sprite, stone, GOLD, INK, IRON, OFFICE, type ModelDef } from '../../builder';
 import { canvas, hex, shade } from '../../art';
 import { nightlit } from '../../light';
 import { DENSITY, pixelTexture, toon } from '../../scene';
@@ -34,7 +34,7 @@ const windows = memo((rows: string[], lamps: string[]) => toon(0xffffff, { map: 
 // NW texels wide, the face W across at its foot with a column to spare at each side, and NH tall, which is the shaft's height. The night's drawing (the emissive map: what is lit) is a deep blue that fades towards the foot, a strip of lamps in every floor, the offices' warm ones low down and
 // cooler, fuller floors higher up (the top ones are nearly all lit), and a pale line down each edge of a face, as the tower is outlined in light. A floor is lit a stretch at a time, never as one sheet (see `curtain`), from a hash of its place, so no two faces are alike
 const W = 19, NH = 110, NW = W + 2, MID = (NW - 1) / 2, PANE = ['#c4d7ee', '#a9c7e8', '#86aad3', '#6f93c0'], COOL = [0xa8ccff, 0x6fa3ff, 0x6fa3ff, 0xd6e6ff];   // a face's width at its foot, the shaft's height, a panel's width and its middle column, the glass's four rows, the lamps of a cool floor: pale blue, blue (twice as often), ice
-const glass = (night: boolean) => pixelTexture(canvas(8 * NW, NH, (g) => {
+const clad = (night: boolean) => pixelTexture(canvas(8 * NW, NH, (g) => {
   const at = (c: string, x: number, y: number, w = 1, h = 1) => { g.fillStyle = c; g.fillRect(x, y, w, h); }, up = (y: number) => 1 - (y + 0.5) / NH;           // y counts down from the roof; up: how far up the shaft it is, 0 at the foot
   for (let i = 0; i < 8; i++) {                                                                                                                                 // face i: the upright ones are even, the leaning ones odd
     const o = i * NW;
@@ -50,7 +50,7 @@ const glass = (night: boolean) => pixelTexture(canvas(8 * NW, NH, (g) => {
     for (let y = 0; y < NH; y++) { const e = Math.floor((W / 2) * (i % 2 ? up(y) / Math.SQRT2 : 1 - up(y))); for (const x of [MID - e, MID + e]) at('#9cc4ff', o + x, y); } // its two edges: an upright face narrows to a point, a leaning one widens from one
   }
 }));
-const GLASS = toon(0xffffff, { map: glass(false), emissive: 0xffffff, emissiveMap: glass(true) }, [0.5, 1, 0, 0.1]);
+const GLASS = toon(0xffffff, { map: clad(false), emissive: 0xffffff, emissiveMap: clad(true) }, [0.5, 1, 0, 0.1]);
 const led = nightlit(toon(STEEL, {}, [0.35, 1, 0.4, 0]), 0x9cc4ff, 0.6), mast = lamplit(LIP, 0xa8ccff, 0.8);                                                    // the steel of the drum and the cream of the mast, which shine pale blue after dusk (the top of the tower is lit)
 // The shaft of One World Trade Center: a square antiprism h tall, a square base (half-width a) under a square turned an eighth of a turn above it, whose corners stand over the middles of the base's sides. Between them are eight triangles: four standing upright on the base's
 // sides, point up, and four leaning in from the roof's edges over the base's corners, point down. Each is laid flat on a panel of the glass of its own (u along its level edge from the panel's middle, v up from its foot), so that a texel of the glass is a world texel
@@ -127,9 +127,9 @@ export default {
       box(g, 0.08, 0.1, 0.08, PATL, SX + 0.47, Y(1.05), SZ + 0.2);                                                                                              // her hand on its edge
       const fx = 0.72;                                                                                                                                          // the ferry's centre
       box(g, 0.7, 0.1, 0.22, ORANGE, fx, 0.1, 0.74); box(g, 0.72, 0.03, 0.225, INK, fx, 0.1, 0.74); box(g, 0.1, 0.1, 0.16, ORANGE, fx + 0.38, 0.1, 0.74);       // the Staten Island ferry: its orange hull, the dark waterline, the narrow bow
-      box(g, 0.58, 0.1, 0.19, WHITE, fx - 0.03, 0.2, 0.74); box(g, 0.52, 0.04, 0.02, NAVY, fx - 0.03, 0.23, 0.84);                                              // the main deck and its windows
-      box(g, 0.42, 0.09, 0.16, WHITE, fx - 0.05, 0.3, 0.74); box(g, 0.36, 0.035, 0.02, NAVY, fx - 0.05, 0.33, 0.82); box(g, 0.46, 0.025, 0.18, ORANGE, fx - 0.05, 0.39, 0.74);  // the upper deck, its windows, the orange roof
-      box(g, 0.16, 0.09, 0.12, WHITE, fx + 0.2, 0.3, 0.74); box(g, 0.12, 0.04, 0.02, NAVY, fx + 0.2, 0.33, 0.8);                                                // the wheelhouse and its glass
+      box(g, 0.58, 0.1, 0.19, WHITE, fx - 0.03, 0.2, 0.74); box(g, 0.52, 0.04, 0.02, NAVY, fx - 0.03, 0.23, 0.84, glass(NAVY)); // the main deck and its windows
+      box(g, 0.42, 0.09, 0.16, WHITE, fx - 0.05, 0.3, 0.74); box(g, 0.36, 0.035, 0.02, NAVY, fx - 0.05, 0.33, 0.82, glass(NAVY)); box(g, 0.46, 0.025, 0.18, ORANGE, fx - 0.05, 0.39, 0.74); // the upper deck, its windows, the orange roof
+      box(g, 0.16, 0.09, 0.12, WHITE, fx + 0.2, 0.3, 0.74); box(g, 0.12, 0.04, 0.02, NAVY, fx + 0.2, 0.33, 0.8, glass(NAVY)); // the wheelhouse and its glass
       box(g, 0.1, 0.22, 0.1, ORANGE, fx - 0.18, 0.415, 0.74); box(g, 0.105, 0.03, 0.105, INK, fx - 0.18, 0.635, 0.74);                                          // the funnel, its black cap
       box(g, 0.76, 0.012, 0.03, FOAM, fx, 0.1, 0.86); box(g, 0.08, 0.012, 0.22, FOAM, fx + 0.45, 0.1, 0.74);                                                    // foam along the hull and at the bow
       [[-1, -0.2], [1, -0.2], [-0.86, 0.22]].forEach(([x, z]) => { box(g, 0.05, 0.2, 0.05, WOOD, x, 0.27, z); cyl(g, 0.15, 0.12, 0x2f7a4a, x, 0.42, z); cyl(g, 0.12, 0.11, 0x3f9a5c, x, 0.52, z); cyl(g, 0.07, 0.09, 0x4fb06a, x, 0.61, z); });  // three trees on the island: a trunk and three tiers of leaves
@@ -160,7 +160,7 @@ export default {
         const X = 0.6, A = px(W) / 2, H = px(NH), SLATE = 0x56688a;                                                                                             // the tower's centre line and half its width, the height of the shaft; the podium's glass
         let y = BANK;
         stone(g, 1.2, BANK, 1.1, GRANITE, X, 0, Z);                                                                                                             // its stretch of quay
-        box(g, 2 * A, px(15), 2 * A, SLATE, X, y, Z); y += px(15); box(g, 2 * A + px(2), px(1), 2 * A + px(2), LIP, X, y, Z); y += px(1);                       // the podium, its cornice
+        box(g, 2 * A, px(15), 2 * A, SLATE, X, y, Z, glass(SLATE)); y += px(15); box(g, 2 * A + px(2), px(1), 2 * A + px(2), LIP, X, y, Z); y += px(1); // the podium, its cornice
         part(g, shaft(A, H), 0, GLASS, X, y, Z); y += H;                                                                                                        // the shaft
         box(g, A * Math.SQRT2 + px(1), px(1), A * Math.SQRT2 + px(1), STEEL, X, y, Z, steel).rotation.y = Math.PI / 4; y += px(1);                              // the roof, turned to the shaft's top
         cyl(g, 0.16, 0.1, STEEL, X, y, Z).material = led; y += 0.1;                                                                                             // the drum on it

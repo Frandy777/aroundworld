@@ -1,4 +1,4 @@
-import { box, cyl, final, floor, plaque, GOLD, IRON, INK, type ModelDef } from '../../builder';
+import { box, cyl, final, floor, glass, plaque, GOLD, IRON, INK, type ModelDef } from '../../builder';
 
 export default {
   key: 'bbc',
@@ -20,7 +20,7 @@ export default {
       box(g, 0.03, 0.26, 0.03, GREY, 0.2, 6.28, -0.6); box(g, 0.08, 0.08, 0.08, 0xff3b3b, 0.2, 6.54, -0.6);                                  // aerial and its red beacon
       const [vx, vz, kx, kz] = [-0.7, 0.42, 0.6, 0.45];                                                                                         // the van's centre, the camera's
       box(g, 0.72, 0.06, 0.3, DARK, vx, 0.1, vz); box(g, 0.46, 0.32, 0.34, WHITE, vx - 0.13, 0.16, vz); box(g, 0.26, 0.22, 0.34, GREY, vx + 0.23, 0.16, vz);  // van (nose to the right): chassis, studio box, cab
-      box(g, 0.72, 0.045, 0.02, RED, vx, 0.2, vz + 0.175); box(g, 0.14, 0.09, 0.02, GLASS, vx + 0.23, 0.27, vz + 0.175);                     // red stripe, cab window
+      box(g, 0.72, 0.045, 0.02, RED, vx, 0.2, vz + 0.175); box(g, 0.14, 0.09, 0.02, GLASS, vx + 0.23, 0.27, vz + 0.175, glass(GLASS)); // red stripe, cab window
       for (let i = -1; i < 2; i++) box(g, 0.09, 0.09, 0.02, 0x14161f, vx - 0.13 + i * 0.11, 0.3, vz + 0.175);                                  // the BBC squares on its side
       [-0.2, 0.22].forEach((dx) => box(g, 0.14, 0.14, 0.05, INK, vx + dx, 0.08, vz + 0.15));                                                  // wheels
       box(g, 0.04, 0.18, 0.04, GREY, vx - 0.2, 0.48, vz); cyl(g, 0.17, 0.03, WHITE, vx - 0.2, 0.74, vz + 0.03).rotation.x = Math.PI / 4; box(g, 0.04, 0.04, 0.04, DARK, vx - 0.2, 0.83, vz + 0.12); // roof dish on its post, tilted to the sky, its feed horn

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { box, cyl, final, mat, part, plaque, GOLD, IRON, INK, type ModelDef } from '../../builder';
+import { box, cyl, final, glass, mat, part, plaque, GOLD, IRON, INK, type ModelDef } from '../../builder';
 
 export default {
   key: 'area51',
@@ -23,7 +23,7 @@ export default {
       // saucer: hull slabs, rim lamps, a glass dome in a dark gasket, an aerial
       cyl(g, 0.16, 0.05, INK, UX, BY, UZ); cyl(g, 0.28, 0.06, 0x6f7a8c, UX, BY + 0.05, UZ); cyl(g, 0.4, 0.06, 0x8e99ac, UX, BY + 0.11, UZ); cyl(g, 0.5, 0.08, 0xc9d1de, UX, BY + 0.17, UZ);
       cyl(g, 0.42, 0.06, 0xdfe6f2, UX, BY + 0.25, UZ); cyl(g, 0.32, 0.05, 0xeef2f8, UX, BY + 0.31, UZ);
-      cyl(g, 0.27, 0.03, INK, UX, BY + 0.35, UZ); part(g, new THREE.SphereGeometry(0.24, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.8, 1), 0, mat(0x6fe0ee), UX, BY + 0.36, UZ);
+      cyl(g, 0.27, 0.03, INK, UX, BY + 0.35, UZ); part(g, new THREE.SphereGeometry(0.24, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.8, 1), 0, glass(0x6fe0ee), UX, BY + 0.36, UZ);
       box(g, 0.02, 0.1, 0.02, IRON, UX, BY + 0.54, UZ); box(g, 0.05, 0.05, 0.05, 0xff5de0, UX, BY + 0.64, UZ);
       for (let k = 0; k < 10; k++) { const a = (k * Math.PI) / 5; box(g, 0.07, 0.06, 0.07, [0xfff6b0, 0xff5de0][k & 1], UX + 0.5 * Math.cos(a), BY + 0.18, UZ + 0.5 * Math.sin(a)); }
       // beam: a translucent cone from the belly to the circle, unlit and shadowless, with dust and straw round it

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { box, cyl, decal, final, hip, lampsOf, stone, GOLD, INK, type ModelDef } from '../../builder';
+import { box, cyl, decal, final, glass, hip, lampsOf, stone, GOLD, INK, type ModelDef } from '../../builder';
 
 // What the two towers behind the Grossmünster share (see `levels`): the green of weathered copper, how far forward on its plot the church stands to leave them room, the height of the quay they stand on (the church's own) and the line of their centres on it
 const COPPER = 0x3fa08e, FWD = 0.4, BANK = 0.22, Z = -0.95;
@@ -74,7 +74,7 @@ export default {
         sides.forEach((p) => { // on every side: a dormer rising from the cornice (flush with it, so that it stands out of the roof) and the pinnacle at the corner after it
           const f = W / 2 + 0.03;                                                                                                                               // the dormer's front
           box(p, 0.2, 0.22, 0.16, UP, 0, E, f - 0.08); hip(p, 0.26, 0.22, 0.22, E + 0.22, COPPER, 0, f - 0.08); finial(p, 0, E + 0.44, f - 0.08);               // the dormer's walls, its roof, its gold ball
-          for (const x of [-0.05, 0.05]) box(p, 0.035, 0.08, 0.012, INK, x, E + 0.07, f + 0.004);                                                               // its two windows
+          for (const x of [-0.05, 0.05]) box(p, 0.035, 0.08, 0.012, INK, x, E + 0.07, f + 0.004, glass(INK)); // its two windows
           box(p, 0.08, 0.24, 0.08, UP, 0.3, E, 0.3); hip(p, 0.1, 0.1, 0.32, E + 0.24, COPPER, 0.3, 0.3); finial(p, 0.3, E + 0.52, 0.3, 0.9);                    // the pinnacle: its shaft, its needle roof, its gold ball
         });
         const clock = decal(front, CLOCK, 0, C + 0.1, W / 2 + 0.02, lampsOf(CLOCK, 'Y')); others.forEach((p) => p.add(clock.clone())); // the clock on every side (the copies share its material: one draw call)

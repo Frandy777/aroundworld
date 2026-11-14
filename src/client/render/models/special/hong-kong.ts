@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { box, cyl, final, hip, lamplit, part, prism, prismMat, stone, GOLD, INK, type ModelDef } from '../../builder';
+import { box, cyl, final, glass, hip, lamplit, part, prism, prismMat, stone, GOLD, INK, type ModelDef } from '../../builder';
 import { glow, switchOf } from '../../light';
 
 const HW = 0.6, MOD = 1.1, RISE = 0.5, WARM = 0xffd9a0; // the prisms' half-width, storey module and roof rise; the warm light of a window
 // What shines once the tower is bought, and only then (see `shine`): the glass of its four prisms, south, west, north, east (one module taller each), and the doors of its lobby. A beacon on each mast takes the colour of its owner:
 // unlit like any lamp, but this one is the tower's own material, so that its colour can be set
-const GLASS = [1, 2, 3, 4].map((n) => prismMat(HW, n * MOD, RISE, MOD, 4 * n)), DOORS = lamplit(0x1d2c4d, WARM, 0.9), beacon = glow(new THREE.MeshBasicMaterial({ color: INK }));
+const GLASS = [1, 2, 3, 4].map((n) => prismMat(HW, n * MOD, RISE, MOD, 4 * n)), DOORS = glass(0x1d2c4d, WARM, 0.9), beacon = glow(new THREE.MeshBasicMaterial({ color: INK }));
 const shine = (c: number | null) => { [...GLASS.flat(), DOORS].forEach((m) => (switchOf(m).value = +(c !== null))); beacon.color.set(c ?? INK); }; // c: the owner's colour while the tower stands, null while it is for sale or mortgaged: its lights are out and its beacons dark
 shine(null); // nobody owns it until the board says so
 
@@ -44,8 +44,8 @@ export default {
       box(g, 0.08, 0.04, 0.015, GOLD, jx + 0.01, 0.93, 0.74);                                                                                                // a pennant at the main masthead
       const fx = 0.8;                                                                                                                                        // the ferry's centre
       box(g, 0.64, 0.1, 0.2, WHITE, fx, 0.1, 0.74); box(g, 0.65, 0.035, 0.205, GREEN, fx, 0.1, 0.74); box(g, 0.08, 0.1, 0.14, WHITE, fx + 0.35, 0.1, 0.74);   // the Star Ferry: hull, its green band, the narrow bow
-      box(g, 0.52, 0.09, 0.17, WHITE, fx - 0.02, 0.2, 0.74); box(g, 0.46, 0.035, 0.02, INK, fx - 0.02, 0.23, 0.835, lit(INK, 0.9));                           // the main deck and its windows (lit by night)
-      box(g, 0.42, 0.08, 0.15, WHITE, fx - 0.05, 0.29, 0.74); box(g, 0.36, 0.03, 0.02, INK, fx - 0.05, 0.32, 0.82, lit(INK, 0.9));                           // the upper deck and its windows
+      box(g, 0.52, 0.09, 0.17, WHITE, fx - 0.02, 0.2, 0.74); box(g, 0.46, 0.035, 0.02, INK, fx - 0.02, 0.23, 0.835, glass(INK, WARM, 0.9)); // the main deck and its windows (lit by night)
+      box(g, 0.42, 0.08, 0.15, WHITE, fx - 0.05, 0.29, 0.74); box(g, 0.36, 0.03, 0.02, INK, fx - 0.05, 0.32, 0.82, glass(INK, WARM, 0.9)); // the upper deck and its windows
       box(g, 0.46, 0.025, 0.18, GREEN, fx - 0.05, 0.37, 0.74); box(g, 0.07, 0.1, 0.07, GREEN, fx + 0.03, 0.395, 0.74);                                       // the green roof, the funnel
       [[-0.3, 0.9], [0.1, 0.65], [-0.05, 0.86], [0.3, 0.55]].forEach(([x, z]) => box(g, 0.14, 0.012, 0.025, 0x9fd6ff, x, 0.1, z));                           // ripples on the harbour
     }),

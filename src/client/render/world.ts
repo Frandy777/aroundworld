@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { scene, toon, lodMap, pixelTexture, texels, lod, DENSITY, BOARD_K } from './scene';
-import { lit, soft } from './light';
+import { glassy, lit, soft } from './light';
 import { sky } from './sky';
 import { canvas } from './art';
 import { EARTH } from './earth';
@@ -177,13 +177,13 @@ const stone = (R: number, h: number) => lodMap(toon(0xc4cee8), (L) => { // the s
   t.needsUpdate = true;
   return t;
 });
-const globe = new THREE.Group(), ball = new THREE.Mesh(new THREE.SphereGeometry(BALL, 48, 32), lodMap(toon(0xffffff), (L) => {
+const globe = new THREE.Group(), ball = new THREE.Mesh(new THREE.SphereGeometry(BALL, 48, 32), glassy(lodMap(toon(0xffffff), (L) => { // its seas are blue texels but water, not glass: they would throw the sun back as a hard dot
   const map = pixelTexture(planet(L));
   map.wrapS = THREE.RepeatWrapping;
   return map;
-}));
+}), 0));
 {
-  const dais = new THREE.Mesh(new THREE.CylinderGeometry(DAIS, DAIS, SLAB, 64), [stone(DAIS, SLAB), lodMap(toon(0xffffff), (L) => pixelTexture(dial(L))), toon(0x6a7898)]);
+  const dais = new THREE.Mesh(new THREE.CylinderGeometry(DAIS, DAIS, SLAB, 64), [stone(DAIS, SLAB), glassy(lodMap(toon(0xffffff), (L) => pixelTexture(dial(L))), 0), toon(0x6a7898)]);
   dais.position.y = TOP - SLAB / 2;
   const plinth = new THREE.Mesh(new THREE.CylinderGeometry(PLINTH, PLINTH + 0.3, PLINTH_H, 48), [stone(PLINTH, PLINTH_H), toon(0x9ea9c6), toon(0x6a7898)]);
   plinth.position.y = TOP + PLINTH_H / 2;

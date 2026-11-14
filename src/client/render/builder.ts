@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { lodMap, pixelTexture, texels, toon, DENSITY } from './scene';
-import { glow, nightlit, type Pbr } from './light';
+import { glassy, glow, nightlit, type Pbr } from './light';
 import { canvas, paint, hex, shade, ink, inkWidth, inkHeight } from './art';
 import { SZ, SLAB } from './layout';
 
@@ -231,12 +231,13 @@ const gableGeo = memo((w: number, d: number, h: number, turn: boolean) => {
   return g;
 });
 const NEON = new Set([0xff5de0, 0x5dfff0, 0xff3b3b, 0x3b6bff, 0xfff6b0, LAVA]); // neon, lamps, flames and lava are unlit: they glow in the shade as in the sun
-const METAL = new Map<number, Pbr>([[GOLD, [0.3, 1, 0.55, 0]], [IRON, [0.45, 1, 0.5, 0]]]); // metal throws the HD-2D light back as a highlight (a metalness short of 1: there is no sky to mirror but the hemisphere's)
+const METAL = new Map<number, Pbr>([[GOLD, [0.3, 1, 0.9, 0]], [IRON, [0.45, 1, 0.85, 0]]]); // metal throws the HD-2D light back: the sun as a highlight, the sky over the ground (`hdEnv`) as its colour; a metalness short of 1 keeps a little lit paint under it
 export const mat = memo((c: THREE.ColorRepresentation) => (NEON.has(c as number) ? glow(new THREE.MeshBasicMaterial({ color: c })) : toon(c, {}, METAL.get(c as number))));
 // The same two special materials, picked explicitly rather than guessed from the colour — a new lamp or alloy need not join the colour tables (and so cannot change another model's parts that share the colour).
 // Shared through memo: never mutate a shared material's state in a `tick` — build a local `glow`/`toon` for that (see models/invest/oil.ts, which colours its own lamp each frame).
 export const emissive = memo((c: THREE.ColorRepresentation) => glow(new THREE.MeshBasicMaterial({ color: c })));
 export const metal = memo((c: THREE.ColorRepresentation, pbr: Pbr) => toon(c, {}, pbr));
+export const glass = memo((c: THREE.ColorRepresentation, night?: number, k: number = 1) => { const m = glassy(toon(c)); return night === undefined ? m : nightlit(m, night, k); }); // a plain colour that is glass (see `glassy`): the gloss of a window on a voxel, which has no texture for it to be found in; `night`: the light it shines in after dusk, k times over (see `lamplit`)
 export const lamplit = memo((c: number, night: number, k: number) => nightlit(toon(c, {}, METAL.get(c)), night, k)); // `mat(c)` by day, and by night it shines in `night` x k (see `nightlit`): a lit path, a strip of light
 const wallMat = memo((cols: number, kind: string, c: number) => lodMap(toon(c), (L) => facade(cols, kind, L)));
 const cityMat = memo((cols: number, rows: string, c: number, seed: number, lamps: boolean) => { // lamps: the night's drawing is the emissive map (white, so that the map alone says what is lit)
@@ -316,7 +317,7 @@ export const part = (g: THREE.Group, geometry: THREE.BufferGeometry, h: number, 
 let K = 1;
 export const PK = 1.25; // the default draw scale of a registered model's authored numbers
 export const box = (g: THREE.Group, w: number, h: number, d: number, color: THREE.ColorRepresentation, x = 0, y = 0, z = 0, m: THREE.Material | THREE.Material[] = mat(color)) => part(g, geo(w * K, h * K, d * K), h * K, m, x * K, y * K, z * K);
-export const cyl = (g: THREE.Group, r: number, h: number, color: THREE.ColorRepresentation, x = 0, y = 0, z = 0) => part(g, cylGeo(r * K, h * K), h * K, mat(color), x * K, y * K, z * K);
+export const cyl = (g: THREE.Group, r: number, h: number, color: THREE.ColorRepresentation, x = 0, y = 0, z = 0, m: THREE.Material = mat(color)) => part(g, cylGeo(r * K, h * K), h * K, m, x * K, y * K, z * K);
 export const hip = (g: THREE.Group, w: number, d: number, h: number, y: number, color: number, x = 0, z = 0) => part(g, roofGeo(w * K, d * K, h * K), h * K, roofMat(color), x * K, y * K, z * K);
 export const gable = (g: THREE.Group, w: number, d: number, h: number, y: number, color: number, wall: number, x = 0, z = 0, turn = false) => part(g, gableGeo(w * K, d * K, h * K, turn), h * K, [roofMat(color), mat(wall)], x * K, y * K, z * K);
 export const plaque = (g: THREE.Group, text: string, bg: string, fg: string, w: number, h: number, x: number, y: number, z: number, s = 1) => { // sized in whole texels; s: texels to a pixel of its text (see plate)
@@ -365,8 +366,8 @@ const stoneTex = memo((L: number) => tex(STONE >> (2 - L), STONE >> (2 - L), (f,
 const stoneMat = memo((c: number) => lodMap(toon(c), stoneTex));
 export const stone = (g: THREE.Group, w: number, h: number, d: number, color: number, x = 0, y = 0, z = 0) => part(g, brick(w, h, d), h, stoneMat(color), x, y, z); // a block of masonry
 export const sprite = memo((rows: string[]) => pixelTexture(canvas(rows[0].length, rows.length, (g) => paint(g, rows, 0, 0)))); // string art as a texture
-export const decal = (g: THREE.Group, rows: string[], x: number, y: number, z: number, lamps?: string[]) => { // a sprite on a wall that faces the viewer, a sprite pixel to the near texel; lamps: its drawing by night, what is lit (see `lampsOf`)
-  const [w, h] = [rows[0].length / DENSITY, rows.length / DENSITY], m = part(g, new THREE.PlaneGeometry(w, h), h, toon(0xffffff, { map: sprite(rows), alphaTest: 0.5, ...(lamps && { emissive: 0xffffff, emissiveMap: sprite(lamps) }) }), x, y, z);
+export const decal = (g: THREE.Group, rows: string[], x: number, y: number, z: number, lamps?: string[]) => { // a sprite on a wall that faces the viewer, a sprite pixel to the near texel; lamps: its drawing by night, what is lit (see `lampsOf`); it is paint, never glass: a flag's blue or a tile's is not a window (see `glassy`)
+  const [w, h] = [rows[0].length / DENSITY, rows.length / DENSITY], m = part(g, new THREE.PlaneGeometry(w, h), h, glassy(toon(0xffffff, { map: sprite(rows), alphaTest: 0.5, ...(lamps && { emissive: 0xffffff, emissiveMap: sprite(lamps) }) }), 0), x, y, z);
   m.castShadow = false;
   return m;
 };

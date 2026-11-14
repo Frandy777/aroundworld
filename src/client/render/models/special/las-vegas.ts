@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { box, cyl, final, part, rnd, sprite, stone, GOLD, type ModelDef } from '../../builder';
+import { box, cyl, final, glass, part, rnd, sprite, stone, GOLD, type ModelDef } from '../../builder';
 import { canvas, shade } from '../../art';
 import { switchOf } from '../../light';
 import { lodMap, pixelTexture, texels, toon } from '../../scene';
@@ -88,7 +88,7 @@ export default {
       const rock = (x: number, z: number, s: number) => { box(g, 0.22 * s, 0.1 * s, 0.16 * s, ROCK, x, 0.2, z); box(g, 0.14 * s, 0.08 * s, 0.11 * s, 0xb5835e, x + 0.03 * s, 0.2 + 0.1 * s, z).rotation.y = 0.5; box(g, 0.07 * s, 0.05 * s, 0.07 * s, 0xd8b08c, x - 0.03 * s, 0.2 + 0.18 * s, z).rotation.y = -0.4; };  // a boulder s big: a block, a smaller turned one and a chip piled on it
       rock(-0.78, 0.46, 1.2); rock(0.2, 0.5, 1); rock(-0.5, 0, 0.8);                                                                                            // three on the gravel
       const [cx, cz] = [0.6, 0.82];                                                                                                                             // the taxi's centre
-      box(g, 0.44, 0.09, 0.2, 0xf2c230, cx, 0.13, cz); box(g, 0.24, 0.09, 0.18, 0xf2c230, cx - 0.02, 0.22, cz); box(g, 0.2, 0.05, 0.19, 0x1a2250, cx - 0.02, 0.24, cz);  // the taxi: its yellow body and cabin, the dark glass round it
+      box(g, 0.44, 0.09, 0.2, 0xf2c230, cx, 0.13, cz); box(g, 0.24, 0.09, 0.18, 0xf2c230, cx - 0.02, 0.22, cz); box(g, 0.2, 0.05, 0.19, 0x1a2250, cx - 0.02, 0.24, cz, glass(0x1a2250)); // the taxi: its yellow body and cabin, the dark glass round it
       box(g, 0.08, 0.03, 0.06, 0xffffff, cx - 0.02, 0.31, cz); [-0.14, 0.14].forEach((dx) => [-0.1, 0.1].forEach((dz) => box(g, 0.08, 0.07, 0.03, 0x23263a, cx + dx, 0.1, cz + dz)));  // its roof light, its four wheels
     }),
   ],
@@ -106,10 +106,10 @@ export default {
         }
         let y = 3.3;                                                                                                                                              // the height built so far: the foot of the pod
         cyl(g, 0.34, 0.06, 0xe8e4d4, TX, y, TZ); y += 0.06;                                                                                                       // the concrete collar
-        [0.28, 0.3, 0.32].forEach((r, i) => cyl(g, r, 0.1, GLASS, TX, y + i * 0.1, TZ));                                                                          // the lower tier of dark glass, widening
+        [0.28, 0.3, 0.32].forEach((r, i) => cyl(g, r, 0.1, GLASS, TX, y + i * 0.1, TZ, glass(GLASS))); // the lower tier of dark glass, widening
         [[-0.2, 0xfff6b0, 0.24], [0, 0x5dfff0, 0.31], [0.2, 0xff5de0, 0.24]].forEach(([x, c, z]) => [-1, 1].forEach((s) => { box(g, 0.03, 0.34, 0.03, c, TX + x, y - 0.02, TZ + z).rotation.z = s * 0.55; }));  // three Xs of neon bracing across its front, following the curve of the drum
         y += 0.3; cyl(g, 0.4, 0.06, WHITE, TX, y, TZ); y += 0.06;                                                                                                 // the white belt between the tiers
-        [0.36, 0.39, 0.42, 0.44].forEach((r, i) => cyl(g, r, 0.08, i & 1 ? GLASS2 : GLASS, TX, y + i * 0.08, TZ)); y += 0.32;                                     // the upper tier, flaring wider still
+        [0.36, 0.39, 0.42, 0.44].forEach((r, i) => { const c = i & 1 ? GLASS2 : GLASS; cyl(g, r, 0.08, c, TX, y + i * 0.08, TZ, glass(c)); }); y += 0.32; // the upper tier, flaring wider still
         cyl(g, 0.45, 0.04, WHITE, TX, y, TZ); y += 0.04;                                                                                                          // the roof deck round the dome
         [0.3, 0.26, 0.2, 0.1].forEach((r, i) => cyl(g, r, 0.07, DOME, TX, y + i * 0.07, TZ)); y += 0.28;                                                          // the dome
         for (const x of [-0.04, 0.04]) box(g, 0.035, 0.95, 0.035, 0xff3b3b, TX + x, y, TZ);                                                                       // the mast: two red-lit uprights

@@ -1,4 +1,4 @@
-import { box, cyl, final, plaque, GOLD, IRON, INK, type ModelDef } from '../../builder';
+import { box, cyl, final, glass, plaque, GOLD, IRON, INK, type ModelDef } from '../../builder';
 
 export default {
   key: 'devil',
@@ -20,14 +20,14 @@ export default {
 
       box(g, 1.64, 0.08, 0.44, 0xbdb6a0, 0, P, -0.62); box(g, 1.6, 0.76, 0.4, CREAM, 0, P + 0.08, -0.62);                                                 // the cellhouse: plinth, walls
       box(g, 1.64, 0.04, 0.42, TRIM, 0, P + 0.44, -0.62); box(g, 1.66, 0.06, 0.46, TRIM, 0, P + 0.84, -0.62);                                             // a belt between the floors, the cornice
-      for (const x of [-0.6, -0.4, -0.2, 0, 0.2, 0.4, 0.6]) { if (x) box(g, 0.1, 0.26, 0.02, NAVY, x, P + 0.15, -0.415); box(g, 0.1, 0.26, 0.02, NAVY, x, P + 0.53, -0.415); } // two rows of barred windows
+      for (const x of [-0.6, -0.4, -0.2, 0, 0.2, 0.4, 0.6]) { if (x) box(g, 0.1, 0.26, 0.02, NAVY, x, P + 0.15, -0.415, glass(NAVY)); box(g, 0.1, 0.26, 0.02, NAVY, x, P + 0.53, -0.415, glass(NAVY)); } // two rows of barred windows
       box(g, 0.2, 0.3, 0.03, 0x8a5a2b, 0, P + 0.08, -0.41); box(g, 0.28, 0.04, 0.05, TRIM, 0, P + 0.38, -0.41);                                          // the door and its lintel
       box(g, 1.52, 0.08, 0.4, 0x59606e, 0, P + 0.9, -0.62); box(g, 1.36, 0.08, 0.28, 0x6a7282, 0, P + 0.98, -0.62); box(g, 1.2, 0.06, 0.16, 0x7b8496, 0, P + 1.06, -0.62); // the roof in three steps
-      box(g, 1, 0.06, 0.1, 0xaadcff, 0, P + 1.12, -0.62);                                                                                                  // the skylight along the ridge
+      box(g, 1, 0.06, 0.1, 0xaadcff, 0, P + 1.12, -0.62, glass(0xaadcff)); // the skylight along the ridge
 
       box(g, 0.34, 0.1, 0.34, 0xb4bccf, 0.7, P, -0.28);                                                                                                    // the lighthouse: plinth
       [[0.17, 0.44], [0.155, 0.42], [0.14, 0.4], [0.125, 0.38]].reduce((y, [r, h]) => (cyl(g, r, h, WHITE, 0.7, y, -0.28), y + h), P + 0.1);              // the white shaft, tapering in four stages
-      box(g, 0.07, 0.15, 0.03, 0x8a5a2b, 0.7, P + 0.1, -0.11); [[P + 0.7, 0.155], [P + 1.1, 0.14]].forEach(([y, r]) => box(g, 0.03, 0.12, 0.02, INK, 0.7, y, -0.28 + r)); // door and slit windows
+      box(g, 0.07, 0.15, 0.03, 0x8a5a2b, 0.7, P + 0.1, -0.11); [[P + 0.7, 0.155], [P + 1.1, 0.14]].forEach(([y, r]) => box(g, 0.03, 0.12, 0.02, INK, 0.7, y, -0.28 + r, glass(INK))); // door and slit windows
       cyl(g, 0.2, 0.05, INK, 0.7, P + 1.74, -0.28); cyl(g, 0.1, 0.26, 0xfff6b0, 0.7, P + 1.79, -0.28);                                                    // the gallery, the glowing lantern
       [-1, 1].forEach((s) => box(g, 0.025, 0.26, 0.025, INK, 0.7 + s * 0.075, P + 1.79, -0.205));                                                          // its two front mullions
       cyl(g, 0.16, 0.05, INK, 0.7, P + 2.05, -0.28); cyl(g, 0.1, 0.08, 0x3a4056, 0.7, P + 2.1, -0.28); box(g, 0.04, 0.1, 0.04, GOLD, 0.7, P + 2.18, -0.28); // cap, dome, finial
@@ -39,14 +39,14 @@ export default {
 
       box(g, 1.1, 0.16, 0.2, 0xc9c2ae, 0.4, 0.1, 0.35); box(g, 1.1, 0.012, 0.025, GOLD, 0.4, 0.26, 0.425);                                                // the quay, its yellow edge line
       [0, 0.45].forEach((x) => box(g, 0.06, 0.07, 0.06, INK, x, 0.26, 0.4));                                                                              // bollards
-      box(g, 0.2, 0.62, 0.18, 0xd6d0c0, 0.8, 0.26, 0.36); box(g, 0.34, 0.26, 0.26, CREAM, 0.8, 0.88, 0.36); box(g, 0.28, 0.12, 0.02, GLASS, 0.8, 0.95, 0.495); // the guard tower on the dock: shaft, cab, its glass
+      box(g, 0.2, 0.62, 0.18, 0xd6d0c0, 0.8, 0.26, 0.36); box(g, 0.34, 0.26, 0.26, CREAM, 0.8, 0.88, 0.36); box(g, 0.28, 0.12, 0.02, GLASS, 0.8, 0.95, 0.495, glass(GLASS)); // the guard tower on the dock: shaft, cab, its glass
       box(g, 0.42, 0.04, 0.34, 0x4a5170, 0.8, 1.14, 0.36); box(g, 0.08, 0.1, 0.08, 0xfff6b0, 0.8, 1.18, 0.36);                                            // roof, searchlight
 
       box(g, 0.9, 0.12, 0.22, WHITE, 0.4, 0.1, 0.58); box(g, 0.92, 0.04, 0.23, NAVY, 0.4, 0.1, 0.58); box(g, 0.9, 0.025, 0.225, BLUE, 0.4, 0.18, 0.58);   // the ferry: hull, dark waterline, blue stripe
       box(g, 0.1, 0.12, 0.16, WHITE, 0.9, 0.1, 0.58); box(g, 0.06, 0.12, 0.09, WHITE, 0.96, 0.1, 0.58);                                                   // bow in two steps
-      box(g, 0.72, 0.1, 0.18, WHITE, 0.32, 0.22, 0.58); box(g, 0.64, 0.045, 0.02, NAVY, 0.32, 0.245, 0.675);                                              // main deck and its windows
-      box(g, 0.46, 0.09, 0.15, WHITE, 0.26, 0.32, 0.58); box(g, 0.4, 0.04, 0.02, NAVY, 0.26, 0.34, 0.66); box(g, 0.5, 0.025, 0.18, GREY, 0.26, 0.41, 0.58); // upper deck, windows, roof
-      box(g, 0.18, 0.1, 0.13, WHITE, 0.58, 0.32, 0.58); box(g, 0.14, 0.05, 0.02, GLASS, 0.58, 0.35, 0.65); box(g, 0.22, 0.025, 0.16, GREY, 0.58, 0.42, 0.58); // wheelhouse, its glass, roof
+      box(g, 0.72, 0.1, 0.18, WHITE, 0.32, 0.22, 0.58); box(g, 0.64, 0.045, 0.02, NAVY, 0.32, 0.245, 0.675, glass(NAVY)); // main deck and its windows
+      box(g, 0.46, 0.09, 0.15, WHITE, 0.26, 0.32, 0.58); box(g, 0.4, 0.04, 0.02, NAVY, 0.26, 0.34, 0.66, glass(NAVY)); box(g, 0.5, 0.025, 0.18, GREY, 0.26, 0.41, 0.58); // upper deck, windows, roof
+      box(g, 0.18, 0.1, 0.13, WHITE, 0.58, 0.32, 0.58); box(g, 0.14, 0.05, 0.02, GLASS, 0.58, 0.35, 0.65, glass(GLASS)); box(g, 0.22, 0.025, 0.16, GREY, 0.58, 0.42, 0.58); // wheelhouse, its glass, roof
       box(g, 0.1, 0.16, 0.1, BLUE, 0.2, 0.435, 0.58); box(g, 0.105, 0.035, 0.105, WHITE, 0.2, 0.5, 0.58); box(g, 0.11, 0.02, 0.11, INK, 0.2, 0.595, 0.58); // funnel, its band and cap
       box(g, 0.96, 0.012, 0.03, FOAM, 0.42, 0.1, 0.7); box(g, 0.1, 0.012, 0.22, FOAM, 1.02, 0.1, 0.58);                                                   // foam along the hull and at the bow
 

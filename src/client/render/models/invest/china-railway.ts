@@ -1,4 +1,4 @@
-import { box, final, floor, hip, plaque, GOLD, IRON, INK, type ModelDef } from '../../builder';
+import { box, final, floor, glass, hip, plaque, GOLD, IRON, INK, type ModelDef } from '../../builder';
 
 export default {
   key: 'China Railway',
@@ -14,11 +14,11 @@ export default {
       box(g, 1.9, 0.08, 0.3, DARK, -0.04, 0.17, Z); [-0.8, -0.3, 0.1, 0.5].forEach((x) => box(g, 0.22, 0.1, 0.03, INK, x, 0.15, Z + 0.16));          // train (nose to the right): underframe and bogies
       box(g, 0.96, 0.36, 0.4, WHITE, -0.56, 0.26, Z); box(g, 0.64, 0.36, 0.4, WHITE, 0.28, 0.26, Z);                                                // two cars
       [[0.66, 0.12, 0.36, 0.34], [0.77, 0.1, 0.3, 0.3], [0.86, 0.08, 0.22, 0.24], [0.93, 0.06, 0.14, 0.16]].forEach(([x, l, w, h]) => box(g, l, h, w, WHITE, x, 0.26, Z)); // nose in four steps
-      [-0.9, -0.72, -0.54, -0.36, -0.18, 0.02, 0.2, 0.38].forEach((x) => box(g, 0.11, 0.11, 0.02, NAVY, x, 0.44, Z + 0.205));                      // windows
+      [-0.9, -0.72, -0.54, -0.36, -0.18, 0.02, 0.2, 0.38].forEach((x) => box(g, 0.11, 0.11, 0.02, NAVY, x, 0.44, Z + 0.205, glass(NAVY))); // windows
       [-0.12, 0.52].forEach((x) => box(g, 0.1, 0.24, 0.02, 0x8e98b4, x, 0.28, Z + 0.205));                                                          // doors
       box(g, 0.96, 0.05, 0.02, RED, -0.56, 0.3, Z + 0.205); box(g, 0.64, 0.05, 0.02, RED, 0.28, 0.3, Z + 0.205);                                    // red stripe, along both cars
       [[0.66, 0.185], [0.77, 0.155], [0.86, 0.115]].forEach(([x, z]) => box(g, 0.1, 0.05, 0.02, RED, x, 0.3, Z + z));                                // and round the nose
-      box(g, 0.1, 0.02, 0.24, NAVY, 0.66, 0.6, Z); box(g, 0.1, 0.02, 0.2, NAVY, 0.77, 0.56, Z); box(g, 0.1, 0.08, 0.02, NAVY, 0.66, 0.46, Z + 0.185); // driver's windscreen and side window
+      box(g, 0.1, 0.02, 0.24, NAVY, 0.66, 0.6, Z, glass(NAVY)); box(g, 0.1, 0.02, 0.2, NAVY, 0.77, 0.56, Z, glass(NAVY)); box(g, 0.1, 0.08, 0.02, NAVY, 0.66, 0.46, Z + 0.185, glass(NAVY)); // driver's windscreen and side window
       [-0.75, 0.3].forEach((x) => box(g, 0.3, 0.05, 0.24, 0xcfd6e6, x, 0.62, Z));                                                                    // air-conditioning units
       box(g, 0.22, 0.03, 0.14, DARK, -0.38, 0.62, Z); box(g, 0.04, 0.16, 0.04, DARK, -0.44, 0.65, Z); box(g, 0.04, 0.16, 0.04, DARK, -0.34, 0.77, Z); box(g, 0.1, 0.03, 0.3, DARK, -0.34, 0.92, Z); // pantograph
       for (const x of [-0.65, 0.55]) { box(g, 0.05, 1.05, 0.05, STEEL, x, 0.18, -0.04); box(g, 0.05, 0.04, 0.28, STEEL, x, 1.1, 0.1); box(g, 0.03, 0.12, 0.03, STEEL, x, 0.97, Z); } // masts, their arms and droppers

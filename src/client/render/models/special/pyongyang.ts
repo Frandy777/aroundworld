@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { box, cyl, decal, final, lamplit, lampsOf, mat, part, rnd, stone, GOLD, INK, type ModelDef } from '../../builder';
+import { box, cyl, decal, final, glass, lamplit, lampsOf, mat, part, rnd, stone, GOLD, INK, type ModelDef } from '../../builder';
 import { canvas, shade } from '../../art';
 import { pixelTexture, toon } from '../../scene';
 
@@ -34,9 +34,9 @@ export default {
         stone(g, w, 0.36, w, GREY, TX, y, TZ); stone(g, 0.62 * w, 0.32, 0.04, LIGHT, TX, y, TZ + w / 2); box(g, w + 0.1, 0.04, w + 0.1, LEDGE, TX, y + 0.32, TZ); // the tier's grey wings, the lighter pier up its front, the ledge that caps it
         if (GLYPH[i]) decal(g, GLYPH[i], TX, y + 0.045, TZ + w / 2 + 0.026, lampsOf(GLYPH[i], 'Y')); // its gold characters, on the pier
       }
-      stone(g, 0.46, 0.26, 0.46, GREY, TX, 4.71, TZ); [-0.13, 0, 0.13].forEach((x) => box(g, 0.06, 0.14, 0.02, 0x2a3050, TX + x, 4.78, TZ + 0.23, lamplit(0x2a3050, 0xffd9a0, 0.9))); box(g, 0.56, 0.04, 0.56, LEDGE, TX, 4.97, TZ); // the viewing gallery with its slit windows, the last ledge
+      stone(g, 0.46, 0.26, 0.46, GREY, TX, 4.71, TZ); [-0.13, 0, 0.13].forEach((x) => box(g, 0.06, 0.14, 0.02, 0x2a3050, TX + x, 4.78, TZ + 0.23, glass(0x2a3050, 0xffd9a0, 0.9))); box(g, 0.56, 0.04, 0.56, LEDGE, TX, 4.97, TZ); // the viewing gallery with its slit windows, the last ledge
       cyl(g, 0.25, 0.05, DGOLD, TX, FY, TZ); cyl(g, 0.31, 0.08, GOLD, TX, FY + 0.05, TZ);                                                                         // the gold collar
-      [0.15, 0.19, 0.21, 0.21, 0.2, 0.18, 0.155, 0.13, 0.105, 0.08, 0.057, 0.037, 0.02].forEach((r, i) => cyl(g, r, 0.085, [CRIMSON, RED, RED, 0xff3b3b, RED, 0xff3b3b, 0xff3b3b][i >> 1], TX + Math.max(0, i - 3) * 0.013, FY + 0.13 + i * 0.085, TZ)); // the torch: slices of red glass swelling, then licking up to the right, the upper ones glowing (unlit)
+      [0.15, 0.19, 0.21, 0.21, 0.2, 0.18, 0.155, 0.13, 0.105, 0.08, 0.057, 0.037, 0.02].forEach((r, i) => { const c = [CRIMSON, RED, RED, 0xff3b3b, RED, 0xff3b3b, 0xff3b3b][i >> 1]; cyl(g, r, 0.085, c, TX + Math.max(0, i - 3) * 0.013, FY + 0.13 + i * 0.085, TZ, c === 0xff3b3b ? undefined : glass(c)); }); // the torch: slices of red glass swelling, then licking up to the right, the upper ones glowing (unlit)
       box(g, 0.8, 0.07, 0.46, 0xd6d0c0, SX, 0.24, SZ); box(g, 0.68, 0.27, 0.36, 0xe9e4d6, SX, 0.31, SZ); box(g, 0.74, 0.05, 0.4, 0xcfc8b4, SX, 0.58, SZ);         // the statue's pedestal, in three courses
       const rod = (x: number, y: number, len: number, a: number, c: number) => { box(g, 0.045, len, 0.045, c, x - Math.sin(a) * len / 2, y + (Math.cos(a) - 1) * len / 2, SZ).rotation.z = a; return [x - Math.sin(a) * len, y + Math.cos(a) * len]; }; // a bar from (x, y) tipped a to the left: where its top end is
       const person = (x: number, s: number, a: number) => { const d = Math.sign(a); box(g, 0.13, 0.2 * s, 0.09, BRONZE, x, P, SZ); box(g, 0.18, 0.25 * s, 0.1, BRONZE, x, P + 0.2 * s, SZ); box(g, 0.1, 0.12 * s, 0.1, BRONZE2, x, P + 0.46 * s, SZ); box(g, 0.045, 0.2 * s, 0.07, BRONZE, x + d * 0.115, P + 0.22 * s, SZ); return rod(x - d * 0.09, P + 0.42 * s, 0.3, a, BRONZE); }; // a bronze figure s tall: legs, coat, head, one arm at his side, the other raised leaning a to the left (the tip of it returned)

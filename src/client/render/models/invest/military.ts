@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { box, cyl, emissive, final, GOLD, INK, type ModelDef } from '../../builder';
+import { box, cyl, emissive, final, glass, GOLD, INK, type ModelDef } from '../../builder';
 import { LAUNCH_PAD, MISSILE_LENGTH, MISSILE_NAME, MISSILE_SCALE, missile } from '../missile';
 
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
@@ -37,7 +37,7 @@ export default {
         cyl(g, 0.16, 0.52, LIGHT, 0.35, 0.08, z); cyl(g, 0.165, 0.1, RED, 0.35, 0.28, z); cyl(g, 0.12, 0.06, STEEL, 0.35, 0.6, z);
       }
       box(g, 0.52, 0.42, 0.62, WALL, 0.82, 0.08, -0.58); box(g, 0.58, 0.07, 0.68, DARK, 0.82, 0.5, -0.58);           // low blast-proof control bunker
-      box(g, 0.34, 0.09, 0.025, GLASS, 0.82, 0.32, -0.26); box(g, 0.12, 0.24, 0.03, DARK, 0.82, 0.08, -0.25);
+      box(g, 0.34, 0.09, 0.025, GLASS, 0.82, 0.32, -0.26, glass(GLASS)); box(g, 0.12, 0.24, 0.03, DARK, 0.82, 0.08, -0.25);
       box(g, 0.07, 0.68, 0.07, STEEL, 0.8, 0.08, 0.43);                                                                // radar pedestal
       const dish = cyl(g, 0.28, 0.06, LIGHT, 0.8, 0.75, 0.43); dish.rotation.x = -0.65;
       box(g, 0.04, 0.34, 0.04, DARK, 0.8, 0.72, 0.49).rotation.x = -0.65; box(g, 0.08, 0.08, 0.08, LAMP, 0.8, 1.04, 0.32, emissive(LAMP));
