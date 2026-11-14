@@ -7,6 +7,7 @@ import { LAMP, lamps, spot } from './light';
 import { defOf } from './models';
 import { free, hdCam, LENS, renderer, scene, sun, zoomed } from './scene';
 import { sky } from './sky';
+import { SEA_Y } from './world';
 
 // ---- Local lights: the warm pools of Octopath's streets. Four lamps are the tokens' lanterns, one is borrowed by missiles (strike.ts), the fixed slots stand at the glowing
 // landmarks — each declared by its own tile model and resolved over its lot (see ModelDef.lamps and lamps.ts, which also keeps the three lights off the board) — and each ordinary
@@ -66,7 +67,7 @@ function lights(t: number) {
 // and Safari WebGL2 driver does that well), and beside a colour averaged from four, an edge pixel can be fogged and blurred as the wrong side of its silhouette, a 1px fringe. The passes:
 //  1. ambient occlusion (GTAO) from the depth alone, at half size, blurred along depth edges;
 //  2. light shafts at half size, marched through the sun's shadow map in the haze, plus a halo round every lamp (not over what stands in front of it) and the spot's cone; blurred likewise;
-//  3. the composite: the occlusion on the lit scene, the sky and the haze by distance (a layer of fog hugging the sea), the shafts on top;
+//  3. the composite: the occlusion on the lit scene, the sky and the haze by distance (a layer of fog hugging the sea, and the sea itself out to the horizon), the shafts on top;
 //  4. tilt-shift: a gather blur that grows from a sharp band across the middle of the screen (for a close view), and with the distance from the focus;
 //  5. bloom: a threshold, then a pyramid of four dual-filter blurs;
 //  6. the end: bloom added, ACES tone map, a little saturation, vignette, a dither against banding, and the sRGB encoding. ----
@@ -174,7 +175,7 @@ void main() {
 			float rho = uFog.w * exp( - max( p.y - uFog.x, 0.0 ) * uFog.z ) * dt, lit = 1.0;
 			vec4 sc = uShM * vec4( p, 1.0 );
 			if ( sc.x >= 0.0 && sc.x <= 1.0 && sc.y >= 0.0 && sc.y <= 1.0 && sc.z <= 1.0 ) lit = step( sc.z - 0.0008, textureLod( tSh, sc.xy, 0.0 ).x );
-			acc += vec3( 1.0, 0.9, 0.7 ) * uSunC * ( lit * ph * rho * uK );
+			acc += uSunC * ( lit * ph * rho * uK );
 			vec3 sv = p - uSp.xyz; float sl = length( sv );
 			acc += uSpC * ( smoothstep( uSp.w, mix( uSp.w, 1.0, 0.4 ), dot( sv / max( sl, 1e-3 ), uSpD ) ) * rho * 30.0 / ( 1.0 + 0.04 * sl * sl ) );
 		}
@@ -196,25 +197,28 @@ void main() {
 
 // The composite: occlusion on the scene, then the air between it and the eye. The sky is a gradient with the glow of the light (the sun, by night the moon); the haze is the sky's own horizon colour,
 // thickest at grazing angles and brighter on the side of the sun, which goes on under the horizon at dusk, and by night on the side of the moon (`sky.glow` is the share of the sun's).
-const sceneTex = u<THREE.Texture | null>(null), aoTex = u<THREE.Texture | null>(null), volTex = u<THREE.Texture | null>(null);
+// The sea does not end where the lens does: below the horizon, where nothing is drawn, the ray goes on to the plane of the water (SEA_Y), so water far off thins into the haze, and at the horizon it is the haze.
+const sceneTex = u<THREE.Texture | null>(null), aoTex = u<THREE.Texture | null>(null), volTex = u<THREE.Texture | null>(null), SEAY = u(SEA_Y);
 const compPass = fx(/* glsl */`
-uniform sampler2D tC, tD, tA, tV; uniform mat4 uIVP; uniform vec3 uEye, uSun, uLit, uSunC, uHor, uZen; uniform vec4 uFog; uniform float uAO, uGlow;
+uniform sampler2D tC, tD, tA, tV; uniform mat4 uIVP; uniform vec3 uEye, uSun, uLit, uSunC, uHor, uZen; uniform vec4 uFog; uniform float uAO, uGlow, uSea;
 float lobe( vec2 h, vec3 d ) { return pow( saturate( dot( h, normalize( d.xz ) ) ), 4.0 ); }
 vec3 haze( vec3 rd ) { vec2 h = normalize( rd.xz ); return uHor * ( 0.85 + 0.3 * mix( lobe( h, uLit ), lobe( h, uSun ), uGlow ) ); }
-vec3 sky( vec3 rd ) { return mix( haze( rd ), uZen, pow( saturate( rd.y * 1.6 ), 0.6 ) ) + vec3( 1.0, 0.8, 0.5 ) * uSunC * pow( saturate( dot( rd, uLit ) ), 24.0 ) * 0.5; }
+vec3 sky( vec3 rd ) { return mix( haze( rd ), uZen, pow( saturate( rd.y * 1.6 ), 0.6 ) ) + uSunC * pow( saturate( dot( rd, uLit ) ), 24.0 ) * 0.5; }
 float tau( vec3 ro, vec3 rd, float tm ) { // the optical depth of the layer along the ray: its density falls off as exp( - k h ), integrated in closed form
 	float k = uFog.z, y0 = uFog.x, ye = ro.y + rd.y * tm;
 	return uFog.w * abs( exp( - k * max( ro.y - y0, 0.0 ) ) - exp( - k * max( ye - y0, 0.0 ) ) ) / ( k * max( abs( rd.y ), 1e-3 ) );
 }
+float melt( float tm ) { float f = max( tm - 500.0, 0.0 ) / 350.0; return f * f; } // water past 500 units is hazier than the layer makes it, and lost in the haze by 1200, where the lens ends: the sea fades out where it is not a sea any more
 void main() {
 	float d = texture2D( tD, v ).x;
 	vec4 w = uIVP * vec4( v * 2.0 - 1.0, d * 2.0 - 1.0, 1.0 ); w.xyz /= w.w;
 	vec3 rd = normalize( w.xyz - uEye ), c = texture2D( tC, v ).rgb;
-	float tm = d >= 1.0 ? 4000.0 : length( w.xyz - uEye );
+	bool wet = d < 1.0 || rd.y < - 1e-4; // the ray ends on the water, drawn or not
+	float tm = d < 1.0 ? length( w.xyz - uEye ) : wet ? ( uSea - uEye.y ) / rd.y : 4000.0;
 	if ( d >= 1.0 ) c = sky( rd ); else c *= mix( 1.0, texture2D( tA, v ).r, uAO * ( 1.0 - smoothstep( 0.85, 1.8, max( c.r, max( c.g, c.b ) ) ) ) );
-	float tr = exp( - tau( uEye, rd, tm ) );
+	float tr = exp( - tau( uEye, rd, tm ) - ( wet ? melt( tm ) : 0.0 ) );
 	gl_FragColor = vec4( c * tr + haze( rd ) * ( 1.0 - tr ) + texture2D( tV, v ).rgb, 1.0 );
-}`, { tC: sceneTex, tD: D, tA: aoTex, tV: volTex, uIVP: IVP, uEye: EYE, uSun: SUN, uLit: LIT, uSunC: SUNC, uHor: HOR, uZen: ZEN, uFog: FOG, uAO: K.ao, uGlow: GLOW });
+}`, { tC: sceneTex, tD: D, tA: aoTex, tV: volTex, uIVP: IVP, uEye: EYE, uSun: SUN, uLit: LIT, uSunC: SUNC, uHor: HOR, uZen: ZEN, uFog: FOG, uAO: K.ao, uGlow: GLOW, uSea: SEAY });
 
 // Tilt-shift: the circle of confusion is none in a band across the middle of the screen and grows toward its top and bottom (the miniature look, for a close view: with the whole board in it, whose
 // outer rows are there, it is all in focus, see `zoomed`), and with the distance from the focus

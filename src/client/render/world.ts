@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { scene, toon, lodMap, pixelTexture, texels, lod, DENSITY, BOARD_K } from './scene';
-import { glassy, lit, soft } from './light';
+import { scene, toon, lodMap, pixelTexture, texels, lod, hdCam, DENSITY, BOARD_K } from './scene';
+import { glassy, hd, lit, soft } from './light';
 import { sky } from './sky';
 import { canvas } from './art';
 import { EARTH } from './earth';
@@ -13,8 +13,11 @@ const smooth = (t: number) => t * t * (3 - 2 * t);
 
 // ---- Sea: one shader, no texture. The world is cut into the texels of the current zoom level and each is painted from a slow swell (four bands of navy, a
 // checker dithering the seams); near a slab or the centre drum the bands run on into lighter, shallower blues and a line of foam, read off a map of the distance
-// to the shore. The level's texel size is the only thing that changes with zoom, so the waves stay as wide in the world and the dither as wide in pixels. ----
-const SEA = 500, SHORE = 100, GRID = 400, DAIS = 7; // sea size, half the span of the shore map (units) and its resolution (half a unit a cell), radius of the centre drum
+// to the shore. The level's texel size is the only thing that changes with zoom, so the waves stay as wide in the world and the dither as wide in pixels.
+// HD-2D has no level to take it from: there a texel is the near one doubled as often as it takes to cover a screen pixel at that spot (the sea is as fine as the screen allows, and coarser
+// toward the horizon), so no step of the zoom changes it all at once, and the sea is a disc that follows the camera and is wider than the lens sees, so there is no edge of it to see. ----
+export const SEA_Y = -0.8; // the height of the water: HD-2D's composite (hd2d.ts) goes on from there to the horizon
+const SEA = 1600, SNAP = 64, SHORE = 100, GRID = 400, DAIS = 7; // radius of the sea (the far plane of HD-2D's lens is 1200 away: scene.ts) and the lattice it follows the camera on, half the span of the shore map (units) and its resolution (half a unit a cell), radius of the centre drum
 const PALETTE = ['#1b3f8e', '#20469a', '#264ea6', '#2c57b2', '#3170c0', '#3a92d0', '#5ec2dc'].map((c) => new THREE.Color(c));
 
 // Signed distance (units, negative inside) to the nearest slab (a rectangle), islet or the centre drum (a circle), kept within -2..8; a coarse grid is enough, a
@@ -34,7 +37,21 @@ const shore = new THREE.DataTexture(dist, GRID, GRID, THREE.RedFormat, THREE.Hal
 shore.minFilter = shore.magFilter = THREE.LinearFilter;
 shore.needsUpdate = true;
 
-const U = { uShore: { value: shore }, uPal: { value: PALETTE }, uTexel: { value: 1 / DENSITY }, uTime: { value: 0 }, uGlint: { value: 1 }, uWake: { value: WAKES }, uSplash: { value: SPLASH } };
+const U = { uShore: { value: shore }, uPal: { value: PALETTE }, uTexel: { value: 1 / DENSITY }, uTime: { value: 0 }, uGlint: { value: new THREE.Color() }, uWake: { value: WAKES }, uSplash: { value: SPLASH } };
+// HD-2D's shadow on the water, `seaSh`, is read from the sun's map where the colour is made (below) rather than by `receiveShadow`, which is one switch for both looks: the restrained look would be shadowed twice, by it and by `dim`.
+// The sun's highlight is cut in the shadow too, but a lamp's is not: the first directional light is the sun, or by night the moon.
+const SHADE = /* glsl */`
+float seaSh = 1.0;
+void RE_Direct_Sea( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in ToonMaterial material, inout ReflectedLight reflectedLight ) {
+	vec3 spec = reflectedLight.directSpecular;
+	RE_Direct_Toon( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
+	#if NUM_DIR_LIGHTS > 0
+		if ( uHd > 0.5 && directLight.direction == directionalLights[ 0 ].direction ) reflectedLight.directSpecular = mix( spec, reflectedLight.directSpecular, seaSh );
+	#endif
+}
+#undef RE_Direct
+#define RE_Direct RE_Direct_Sea
+`;
 const mat = toon(0x20469a, {}, [0.22, 1, 0, 0]); // HD-2D: glossy, and no texture to take a relief from (the swell's own slopes stand in, below)
 mat.onBeforeCompile = (sh) => {
   lit.call(mat, sh);
@@ -44,23 +61,42 @@ mat.onBeforeCompile = (sh) => {
     .replace('#include <begin_vertex>', '#include <begin_vertex>\nvW = (modelMatrix * vec4(transformed, 1.)).xz;');
   sh.fragmentShader = sh.fragmentShader
     .replace('#include <common>', `#include <common>
-      varying vec2 vW; uniform sampler2D uShore; uniform vec3 uPal[7], uSplash[2]; uniform vec4 uWake[${WAKES.length}]; uniform float uTexel, uTime, uGlint;
+      varying vec2 vW; uniform sampler2D uShore; uniform vec3 uPal[7], uSplash[2], uGlint; uniform vec4 uWake[${WAKES.length}]; uniform float uTexel, uTime;
       float hash(vec2 p) { p = fract(p * vec2(0.1031, 0.1030)); p += dot(p, p.yx + 33.33); return fract((p.x + p.y) * p.x); }`)
+    .replace('#include <bumpmap_pars_fragment>', `${SHADE}\n#include <bumpmap_pars_fragment>`)
     .replace('#include <color_fragment>', `#include <color_fragment>
-      vec2 c = floor(vW / uTexel), q = (c + 0.5) * uTexel;                 // this texel and its centre, in world units
+      float tx = uTexel, px = 0.; // the texel: a level's in the restrained look; HD-2D's is the near one doubled as often as the longer side of this pixel on the water (px, in world units) asks
+      if (uHd > 0.5) { vec2 ax = dFdx(vW), ay = dFdy(vW); px = sqrt(max(dot(ax, ax), dot(ay, ay))); tx *= exp2(ceil(log2(max(px / tx, 1.)))); }
+      vec2 c = floor(vW / tx), q = (c + 0.5) * tx;                         // this texel and its centre, in world units
       float chk = mod(c.x + c.y, 2.) - 0.5, t = uTime;                     // checker dither: -0.5 / +0.5
-      float d0 = texture2D(uShore, q / ${2 * SHORE}. + 0.5).r, d = d0 + chk * 1.5 * uTexel; // distance to the shore, and dithered
+      if (uHd > 0.5) chk *= 1. - smoothstep(0.4, 1.2, px); // far off a texel's checker only beats against the pixels: it fades out
+      float d0 = texture2D(uShore, q / ${2 * SHORE}. + 0.5).r, d = d0 + chk * 1.5 * tx; // distance to the shore, and dithered
       float warp = sin(q.x * 0.53 + t * 0.3) * 1.3 + sin(dot(q, vec2(0.31, 0.23)) - t * 0.2) * 0.9;           // the swell's crests wander, so no two chevrons repeat
-      float s = sin(q.y * 1.05 + warp + t * 0.6) + 0.4 * sin(dot(q, vec2(1.9, 1.3)) + t * 0.9) + 0.4 * sin(dot(q, vec2(0.09, 0.06)) + t * 0.05) + chk * 3. * uTexel;
+      float s = sin(q.y * 1.05 + warp + t * 0.6) + 0.4 * sin(dot(q, vec2(1.9, 1.3)) + t * 0.9) + 0.4 * sin(dot(q, vec2(0.09, 0.06)) + t * 0.05) + chk * 3. * tx;
       float depth = step(-0.6, s) + step(0., s) + step(0.6, s);            // swell band, 0 (trough) .. 3 (crest)
       float shallow = step(d, 1.2) + step(d, 0.75) + step(d, 0.38);        // 0 deep .. 3 right at the shore
+      vec3 sn = vec3(0., 0., 1.);                                          // HD-2D: the swell's normal, the share of the sun's glitter on it, and the sun's shadow there
+      float lobe = 0.;
+      if (uHd > 0.5) {                                                     // the slope of s above, by the chain rule, cut into a few steps per texel like the water itself
+        float e = cos(dot(q, vec2(0.31, 0.23)) - t * 0.2);
+        vec2 g = cos(q.y * 1.05 + warp + t * 0.6) * vec2(0.689 * cos(q.x * 0.53 + t * 0.3) + 0.279 * e, 1.05 + 0.207 * e)
+          + 0.4 * cos(dot(q, vec2(1.9, 1.3)) + t * 0.9) * vec2(1.9, 1.3) + 0.4 * cos(dot(q, vec2(0.09, 0.06)) + t * 0.05) * vec2(0.09, 0.06);
+        g = floor(g / 0.5 + 0.5) * 0.5;
+        sn = normalize((viewMatrix * vec4(normalize(vec3(-0.07 * g.x, 1., -0.07 * g.y)), 0.)).xyz);
+        #if NUM_DIR_LIGHTS > 0
+          lobe = pow(saturate(dot(sn, normalize(directionalLights[0].direction + normalize(vViewPosition)))), 12.); // only the crests that face the half-way between the eye and the light glitter
+          #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
+            seaSh = getShadow(directionalShadowMap[0], directionalLightShadows[0].shadowMapSize, directionalLightShadows[0].shadowIntensity, directionalLightShadows[0].shadowBias, directionalLightShadows[0].shadowRadius, vDirectionalShadowCoord[0]);
+          #endif
+        #endif
+      }
       vec3 sea = uPal[int(depth + shallow)];
-      float run = max(1., floor(0.14 / uTexel + 0.5));                    // a glint is a dash of texels along x, about as long in the world on every level
+      float run = max(1., floor(0.14 / tx + 0.5));                        // a glint is a dash of texels along x, about as long in the world on every level
       float glint = 0.;
-      if (depth > 2.5 && d0 > 0.5 && hash(vec2(floor((c.x + 9. * hash(vec2(c.y, 1.))) / run), c.y) + floor(t * 2.)) > 0.992) { sea = vec3(0.62, 0.8, 1.); glint = 1.; } // glints twinkle on the crests
+      if (depth > 2.5 && d0 > 0.5 && hash(vec2(floor((c.x + 9. * hash(vec2(c.y, 1.))) / run), c.y) + floor(t * 2.)) > 0.992) { glint = 1.; if (uHd < 0.5) sea = vec3(0.62, 0.8, 1.); } // glints twinkle on the crests (in HD-2D they are light, below, not paint)
       float ph = fract(t * 0.18 + 0.15 * sin(dot(q, vec2(0.21, 0.17))));   // a ripple leaves the shore every ~5.5 s, each stretch of it on its own beat,
-      if (abs(d0 - 0.15 - 0.6 * ph) < 0.5 * max(0.045, uTexel) && hash(c + 5.) > ph) sea = vec3(0.45, 0.75, 0.9); // a texel wide and breaking up as it goes
-      float fw = max(0.09, uTexel);                                       // the foam's width: two near texels, a whole texel on the coarser levels
+      if (abs(d0 - 0.15 - 0.6 * ph) < 0.5 * max(0.045, tx) && hash(c + 5.) > ph) sea = vec3(0.45, 0.75, 0.9); // a texel wide and breaking up as it goes
+      float fw = max(0.09, tx);                                           // the foam's width: two near texels, a whole texel on the coarser levels
       if (d0 < fw) sea = vec3(0.9, 0.97, 1.);                              // the line of foam
       for (int i = 0; i < ${WAKES.length}; i++) {                             // a ship's wake: from its stern, two arms spreading and a churn between them, breaking up as they go
         vec2 wr = q - uWake[i].xy, wf = uWake[i].zw;
@@ -71,24 +107,24 @@ mat.onBeforeCompile = (sh) => {
         float k = uSplash[i].z;
         if (k >= 0. && k <= 1. && abs(length(q - uSplash[i].xy) - 0.25 - 1.6 * k) < 0.5 * fw && hash(c + 7.) > k) sea = vec3(0.9, 0.97, 1.);
       }
+      if (uHd > 0.5) sea = mix(sea, uPal[0], 0.65 * (1. - seaSh));        // HD-2D: a shadow on the water is a few bands deeper, not black: the sky still lights it
       diffuseColor.rgb = sea;
-      totalEmissiveRadiance += glint * uHd * uGlint * vec3(1.6, 2., 2.2);  // HD-2D: the sun or moon lights a glint, so its HDR light follows the hour`)
+      if (uHd > 0.5) totalEmissiveRadiance += glint * lobe * seaSh * uGlint; // HD-2D: a glint is the light of the sun or moon itself (HDR, in its colour: see updateWorld) where a crest faces it, and none in a shadow`)
     .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-      if (uHd > 0.5) {                                                    // HD-2D: the normal of the swell (the slope of s above, by the chain rule), for the highlights and the sky in the water
-        float e = cos(dot(q, vec2(0.31, 0.23)) - t * 0.2);
-        vec2 g = cos(q.y * 1.05 + warp + t * 0.6) * vec2(0.689 * cos(q.x * 0.53 + t * 0.3) + 0.279 * e, 1.05 + 0.207 * e)
-          + 0.4 * cos(dot(q, vec2(1.9, 1.3)) + t * 0.9) * vec2(1.9, 1.3) + 0.4 * cos(dot(q, vec2(0.09, 0.06)) + t * 0.05) * vec2(0.09, 0.06);
-        normal = normalize((viewMatrix * vec4(normalize(vec3(-0.07 * g.x, 1., -0.07 * g.y)), 0.)).xyz);
-      }`);
+      if (uHd > 0.5) normal = sn;`);
 };
 // three.js names a compiled program by the text of onBeforeCompile, which says nothing of the values the shader bakes in (SHORE, the number of wakes). A hot update keeps the renderer, and so its
 // programs: without these in the key, a changed value would be handed the program compiled for the old one, and the sea would be drawn at the wrong scale.
 mat.customProgramCacheKey = () => `${SHORE} ${WAKES.length} ${mat.onBeforeCompile}`;
-const sea = new THREE.Mesh(new THREE.PlaneGeometry(SEA, SEA), mat);
+// The restrained look's sea stays this plane: the shader cuts its texels on `vW`, interpolated over the triangles, and where a pixel falls on the edge of a texel the rounding of another mesh's triangles would flip it (a row of them here and there).
+const sea = new THREE.Mesh(new THREE.PlaneGeometry(500, 500), mat);
 sea.rotation.x = -Math.PI / 2;
-sea.position.y = -0.8;
-mat.onBeforeRender = () => (U.uTexel.value = 2 ** (2 - lod.n) / DENSITY); // a water pixel is a texel of the level in view
-// A shadow on water is one tone darker, not black: the sea itself is lit flat, and a see-through plane just above it takes the shadow map alone. It is as dark as the light is strong, and as dark a blue as the sky is bright (see updateWorld)
+sea.position.y = SEA_Y;
+const ocean = new THREE.Mesh(new THREE.CircleGeometry(SEA, 64), mat); // HD-2D's: the disc that follows its camera
+ocean.rotation.x = sea.rotation.x;
+ocean.position.y = SEA_Y;
+mat.onBeforeRender = () => (U.uTexel.value = 2 ** (hd.on ? 0 : 2 - lod.n) / DENSITY); // a water pixel is a texel of the level in view; HD-2D starts from the near one (the shader goes on from there)
+// A shadow on water is one tone darker, not black: the sea itself is lit flat, and a see-through plane just above it takes the shadow map alone. It is as dark as the light is strong, and as dark a blue as the sky is bright (see updateWorld). It is the restrained look's: HD-2D's sea has its shadow in its own shader (SHADE) and this plane is hidden there
 const DIM = new THREE.Color(0x0a1a5c);
 const dim = new THREE.Mesh(sea.geometry, soft(new THREE.ShadowMaterial({ color: DIM, opacity: 0.34 })));
 dim.rotation.x = sea.rotation.x;
@@ -193,12 +229,15 @@ const globe = new THREE.Group(), ball = new THREE.Mesh(new THREE.SphereGeometry(
   globe.add(dais, plinth, ball);
 }
 
-export const initWorld = () => scene.add(sea, dim, globe, scenery);
+export const initWorld = () => scene.add(sea, ocean, dim, globe, scenery);
 
 export function updateWorld(t: number, dt: number) {
   U.uTime.value = Math.floor(t * 4) / 4; // the sea moves in quarter-second steps
-  U.uGlint.value = sky.lightK;
+  U.uGlint.value.copy(sky.lightC).multiplyScalar(2.4 * sky.lightK); // HD-2D's glint: HDR light, in the colour of the sun's or the moon's
+  sea.visible = dim.visible = !hd.on; ocean.visible = hd.on;
   dim.material.opacity = 0.34 * sky.lightK; dim.material.color.copy(DIM).multiplyScalar(sky.skyK);
+  ocean.position.x = Math.round(hdCam.position.x / SNAP) * SNAP; // HD-2D's sea follows the camera, a lattice step at a time (the shader anchors the texels to the world, so the water does not swim)
+  ocean.position.z = Math.round(hdCam.position.z / SNAP) * SNAP;
   updateScenery(t, dt);
   ball.rotation.y += dt * 0.35;
   ball.position.y = FLOAT + Math.sin(t * 1.2) * 0.4;
