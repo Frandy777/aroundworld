@@ -6,7 +6,7 @@ import { enter, leaveRoom } from '../controller';
 import { send } from '../net';
 import { PAL, logo } from '../render/art';
 import { session, useCell } from '../store';
-import { Face, Icon, hex, money } from './bits';
+import { Face, FullBtn, Icon, hex, money } from './bits';
 import { Btn, Card } from './dialogs';
 import { openRules } from './open';
 
@@ -86,6 +86,7 @@ export function Title() {
         <p className="hint">Drag: pan &nbsp;|&nbsp; Right-drag: rotate &nbsp;|&nbsp; Wheel: zoom</p>
         <small className="ver">AROUNDWORLD v0.1</small>
       </section>
+      <FullBtn corner />
       {view === 'title' && dlg && <RoomCard join={dlg === 'join'} invite={invite} back={back} />}
     </>
   );

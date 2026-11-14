@@ -4,7 +4,7 @@ import { money } from '../../shared/msg';
 import type { Block, Msg, Row } from '../../shared/types';
 import { ICONS, PAL, dieRows, faceRows, facePal, hex, lum, svgParts, type Pal } from '../render/art';
 import { FLAG_PAL, flagRows } from '../render/flags';
-import { state } from '../store';
+import { fullscreen, state, useCell } from '../store';
 
 export { money };
 export { hex };
@@ -20,6 +20,12 @@ function Sprite({ rows, cls = '', pal = PAL, z = 1 }: { rows: string[]; cls?: st
   );
 }
 export const Icon = ({ n }: { n: string }) => <Sprite rows={ICONS[n]} cls="ic" />;
+/** The button that puts the page on the whole screen (and back); `corner` floats it over whatever is up. Nothing where the browser cannot fullscreen. */
+export function FullBtn({ corner }: { corner?: boolean }) {
+  const fs = useCell(fullscreen);
+  if (!document.fullscreenEnabled) return null;
+  return <button className={`btn sm${corner ? ' corner' : ''}`} id="btn-full" title={fs ? 'Exit fullscreen (F)' : 'Fullscreen (F)'} onClick={() => fullscreen.set(!fs)}><Icon n={fs ? 'shrink' : 'full'} /></button>;
+}
 export function Face({ color }: { color: number }) {
   const [rows, pal] = useMemo(() => { const i = Math.max(0, PLAYER_DEFS.findIndex((p) => p.color === color)); return [faceRows(i), facePal(color, i)] as const; }, [color]);
   return <Sprite rows={rows} cls="face" pal={pal} />;

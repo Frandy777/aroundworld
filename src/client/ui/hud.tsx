@@ -4,7 +4,7 @@ import { maxRounds } from '../../shared/state';
 import { leaveRoom } from '../controller';
 import { CAM, focusTok, lookAtTile } from '../stage';
 import { G, actionBtn, activeTab, cards, cashEls, countdown, floats, hd2d, hudLive, lastRoll, paused, peeking, selectedTile, session, state, statsOf, tip, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
-import { Die, Face, Flag, Icon, Named, Pips, Rich, hex, money, tileHead } from './bits';
+import { Die, Face, Flag, FullBtn, Icon, Named, Pips, Rich, hex, money, tileHead } from './bits';
 import { openMenu, openRules } from './open';
 import { TileBody } from './tile';
 
@@ -17,6 +17,7 @@ function Topbar() {
       <div className="tools">
         <button className="btn sm" id="btn-help" onClick={() => void openRules()}><Icon n="help" /></button>
         <button className="btn sm" id="btn-menu" onClick={() => void openMenu(room!.code, leaveRoom)}><Icon n="menu" /></button>
+        <FullBtn />
       </div>
     </header>
   );

@@ -54,6 +54,16 @@ const HD_KEY = 'hd2d';
 export const hd2d = cell(localStorage.getItem(HD_KEY) === 'true'); // the HD-2D light (see render/light.ts) instead of the restrained pixel look; off until asked for
 hd2d.sub(() => localStorage.setItem(HD_KEY, String(hd2d.get())));
 
+// ---- Fullscreen: not a preference, the browser's own state. get reads it; set asks for the change, which lands back here through the event ----
+export const fullscreen: Cell<boolean> = {
+  get: () => !!document.fullscreenElement,
+  set: (v) => {
+    if (v === fullscreen.get() || !document.fullscreenEnabled) return;
+    void Promise.resolve(v ? document.documentElement.requestFullscreen() : document.exitFullscreen()).catch(() => {});
+  },
+  sub: (f) => { addEventListener('fullscreenchange', f); return () => removeEventListener('fullscreenchange', f); },
+};
+
 // ---- Toasts and floating numbers: they remove themselves ----
 export interface Toast { id: number; m: Msg; tone: Tone }
 export interface Float { id: number; x: number; y: number; text: string; cls: string }
