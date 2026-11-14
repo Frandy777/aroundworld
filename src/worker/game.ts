@@ -30,7 +30,7 @@ const noMods = (): Mods => ({ fuel: false, half: false, back: false, magnet: fal
 // What a restart keeps of a game: how a turn began (a checkpoint), and what that turn has taken from outside since (the tape: its dice, and the answers it was given; `k` is 'rnd' or the kind of prompt answered).
 interface Entry { k: string; v: unknown }
 export interface Ckpt { S: GameState; mods: Mods[]; nextId: number; gone: number[]; turn: number; round: number; rig: number[] }
-export interface Saved { ckpt: Ckpt; tape: Entry[]; due: number; lapsed: number; pausedAt: number }
+export interface Saved { ckpt: Ckpt; tape: Entry[]; due: number; lapsed: number; pausedAt: number; conceded?: number[] } // conceded: players who declared bankruptcy mid-turn (the tape says nothing of it: it is not an input the game asked for)
 
 /** The game before its first turn. */
 export const fresh = (players: { name: string; color: number }[], settings: Settings): Ckpt => ({
@@ -103,6 +103,7 @@ export class Game {
   private nextId: number;
   private pending: Pending | null = null;
   private gone: Set<number>; // players who left: their asks answer themselves, and they drop out on their next turn
+  private conceded = new Set<number>(); // players who declared bankruptcy: out at once, but still in the room watching (see `concede`)
   private tape: Entry[] = []; // what the turn in progress has taken from outside so far
   private replay: Entry[] | null = null; // the tape while it plays back after a restart; null once the game is live
   private wasDue = 0; // the clock the open question had before the restart
@@ -124,7 +125,7 @@ export class Game {
   /** When the open question answers itself (epoch ms; 0: it waits). */
   get due() { return this.pending?.due ?? 0; }
   /** What a restart needs to bring the game back. */
-  get saved(): Saved { return { ckpt: this.ckpt, tape: this.tape, due: this.due, lapsed: this.lapsed, pausedAt: this.pausedAt }; }
+  get saved(): Saved { return { ckpt: this.ckpt, tape: this.tape, due: this.due, lapsed: this.lapsed, pausedAt: this.pausedAt, conceded: [...this.conceded] }; }
 
   // ---- Chance and the tape ----
   // The game is a chain of awaits, which a restart cannot carry over. A turn can be played again though: from its checkpoint, fed from the tape instead of the dice and the
@@ -180,7 +181,7 @@ export class Game {
       this.pending = pend;
       if (replaying) { pend.due = this.wasDue; return; } // it was asked before the restart: the clients know, and its clock runs on
       this.emit(ev);
-      if (this.gone.has(to)) return this.settle(pend, fallback(p));
+      if (this.gone.has(to) || this.S.players[to].out) return this.settle(pend, fallback(p)); // a gone or bankrupt player is never waited on: the default answer stands
       this.arm(pend);
       this.host.save();
     });
@@ -235,6 +236,22 @@ export class Game {
     this.gone.add(pi);
     if (this.pending?.to === pi) this.settle(this.pending, fallback(this.pending.p));
   }
+  /** A player still in the room declares bankruptcy: out on the spot, left to watch on (leaving the room forfeits instead: `forfeit`). `conceded` goes with the
+   * save so a restart mid-turn puts them out again: the tape holds only what a turn took from outside, and this was no input the game asked for. */
+  concede(pi: number) {
+    const p = this.S.players[pi];
+    if (p.out || this.S.over) return;
+    if (this.replay) { // the state is still being rebuilt from the tape and nothing outside it may change it: go out the moment it is caught up
+      const up = this.caughtUp;
+      this.caughtUp = () => { up?.(); this.concede(pi); };
+      return;
+    }
+    this.conceded.add(pi);
+    this.toast(`${p.name} declared bankruptcy`, 'bad');
+    this.goBankrupt(pi);
+    if (this.pending?.to === pi) this.settle(this.pending, fallback(this.pending.p));
+    this.host.save();
+  }
   dispose() { this.pending = null; }
 
   // ---- Who is who ----
@@ -265,7 +282,7 @@ export class Game {
   // ---- Money: what each of these is for (`why`) goes to the log with the sum ----
   /** Money from the bank: Zurich takes its cut. */
   give(pi: number, amt: number, why: Msg | string, bank = true) {
-    if (amt <= 0) return;
+    if (amt <= 0 || this.S.players[pi].out) return;
     this.cash(pi, amt, why);
     if (bank) this.bonus('Zurich', [100, 200, 300], m`${P(pi)} got money from the bank`, false);
   }
@@ -280,6 +297,7 @@ export class Game {
   async pay(pi: number, amt: number, why: Msg | string, to: number | null = null): Promise<boolean> {
     const S = this.S, p = S.players[pi];
     if (amt <= 0) return true;
+    if (p.out) return false; // declared bankruptcy while a question stood: the estate already went to the bank
     if (p.cash < amt && p.dep) {
       const d = p.dep;
       this.emit({ t: 'dep', pi, d: null });
@@ -300,9 +318,10 @@ export class Game {
       if (forced) this.toast(`${p.name} must mortgage every property to pay ${money(amt)}`, 'bad');
       const sel = forced ? items.map((x) => x.i) : (await this.ask(pi, { k: 'pick', of: 'tile', title: 'MORTGAGE TO PAY', sub: [`${p.name} owes ${money(amt)}`], tone: 0x3b7bd9,
         hint: `You can't afford this. Mortgage properties (each pays half its lot value) to raise at least ${money(amt - p.cash)}.`, items, rule: { k: 'raise', cash: p.cash, need: amt }, label: 'MORTGAGE & PAY' })) as number[];
+      if (p.out) return false; // gave up while picking: the estate already went to the bank, there is nothing to mortgage
       this.mortgage(pi, sel, 0.5);
     }
-    if (to === null) this.cash(pi, -amt, why);
+    if (to === null || S.players[to].out) this.cash(pi, -amt, why); // a creditor who went out meanwhile leaves the payment to the bank
     else this.xfer(pi, to, amt, why);
     return true;
   }
@@ -333,6 +352,7 @@ export class Game {
   }
   lower(i: number) {
     const o = this.S.own[i];
+    if (!o || !o.lv) return; // the lot left hands (its owner went bankrupt) since the choice was made
     this.own(i, { ...o, lv: o.lv - 1, paid: Math.max(0, (o.paid ?? o.lv * TILES[i].up) - TILES[i].up) });
     this.log(m`${T(i, true)} was lowered to Lv ${String(o.lv - 1)}`);
   }
@@ -345,10 +365,10 @@ export class Game {
   }
 
   /** After a restart: play the turn in progress again from its checkpoint, fed from the tape. Resolves once it stands where it stood; rejects when the code no longer plays it the same way. */
-  resume({ tape, due, lapsed, pausedAt }: Omit<Saved, 'ckpt'>) {
+  resume({ tape, due, lapsed, pausedAt, conceded }: Omit<Saved, 'ckpt'>) {
     if (this.S.over) return Promise.resolve();
     return new Promise<void>((caughtUp, fail) => {
-      this.replay = tape; this.wasDue = due; this.lapsed = lapsed ?? 0; this.pausedAt = pausedAt ?? 0; this.caughtUp = caughtUp; // a game saved before the count (or before pausing) has none
+      this.replay = tape; this.wasDue = due; this.lapsed = lapsed ?? 0; this.pausedAt = pausedAt ?? 0; this.conceded = new Set(conceded ?? []); this.caughtUp = caughtUp; // a game saved before the count (or before pausing, or before conceding) has none
       this.run(true).then(caughtUp, (err) => { if (this.replay) fail(err); else console.error('game crashed', err); });
     });
   }
@@ -418,6 +438,7 @@ export class Game {
     // 2. Roll (in a dev room the question may be answered with a command of the panel instead: it runs, and the question is asked again)
     this.emit({ t: 'step', s: 'roll' });
     for (let go = await this.ask(pi, { k: 'roll' }); go !== true; go = await this.ask(pi, { k: 'roll' })) if (go && (await this.debug(go as Cmd))) return;
+    if (p.out) return; // declared bankruptcy while the question stood
     const a = this.d6(), b = this.d6();
     this.emit({ t: 'dice', a, b });
     if (a === b) this.bonus('Rio', [200, 500, 1000], m`${P(pi)} rolled doubles`);
@@ -542,7 +563,7 @@ export class Game {
     this.log(m`${P(pi)} rolled ${String(a + b)} at ${T(JERU, true)}`);
     for (const q of this.alive()) {
       if (q !== pi) await this.pay(q, fee, m`${T(JERU, true)}: rolled ${String(a + b)}`, pi);
-      if (this.over()) return;
+      if (this.S.players[pi].out || this.over()) return;
     }
   }
 
@@ -579,7 +600,7 @@ export class Game {
 
   async sendToJail(pi: number) {
     const p = this.S.players[pi];
-    if (p.jail) return;
+    if (p.jail || p.out) return;
     if (this.spOf(pi, "Devil's Island") && p.cash >= 700 && (await this.ask(pi, { k: 'confirm', title: "DEVIL'S ISLAND", sub: [p.name], tone: TILES[tileAt("Devil's Island")].color,
       body: [note("You own Devil's Island. Pay $700 bail and only visit the Jail tile, with no stay?")], yes: 'PAY $700', no: 'GO TO JAIL' })) === true) {
       await this.pay(pi, 700, m`bail at ${T(tileAt("Devil's Island"), true)}`);

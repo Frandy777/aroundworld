@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState, type CSSProperties, type JSX } f
 import { LEVEL_NAMES, REGIONS, TILES, depInterest, maxLevel } from '../../shared/data';
 import { maxRounds } from '../../shared/state';
 import { leaveRoom } from '../controller';
+import { send } from '../net';
 import { CAM, focusTok, lookAtTile } from '../stage';
 import { G, actionBtn, activeTab, cards, cashEls, countdown, floats, hd2d, hudLive, lastRoll, paused, peeking, selectedTile, session, state, statsOf, tip, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
 import { Die, Face, Flag, FullBtn, Icon, Named, Pips, Rich, hex, money, tileHead } from './bits';
@@ -10,13 +11,13 @@ import { TileBody } from './tile';
 
 // ---- Top bar ----
 function Topbar() {
-  const S = useGame(), room = useCell(session).room, last = maxRounds(S), p = useCell(paused);
+  const S = useGame(), room = useCell(session).room, last = maxRounds(S), p = useCell(paused), me = G.me >= 0 ? S.players[G.me] : null;
   return (
     <header id="topbar" className="box">
       <div id="round">ROUND <b>{S.round}</b> {last === Infinity ? <>&middot; ENDLESS</> : `/ ${last}`}{p && <> <span className="badge blue">PAUSED</span></>}</div>
       <div className="tools">
         <button className="btn sm" id="btn-help" onClick={() => void openRules()}><Icon n="help" /></button>
-        <button className="btn sm" id="btn-menu" onClick={() => void openMenu(room!.code, leaveRoom)}><Icon n="menu" /></button>
+        <button className="btn sm" id="btn-menu" onClick={() => void openMenu(room!.code, leaveRoom, me && !me.out && !S.over ? () => send({ t: 'bankrupt' }) : undefined)}><Icon n="menu" /></button>
         <FullBtn />
       </div>
     </header>

@@ -74,6 +74,7 @@ export class Room extends DurableObject<Env> implements Host {
           g.run(true).catch((e) => console.error('game crashed', e));
         }
         for (const s of this.seats) if (s.left) g.forfeit(s.pi);
+        for (const pi of game.conceded ?? []) g.concede(pi); // declared bankruptcy mid-turn before the restart: out again, for the tape never said so
       }
       if (!this.anyOnline()) this.presence(); // the connections are gone (a restart cuts them): nobody can be waited for
       this.save(); // presence and legacy deadline migration must survive another eviction, including a rejected create RPC
@@ -93,7 +94,7 @@ export class Room extends DurableObject<Env> implements Host {
     if (this.game?.S.over) this.linger ||= Date.now() + OVER_MS;
     const { code, host, dev, settings, idle, expires, linger, seats } = this, saved = this.game?.saved;
     if (saved && saved.ckpt !== this.ckpt) this.ctx.storage.kv.put('ckpt', JSON.stringify((this.ckpt = saved.ckpt))); // a checkpoint is never changed, only replaced (see `Game.mark`): it is written when it is a new one
-    const json = JSON.stringify({ code, host, dev, settings, idle, expires, linger, seats, game: saved && { tape: saved.tape, due: saved.due, lapsed: saved.lapsed, pausedAt: saved.pausedAt } } satisfies Stored);
+    const json = JSON.stringify({ code, host, dev, settings, idle, expires, linger, seats, game: saved && { tape: saved.tape, due: saved.due, lapsed: saved.lapsed, pausedAt: saved.pausedAt, conceded: saved.conceded } } satisfies Stored);
     if (json !== this.stored) this.ctx.storage.kv.put('room', (this.stored = json));
     const at = Math.min(expires, ...[idle, linger, this.game?.pausedAt ? 0 : this.game?.due ?? 0, ...seats.map((s) => s.drop)].filter(Boolean)); // every stored room has a finite alarm, even if a deploy cuts all sockets without a close event; a paused game's frozen deadline is none
     if (at >= this.alarmAt) return;
@@ -287,6 +288,7 @@ export class Room extends DurableObject<Env> implements Host {
       }
       case 'start': if (!this.game && host && this.seats.length >= 2) this.start(); break;
       case 'answer': if (this.game && s.pi >= 0) this.game.answer(s.pi, msg.id, msg.v); break;
+      case 'bankrupt': if (this.game && s.pi >= 0) this.game.concede(s.pi); break;
       case 'pause': if (this.dev && host && typeof msg.on === 'boolean') this.game?.setPaused(msg.on); break;
       case 'again': if (this.game?.S.over) this.reset(); break;
     }

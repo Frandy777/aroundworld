@@ -33,8 +33,17 @@ export const openOrder = (players: Player[], passes: OrderPass[], order: number[
 
 export const openResults = (rank: RankRow[]) => openCard<'menu' | 'again'>((close) => <ResultsCard rank={rank} close={close} />).done;
 
-export const openMenu = (room: string, quit: () => void) => openCard((close) => (
+/** A choice that cannot be taken back confirms first: the safe option stays the default a key press lands on. */
+const openConfirm = (title: string, text: string, yes: string) => openCard<boolean>((close) => (
+  <Card title={title} tone={0xb13e53} dismiss="no" foot={<>
+    <Btn id="no" cls="primary" onClick={() => close(false)}>CANCEL</Btn>
+    <Btn id="yes" cls="danger" onClick={() => close(true)}>{yes}</Btn>
+  </>}><div className="note">{text}</div></Card>
+)).done;
+
+export const openMenu = (room: string, quit: () => void, bankrupt?: () => void) => openCard((close) => (
   <Card title="MENU" sub={`Room ${room}`} dismiss="resume" foot={<>
+    {bankrupt && <Btn id="bankrupt" cls="danger" onClick={() => void openConfirm('GO BANKRUPT?', 'Everything you own goes back to the bank and you are out of the game. You stay in the room and can keep watching.', 'GO BANKRUPT').then((yes) => { if (yes) { close(); bankrupt(); } })}>GO BANKRUPT</Btn>}
     <Btn id="quit" cls="danger" onClick={() => { close(); quit(); }}>QUIT TO TITLE</Btn>
     <Btn id="rules" onClick={() => void openRules()}>HOW TO PLAY</Btn>
     <Btn id="resume" cls="primary" onClick={() => close()}>RESUME</Btn>
