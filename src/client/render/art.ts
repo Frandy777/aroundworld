@@ -49,6 +49,29 @@ export const canvas = (w: number, h: number, draw: (g: CanvasRenderingContext2D,
   return c;
 };
 
+// ---- The mask of a texture: what a drawing says of its material, texel by texel (HD-2D reads it as `ormMap`, see light.ts) ----
+// A fill that has something to say says it with `m` = [gloss, height], both 0..1: gloss is how much of the texel is glass (the sharp bright gloss), height how far it stands out, 1 being the flat of the surface, so a frame,
+// a mortar line or a joint is sunk and HD-2D bevels it a pixel wide where the height steps. The mask is a canvas beside the colour's, on the same grid and through the same levels (see `lodMap`).
+// A fill with no `m` is flat and matte, and so is every texel of a drawing that never says anything: its mask is never made.
+export type Mask = [gloss: number, height: number];
+export type Fill = (c: string, x: number, y: number, w: number, h: number, m?: Mask | false) => void;
+const FLAT: Mask = [0, 1], rgb = ([a, b]: Mask) => `rgb(${Math.round(a * 255)},${Math.round(b * 255)},0)`;
+export const PANE: Mask = [1, 0.35]; // glass, set back in its frame
+export const SEAM: Mask = [0, 0.35]; // a frame, a mortar line, a course joint: matte, sunk
+export const GROOVE: Mask = [0, 0.7]; // a shallow joint between paving slabs or tiles
+const masks = new WeakMap<HTMLCanvasElement, HTMLCanvasElement>();
+export const maskOf = (c: HTMLCanvasElement) => masks.get(c); // the mask of a drawing, if it made one
+export const flatMask = (c: HTMLCanvasElement) => canvas(c.width, c.height, (g, w, h) => { g.fillStyle = rgb(FLAT); g.fillRect(0, 0, w, h); }); // the mask of one that did not
+export const filler = (g: CanvasRenderingContext2D): Fill => { // the fill of a drawing: its rectangle in the colour and in the mask (made at the first `m`; a fill after it with no `m` makes its texels flat again)
+  let k: CanvasRenderingContext2D | undefined;
+  return (c, x, y, w, h, m) => {
+    g.fillStyle = c; g.fillRect(x, y, w, h);
+    if (typeof document === 'undefined' || !(m || k)) return; // under Node (see ctx2d) there is no GPU to read a mask
+    if (!k) { const mask = flatMask(g.canvas); masks.set(g.canvas, mask); k = mask.getContext('2d')!; }
+    k.fillStyle = rgb(m || FLAT); k.fillRect(x, y, w, h);
+  };
+};
+
 // ---- Hard-edged text for the 3D textures: a hand-drawn 3x5 set. A letter has only 5 texels to live on and no font stays legible there (5 and 6, 8 and 9 merge). ----
 const TINY: Record<string, string> = { // '#' = ink; rows from the top down to the baseline, then an optional '|' and the rows hanging below it
   A: '.#./#.#/###/#.#/#.#', B: '##./#.#/##./#.#/##.', C: '.##/#../#../#../.##', D: '##./#.#/#.#/#.#/##.', E: '###/#../##./#../###',

@@ -3,7 +3,7 @@ import { TILES } from '../../shared/data';
 
 // ---- Two looks, one world ----
 // The restrained look (a pixel buffer, banded toon light, hard shadows, inked edges) is the game's own. HD-2D is the option, after Octopath Traveler: the same pixel-art
-// surfaces, kept sharp, under modern light. This file is the light of it: smooth sun and sky with GGX highlights, relief read off the textures, soft shadows (PCSS) and
+// surfaces, kept sharp, under modern light. This file is the light of it: smooth sun and sky with GGX highlights, glass and relief read off the textures' masks, soft shadows (PCSS) and
 // local lamps. hd2d.ts does the rest (occlusion, haze and light shafts, tilt-shift focus, bloom, tone map). Every lit material carries both looks, switched by one shared
 // uniform, and every light that is only for HD-2D is hidden while it is off, so the restrained look is drawn exactly as it was.
 export const hd = { on: false };
@@ -57,22 +57,50 @@ if (!SHADOW.includes('pcss')) { // three keeps its chunks across a hot update: p
 export const soft = <M extends THREE.Material>(m: M) => { m.onBeforeCompile = (sh) => void Object.assign(sh.uniforms, U); return m; };
 
 // The lit materials. Everything the restrained look does stays in the `uHd < 0.5` branches, untouched; HD-2D is Lambert with a GGX highlight per light, the sky in the mirror
-// direction by Fresnel, and a bump read off the texture's own brightness, so a pixel-art brick has mortar you can feel in a raking light.
-// uPbr: roughness, specular strength, metalness, relief. Glass is sharper and brighter than the rest: a texture's is found by its blue (the windows, the domes) unless `glassy` says otherwise.
+// direction by Fresnel, and a bevel a pixel wide where the texture's mask steps in height, so a pixel-art brick has mortar you can feel in a raking light.
+// uPbr: roughness, specular strength, metalness, relief. Glass is sharper and brighter than the rest: a texture's is where its mask says (the windows, drawn with it: art.ts) unless `glassy` says otherwise.
 export type Pbr = [rough: number, spec: number, metal: number, relief: number];
 const PBR: Pbr = [0.8, 1, 0, 0.5];
 export const PAINT: Pbr = [0.88, 0.25, 0, 0]; // a painted board (a card, a sign): matte, a little sheen, flat: nothing in it to read a relief from
 const DARK = new THREE.Color(0); // the lamps of a material that has none (see `nightlit`)
+export const ORM = new THREE.DataTexture(new Uint8Array([0, 255, 0, 255]), 1, 1); // the mask of a texture that says nothing of its material (flat and matte), bound where there is none to read: `uOrm` is 0 then
+ORM.needsUpdate = true;
+/** What `lit` reads of a material's textures in HD-2D, set by `lodMap` (scene.ts): `ormMap`, the mask of the texture (R gloss, G height, see art.ts) and `uOrm` whether it has one, and `uLv`, the sizes of the three drawings that are
+ * the first mips of its chain (see `hdPick`: a drawing is padded to halve exactly, and its own size is its grid). A material whose textures are no lodMap's has none of it: zeros. */
+export const texOf = (m: THREE.Material) => (m.userData.tex ??= { ormMap: { value: ORM }, uOrm: { value: 0 }, uLv: { value: [0, 1, 2].map(() => new THREE.Vector2()) } }) as { ormMap: THREE.IUniform<THREE.Texture>; uOrm: THREE.IUniform<number>; uLv: THREE.IUniform<THREE.Vector2[]> };
 const TOON = /* glsl */`
 varying vec3 vViewPosition;
 uniform vec4 uPbr;
-uniform float uBacklit, uBacklitHd, uLamp, uSwitch, uGlass, uFlat;
+uniform float uBacklit, uBacklitHd, uLamp, uSwitch, uGlass, uFlat, uOrm;
 uniform vec3 uNight;
+uniform vec2 uLv[ 3 ];
+uniform sampler2D ormMap;
 float hdGloss;
+int hdMip;
+vec2 hdDim, hdFw;
 struct ToonMaterial { vec3 diffuseColor; };
-#ifdef USE_MAP
-	float hdH( vec2 uv ) { return dot( texture2D( map, uv ).rgb, vec3( 0.299, 0.587, 0.114 ) ); }
-#endif
+// HD-2D reads a pixel texture through the box of one screen pixel (hdSample): a texel is flat but for the width of that pixel where it meets the next, so a line neither breaks up nor shimmers as the view turns. hdPick comes
+// first and says which mip the pixel reads, the grid of its texels (hdDim) and how many of them a pixel spans (hdFw). The three hand-drawn mips of a lodMap's chain (uLv, see scene.ts chainOf) are taken at the finest whose texels
+// are a whole pixel or more, like the restrained look's levels; past them, as the hardware rounds a plain texture's mips (a mip whose texels are up to 1.4 pixels wide). The derivatives are taken here, once, where every pixel of the quad does.
+vec2 hdGrid( sampler2D t, int k ) {
+	return uLv[ 0 ].x > 0.0 ? uLv[ min( k, 2 ) ] * exp2( float( min( 2 - k, 0 ) ) ) : vec2( textureSize( t, k ) );
+}
+void hdPick( sampler2D t, vec2 uv ) {
+	vec2 dx = dFdx( uv ), dy = dFdy( uv ), g = vec2( textureSize( t, 0 ) );
+	int top = int( log2( max( g.x, g.y ) ) + 0.01 ), own = uLv[ 0 ].x > 0.0 ? 2 : 0;
+	hdMip = 0; hdDim = hdGrid( t, 0 );
+	for ( int k = 1; k <= top; k ++ ) {
+		vec2 a = dx * hdDim, b = dy * hdDim;
+		if ( sqrt( max( dot( a, a ), dot( b, b ) ) ) <= ( hdMip < own ? 1.0 : 1.4142 ) ) break;
+		hdMip = k; hdDim = hdGrid( t, k );
+	}
+	hdFw = ( abs( dx ) + abs( dy ) ) * hdDim;
+}
+vec4 hdSample( sampler2D t, vec2 uv ) {
+	vec2 p = uv * hdDim, i = floor( p + 0.5 ), f = clamp( ( p - i ) / max( hdFw, 1e-4 ) + 0.5, 0.0, 1.0 ); // the nearest texel corner, and how far past it this pixel's box reaches
+	return textureLod( t, ( i - 0.5 + f ) / vec2( textureSize( t, hdMip ) ), float( hdMip ) );
+}
+float hdTap( vec2 c, vec2 sz ) { return textureLod( ormMap, c / sz, float( hdMip ) ).g; }
 float hdRough() { return mix( uPbr.x, 0.14, hdGloss ); }
 vec3 hdF0( vec3 albedo ) { return mix( vec3( 0.04 ), albedo, uPbr.z ); }
 #if NUM_HEMI_LIGHTS > 0
@@ -120,7 +148,23 @@ void RE_IndirectDiffuse_Toon( const in vec3 irradiance, const in vec3 geometryPo
 const GLOSS = /* glsl */`
 hdGloss = max( uGlass, 0.0 );
 #ifdef USE_MAP
-	if ( uGlass < 0.0 ) hdGloss = smoothstep( 0.1, 0.4, sampledDiffuseColor.b - max( sampledDiffuseColor.r, sampledDiffuseColor.g ) );
+	if ( uHd > 0.5 && uGlass < 0.0 && uOrm > 0.5 ) hdGloss = hdSample( ormMap, vMapUv ).r;
+#endif
+`;
+const MAP = /* glsl */`
+#ifdef USE_MAP
+	vec4 sampledDiffuseColor;
+	if ( uHd > 0.5 ) { hdPick( map, vMapUv ); sampledDiffuseColor = hdSample( map, vMapUv ); } else sampledDiffuseColor = texture2D( map, vMapUv );
+	diffuseColor *= sampledDiffuseColor;
+#endif
+${GLOSS}`;
+const EMISSIVE = /* glsl */`
+#ifdef USE_EMISSIVEMAP
+	#ifndef USE_MAP
+		if ( uHd > 0.5 ) hdPick( emissiveMap, vEmissiveMapUv );
+	#endif
+	vec4 emissiveColor = uHd > 0.5 ? hdSample( emissiveMap, vEmissiveMapUv ) : texture2D( emissiveMap, vEmissiveMapUv );
+	totalEmissiveRadiance *= emissiveColor.rgb;
 #endif
 `;
 const NIGHT = /* glsl */`
@@ -131,34 +175,37 @@ float night = smoothstep( 0.12, 1.0, uLamp ) * uSwitch;
 #endif
 totalEmissiveRadiance += uNight * night * ( 1.0 + 0.45 * uHd );
 `;
+// The relief is the step of the mask's height (G) across the edge of a texel, at the mip the pixel reads (hdPick) and only within the width of the pixel that straddles it (the same blend as hdSample's): a bevel a pixel wide at
+// every sunk frame and joint, and the flat of a texel, which has no height step, is never tilted.
 const RELIEF = /* glsl */`
 #ifdef USE_MAP
-	if ( uHd > 0.5 && uPbr.w > 0.0 ) {
-		vec2 ts = 1.0 / vec2( textureSize( map, 0 ) );
-		float hx = hdH( vMapUv + vec2( ts.x, 0.0 ) ) - hdH( vMapUv - vec2( ts.x, 0.0 ) ), hy = hdH( vMapUv + vec2( 0.0, ts.y ) ) - hdH( vMapUv - vec2( 0.0, ts.y ) );
+	if ( uHd > 0.5 && uPbr.w > 0.0 && uOrm > 0.5 ) {
+		vec2 sz = vec2( textureSize( ormMap, hdMip ) ), p = vMapUv * hdDim, i = floor( p + 0.5 ), e = p - i, w = max( hdFw, 1e-4 ), f = clamp( e / w + 0.5, 0.0, 1.0 );
+		float a = hdTap( i - 0.5, sz ), b = hdTap( i + vec2( 0.5, - 0.5 ), sz ), c = hdTap( i + vec2( - 0.5, 0.5 ), sz ), d = hdTap( i + 0.5, sz ); // the four texels round the corner: below left, right, above left, right
+		vec2 h = vec2( mix( b - a, d - c, f.y ), mix( c - a, d - b, f.x ) ) * step( abs( e ), 0.5 * w ); // the rise across the corner's two edges, where this pixel is on them
 		vec3 q0 = dFdx( - vViewPosition ), q1 = dFdy( - vViewPosition ), q1p = cross( q1, normal ), q0p = cross( normal, q0 );
 		vec2 s0 = dFdx( vMapUv ), s1 = dFdy( vMapUv );
 		vec3 T = q1p * s0.x + q0p * s1.x, B = q1p * s0.y + q0p * s1.y;
 		float m = max( dot( T, T ), dot( B, B ) );
-		if ( m > 1e-20 ) normal = normalize( normal - uPbr.w * ( hx * T + hy * B ) * inversesqrt( m ) );
+		if ( m > 1e-20 ) normal = normalize( normal - uPbr.w * ( h.x * T + h.y * B ) * inversesqrt( m ) );
 	}
 #endif
 `;
 /** onBeforeCompile of every `toon()` material (one function, so every program of the same kind is shared: three names a program by its text). */
 export function lit(this: THREE.Material, sh: THREE.WebGLProgramParametersWithUniforms) {
-  Object.assign(sh.uniforms, U, { uPbr: { value: new THREE.Vector4(...((this.userData.pbr as Pbr | undefined) ?? PBR)) }, uBacklit: { value: (this.userData.backlit as number | undefined) ?? 0 }, uBacklitHd: backlitOf(this), uGlass: { value: (this.userData.glass as number | undefined) ?? -1 }, uNight: { value: (this.userData.night as THREE.Color | undefined) ?? DARK }, uSwitch: switchOf(this), uFlat: { value: (this.userData.flat as number | undefined) ?? -1 } });
+  Object.assign(sh.uniforms, U, { uPbr: { value: new THREE.Vector4(...((this.userData.pbr as Pbr | undefined) ?? PBR)) }, uBacklit: { value: (this.userData.backlit as number | undefined) ?? 0 }, uBacklitHd: backlitOf(this), uGlass: { value: (this.userData.glass as number | undefined) ?? -1 }, uNight: { value: (this.userData.night as THREE.Color | undefined) ?? DARK }, uSwitch: switchOf(this), uFlat: { value: (this.userData.flat as number | undefined) ?? -1 } }, texOf(this));
   sh.fragmentShader = sh.fragmentShader
     .replace('#include <lights_toon_pars_fragment>', '')
     .replace('#include <shadowmap_pars_fragment>', `#include <shadowmap_pars_fragment>\n${TOON}`)
-    .replace('#include <map_fragment>', `#include <map_fragment>\n${GLOSS}`)
+    .replace('#include <map_fragment>', MAP) // the colour's own sample, through HD-2D's pixel filter there (see hdSample); the restrained look's is the one it was
     .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${RELIEF}`)
-    .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${NIGHT}\ntotalEmissiveRadiance += diffuseColor.rgb * mix( uBacklit, uBacklitHd, uHd ) * uLamp;`) // a nightlit one's lamps (the emissive map is gated before anything is added to it), and a backlit material's own colour (see `backlit`), unshadowed
+    .replace('#include <emissivemap_fragment>', `${EMISSIVE}\n${NIGHT}\ntotalEmissiveRadiance += diffuseColor.rgb * mix( uBacklit, uBacklitHd, uHd ) * uLamp;`) // a nightlit one's lamps (the emissive map is gated before anything is added to it), and a backlit material's own colour (see `backlit`), unshadowed
     .replace('#include <opaque_fragment>', `if ( uHd < 0.5 && uFlat >= 0.0 ) outgoingLight = diffuseColor.rgb * mix( 1.0, uFlat, uLamp );\n#include <opaque_fragment>`) // a flat material (see `flat`) is unlit in the restrained look: its exact colour, dimmed as the lamp comes on
     .replace('reflectedLight.indirectDiffuse + totalEmissiveRadiance', 'reflectedLight.indirectDiffuse + totalEmissiveRadiance + reflectedLight.directSpecular + reflectedLight.indirectSpecular');
 }
 
-/** How much of a material is glass, the sharp bright gloss of `lit`: `glassy(m)` says all of it (a pane of plain colour, which has no texture to find its glass in), `glassy(m, 0)` none (a blue floor, the sea of the globe, a player's colour:
- * those blues are paint and water, not windows). Left alone, a textured material has glass where its texture is blue (the windows of a wall) and a plain one has none. */
+/** How much of a material is glass, the sharp bright gloss of `lit`: `glassy(m)` says all of it (a pane of plain colour, which has no texture to find its glass in), `glassy(m, 0)` none: it forces the mask aside (a blue floor, the sea of the globe,
+ * a player's colour are paint and water, not windows, though a texture that has no mask has none to begin with). Left alone, a textured material has glass where its mask says (the windows of a wall, drawn with it) and a plain one has none. */
 export const glassy = <M extends THREE.Material>(m: M, share = 1) => { m.userData.glass = share; return m; };
 
 /** The lamp inside a tile (artificial light, so it follows `uLamp`) shines up through this material: `t` of its own colour, texels and all, is added to what the sun and sky give it, in either look (see `lit`).

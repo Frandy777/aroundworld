@@ -1,8 +1,7 @@
-import { PAL, hex, lum, shade } from './art';
+import { PAL, GROOVE, filler, hex, lum, shade, type Fill } from './art';
 import type { Tile } from '../../shared/data';
 
 type Ctx = CanvasRenderingContext2D;
-type Fill = (c: string, x: number, y: number, w: number, h: number) => void;
 type Scale = (n: number, min?: number) => number; // a near-level length on this level's grid
 
 // ---- Tile textures, drawn once per zoom level (see scene.js): an info CARD, the GROUND it lies on and the owner's PAD ----
@@ -31,11 +30,11 @@ const ACCENT: Record<string, number> = { transport: 0x4da3ff, build: 0xf0a020, m
 const GOLD = ['#fff6b0', '#ffd23f', '#b36a14'];
 const tone = (t: Tile): [number, boolean] => { const col = t.type === 'invest' ? ACCENT[t.kind] : t.color; return [col, t.type !== 'public' && lum(col) > 0.55]; }; // a card's band colour, and whether it takes dark ink (light bands) or white (dark ones)
 export const codeOf = (t: Tile): [string, number] => [CODE[t.name], tone(t)[1] ? 0x0b0e24 : 0xffffff]; // a card's code and the ink it is carved in: dark on a light band, white on a dark one
-const filler = (g: Ctx) => (c: string, x: number, y: number, w: number, h: number) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
 // The ink edge: one texel round a texture, its colour per level. A coarse level's texel is 1 - 2 buffer pixels wide, and where a slab meets the sea the ink pass (see scene) draws a pixel of its own just outside it: with a solid
 // edge as well that was a band of black 2 - 3 pixels thick round every tile, and a hard black line round every plot and card. So the coarse levels draw it half see-through, a dark tone of the colour under it, and the near level keeps it solid.
+// HD-2D has no ink pass: its drawings (`hd`, the mips of one texture, see lodMap) keep it solid at every level, for the tile's outline to be clean at a distance.
 const RING = [PAL.o + '80', PAL.o + '80', PAL.o];
-const edge = (fill: Fill, w: number, h: number, L: number, ring = RING[L]) => { // bevel (the finer levels) + ink edge
+const edge = (fill: Fill, w: number, h: number, L: number, hd: boolean, ring = hd ? PAL.o : RING[L]) => { // bevel (the finer levels) + ink edge
   if (L) {
     fill('rgba(255,255,255,.45)', 1, 1, w - 2, 1); fill('rgba(255,255,255,.45)', 1, 1, 1, h - 2);
     fill('rgba(0,0,0,.25)', 1, h - 2, w - 2, 1); fill('rgba(0,0,0,.25)', w - 2, 1, 1, h - 2);
@@ -55,7 +54,7 @@ const FLOOR: Record<string, (f: Fill, c: number, x: number, y: number, w: number
   tax: (f, c, x, y, w, h, s) => { for (let j = s(3); j < h; j += s(5, 3)) f(shade(c, 1.3), x, y + j, w, 1); f(shade(c, 0.6), x + s(6), y, 1, h); },                                  // ledger paper
   casino: (f, c, x, y, w, h, s) => { const q = s(8, 2); for (let i = 0; i < w / q; i++) for (let j = 0; j < h / q; j++) f((i + j) & 1 ? shade(c, 0.7) : shade(c, 1.15), x + i * q, y + j * q, q, q); }, // felt checker
   club: (f, c, x, y, w, h, s) => { const q = s(8, 2); for (let i = 0; i < w / q; i++) for (let j = 0; j < h / q; j++) f((i + j) & 1 ? shade(c, 0.65) : shade(c, 1.3), x + i * q, y + j * q, q, q); },  // dance floor
-  bank: (f, c, x, y, w, h, s) => { const p = s(14, 4); for (let i = 0; i < w; i += p) for (let j = 0; j < h; j += p) { f(shade(c, 1.35), x + i, y + j, p - 1, p - 1); f(shade(c, 1.55), x + i, y + j, p - 1, 1); } }, // marble tiles
+  bank: (f, c, x, y, w, h, s) => { const p = s(14, 4); f(hex(c), x, y, w, h, GROOVE); for (let i = 0; i < w; i += p) for (let j = 0; j < h; j += p) { f(shade(c, 1.35), x + i, y + j, p - 1, p - 1); f(shade(c, 1.55), x + i, y + j, p - 1, 1); } }, // marble tiles, the gap between them a shallow joint (the ground's colour under them, laid again for its mask)
   news: (f, c, x, y, w, h, s) => { for (let j = s(2), k = 0; j < h; j += s(4, 2), k++) f(shade(c, 0.6), x + s(4), y + j, w - 2 * s(4) - (k & 1) * s(7), s(2)); },                    // columns of print
   area51: (f, c, x, y, w, h, s) => { // landing rings round the middle of the tile
     const lit = shade(c, 1.4);
@@ -66,7 +65,7 @@ const FLOOR: Record<string, (f: Fill, c: number, x: number, y: number, w: number
   },
 };
 
-export function drawCard(g: Ctx, t: Tile, L: number) {
+export function drawCard(g: Ctx, t: Tile, L: number, hd = false) {
   const [W, H] = CARD_SIZE[L], fill = filler(g);
   const pub = t.type === 'public', sp = t.type === 'special', col = tone(t)[0];
   const [hi, base, lo] = [shade(col, 1.3, 14), hex(col), shade(col, 0.62)];
@@ -85,35 +84,35 @@ export function drawCard(g: Ctx, t: Tile, L: number) {
     for (const [x, y, w, h] of [[1, 1, W - 2, th], [1, H - 1 - th, W - 2, th], [1, 1, th, H - 2], [W - 1 - th, 1, th, H - 2]]) fill(GOLD[1], x, y, w, h);
     fill(GOLD[0], 1, 1, W - 2, 1); fill(GOLD[2], 1, H - 2, W - 2, 1);
   }
-  edge(fill, W, H, L, sp && !L ? GOLD[1] : RING[L]);
+  edge(fill, W, H, L, hd, sp && !L ? GOLD[1] : undefined);
 }
 
 // Pad: the carpet under a building, in the owner's colour (grey when vacant or mortgaged). Bevel, lit top-left band and (near) the card's dither, so it reads as a solid colour block at any zoom.
-export function drawPad(g: Ctx, color: number, w: number, h: number, L: number) {
+export function drawPad(g: Ctx, color: number, w: number, h: number, L: number, hd = false) {
   const fill = filler(g), lit = shade(color, 1.35, 30), m = Math.max(1, Math.round(3 / 2 ** (2 - L)));
   fill(shade(color, 0.7), 0, 0, w, h);
   fill(hex(color), m, m, w - 2 * m, h - 2 * m);
   fill(lit, m, m, w - 2 * m, 1); fill(lit, m, m, 1, h - 2 * m);
   if (L === 2) for (let y = 5; y < h - 5; y++) for (let x = 5 + (y & 1); x < w - 5; x += 2) fill('rgba(255,255,255,.08)', x, y, 1, 1);
-  edge(fill, w, h, L);
+  edge(fill, w, h, L, hd);
 }
 
 // Ground: city tiles are paved with 4 x 4 square slabs in a soft tint of the region colour, joined by hairlines. Flat and quiet on purpose: nothing like
 // the side walls' courses, so it reads as floor, and nothing for the eye to read, so the cards and buildings stand out.
 // A hatched yard for investments, the signature floor for public tiles. Special cities get a gold inlay just inside the tile edge.
-export function drawGround(g: Ctx, type: string, kind: string, color: number, L: number) {
+export function drawGround(g: Ctx, type: string, kind: string, color: number, L: number, hd = false) {
   const G = 32 << L, fill = filler(g), s = (n: number, min = 1) => Math.max(min, Math.round((n * G) / 128));
   if (type === 'public') { const m = s(4); fill(hex(color), 0, 0, G, G); FLOOR[kind]?.(fill, color, m, m, G - 2 * m, G - 2 * m, s); }
   else if (type === 'invest') { fill('#c3cbe0', 0, 0, G, G); for (let i = -G; i < G; i += s(12, 3)) for (let j = 0; j < G; j++) fill('#b3bdd6', i + j, j, s(4), 1); }
   else {
     const tint = (t: number) => shade(color, 0.38, t), S = G / 4, joint = tint(112);
     fill(tint(130), 0, 0, G, G);
-    for (let i = S; i < G; i += S) { fill(joint, i, 1, 1, G - 2); fill(joint, 1, i, G - 2, 1); }
+    for (let i = S; i < G; i += S) { fill(joint, i, 1, 1, G - 2, GROOVE); fill(joint, 1, i, G - 2, 1, GROOVE); } // real joints between slabs: the only relief in the paving
     if (type === 'special') {
       const m = s(7), th = s(3);
       for (const [x, y, w, h] of [[m, m, G - 2 * m, th], [m, G - m - th, G - 2 * m, th], [m, m, th, G - 2 * m], [G - m - th, m, th, G - 2 * m]]) fill(GOLD[1], x, y, w, h);
       fill(GOLD[0], m, m, G - 2 * m, 1); fill(GOLD[2], m, G - m - 1, G - 2 * m, 1);
     }
   }
-  edge(fill, G, G, L);
+  edge(fill, G, G, L, hd);
 }

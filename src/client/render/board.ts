@@ -25,11 +25,12 @@ export const lotLit = (i: number): boolean => tileGroups[i]?.userData.lit ?? fal
 const THROUGH = { floor: 0.1, plot: 0.5, plotHd: 0.18, ink: 0.9, card: { white: 0.3, dark: 0.85 }, cardHd: 0.12 };
 
 // ---- Tile surfaces: the info card, the ground and the plot, one drawing per zoom level (see labels) ----
-const cardTex = (t: Tile, L: number) => pixelTexture(canvas(...CARD_SIZE[L], (g) => drawCard(g, t, L)));
-const groundTex = memo((type: string, kind: string, color: number, L: number) => pixelTexture(canvas(32 << L, 32 << L, (g) => drawGround(g, type, kind, color, L))));
+// `hd`: the drawing for HD-2D's mip chain, which differs from the restrained look's in the ring of its edge (see lodMap and labels.ts `edge`)
+const cardTex = (t: Tile, L: number, hd: boolean) => pixelTexture(canvas(...CARD_SIZE[L], (g) => drawCard(g, t, L, hd)));
+const groundTex = memo((type: string, kind: string, color: number, L: number, hd: boolean) => pixelTexture(canvas(32 << L, 32 << L, (g) => drawGround(g, type, kind, color, L, hd))));
 // the plot, in whole texels of each level: top face carries the carpet, the walls are a darker tone of the same colour
 const padMats = memo((color: number) => {
-  const side = backlit(toon(shade(color, 0.6)), THROUGH.plot), top = glassy(lodMap(backlit(toon(0xffffff), THROUGH.plot), (L) => pixelTexture(canvas(texels(PAD.w, L), texels(PAD.d, L), (g, w, h) => drawPad(g, color, w, h, L)))), 0); // an owner's blue is paint, not glass
+  const side = backlit(toon(shade(color, 0.6)), THROUGH.plot), top = glassy(lodMap(backlit(toon(0xffffff), THROUGH.plot), (L, hd) => pixelTexture(canvas(texels(PAD.w, L), texels(PAD.d, L), (g, w, h) => drawPad(g, color, w, h, L, hd)))), 0); // an owner's blue is paint, not glass
   return [side, top];
 });
 
@@ -68,12 +69,12 @@ export function createBoard() {
     g.position.set(POS[t.i].x, 0, POS[t.i].z);
     g.userData = { lift: 0, lit: false };
     const side = lodMap(toon(t.color), sideTex);
-    const ground = glassy(lodMap(backlit(toon(0xffffff), THROUGH.floor), (L) => groundTex(t.type, t.kind, t.color, L)), 0); // lit: buildings and tokens cast their shadows on it; a region's blue is paving, not glass
+    const ground = glassy(lodMap(backlit(toon(0xffffff), THROUGH.floor), (L, hd) => groundTex(t.type, t.kind, t.color, L, hd)), 0); // lit: buildings and tokens cast their shadows on it; a region's blue is paving, not glass
     const slab = new THREE.Mesh(slabGeo(SZ, SLAB, SZ), [side, ground]);
     slab.position.y = (TOP - 0.8) / 2;
     slab.receiveShadow = slab.castShadow = true;
     const [code, fg] = codeOf(t), letters = new THREE.Mesh(codeGeo(code), inkMat(fg, false));
-    const card = new THREE.Mesh(CARD_GEO, flat(backlit(glassy(lodMap(toon(0xffffff, {}, PAINT), (L) => cardTex(t, L)), 0), THROUGH.cardHd), fg === 0xffffff ? THROUGH.card.white : THROUGH.card.dark)); // HD-2D lights it (soft shadows by day, the lamps' tint by night); the restrained look draws it unlit as before: exact colours, no shadow smudges. A region's blue is paint, not glass
+    const card = new THREE.Mesh(CARD_GEO, flat(backlit(glassy(lodMap(toon(0xffffff, {}, PAINT), (L, hd) => cardTex(t, L, hd)), 0), THROUGH.cardHd), fg === 0xffffff ? THROUGH.card.white : THROUGH.card.dark)); // HD-2D lights it (soft shadows by day, the lamps' tint by night); the restrained look draws it unlit as before: exact colours, no shadow smudges. A region's blue is paint, not glass
     card.receiveShadow = true;
     card.position.set(CARD.x, TOP + 0.03, CARD.z);
     letters.position.copy(card.position);

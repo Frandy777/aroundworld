@@ -2,15 +2,13 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { lodMap, pixelTexture, texels, toon, DENSITY } from './scene';
 import { PAINT, flat, glassy, glow, nightlit, type Pbr } from './light';
-import { canvas, paint, hex, shade, ink, inkWidth, inkHeight } from './art';
+import { PANE, SEAM, canvas, filler, paint, hex, shade, ink, inkWidth, inkHeight, type Fill, type Mask } from './art';
 import { SZ, SLAB } from './layout';
-
-type Fill = (c: string, x: number, y: number, w: number, h: number) => void;
 
 // ---- Pixel textures: one drawing per zoom level L (0 far, 1 mid, 2 near; see scene.js), each a design on its own grid of 1/4, 1/2 or all of the world pixel
 // density (DENSITY, ~22 texels per world unit). Shapes and materials are shared through memo ----
 export const memo = <A extends unknown[], R>(fn: (...a: A) => R) => { const c = new Map<string, R>(); return (...a: A): R => { const k = a.join('|'); if (!c.has(k)) c.set(k, fn(...a)); return c.get(k)!; }; };
-const tex = (w: number, h: number, draw: (f: Fill, w: number, h: number, g: CanvasRenderingContext2D) => void, repeat?: number) => pixelTexture(canvas(w, h, (g, W, H) => draw((c, x, y, bw, bh) => { g.fillStyle = c; g.fillRect(x, y, bw, bh); }, W, H, g)), repeat);
+const tex = (w: number, h: number, draw: (f: Fill, w: number, h: number, g: CanvasRenderingContext2D) => void, repeat?: number) => pixelTexture(canvas(w, h, (g, W, H) => draw(filler(g), W, H, g)), repeat);
 
 // side wall: stone courses with a lit top edge and a dark waterline (grey, tinted per tile by the material colour). Half a wall wide, shown twice.
 // Courses are 8 texels tall near, 4 mid, 3 far (two of them, with bigger stones)
@@ -20,8 +18,8 @@ export const sideTex = memo((L: number) => {
     f('#bcbcbc', 0, 0, w, h); f('#f2f2f2', 0, 0, w, 1); if (L === 2) f('#dadada', 0, 1, w, 1);
     for (let r = 0; r < rows; r++) {
       const y = top + r * c;
-      f('#d2d2d2', 0, y, w, 1); f('#7c7c7c', 0, y + c - 1, w, 1);
-      for (let x = (r & 1) * (jp / 2); x < w; x += jp) f('#7c7c7c', x, y, 1, c - 1);
+      f('#d2d2d2', 0, y, w, 1); f('#7c7c7c', 0, y + c - 1, w, 1, SEAM);
+      for (let x = (r & 1) * (jp / 2); x < w; x += jp) f('#7c7c7c', x, y, 1, c - 1, SEAM);
     }
     f('#6a6a6a', 0, h - wl, w, wl);
   });
@@ -32,26 +30,26 @@ export const sideTex = memo((L: number) => {
 // + entrance, 'lobby' windows + glass double doors under a sign band, 'glass' curtain wall. The windows get a frame, glint and sill near, a head and sill mid, and are bare slits far
 const STOREY: [number, number][] = [[3, 5], [5, 10], [11, 20]];
 const WINDOW: ((f: Fill, x: number) => void)[] = [
-  (f, x) => { f('#3f6fd0', x + 1, 1, 1, 3); f('#7db6ff', x + 1, 1, 1, 1); },
-  (f, x) => { f('#1a2250', x + 1, 1, 3, 1); f('#7db6ff', x + 1, 2, 3, 2); f('#3f6fd0', x + 1, 4, 3, 3); f('#dce8ff', x + 1, 2, 1, 1); f('#aaa', x, 7, 5, 1); },
-  (f, x) => { f('#1a2250', x + 2, 4, 7, 10); f('#7db6ff', x + 3, 5, 5, 3); f('#3f6fd0', x + 3, 8, 5, 5); f('#dce8ff', x + 3, 5, 1, 2); f('#f4f4f4', x + 1, 14, 9, 1); f('#aaa', x + 1, 15, 9, 1); }, // frame, sky, shade, glint, sill
+  (f, x) => { f('#3f6fd0', x + 1, 1, 1, 3, PANE); f('#7db6ff', x + 1, 1, 1, 1, PANE); },
+  (f, x) => { f('#1a2250', x + 1, 1, 3, 1, SEAM); f('#7db6ff', x + 1, 2, 3, 2, PANE); f('#3f6fd0', x + 1, 4, 3, 3, PANE); f('#dce8ff', x + 1, 2, 1, 1, PANE); f('#aaa', x, 7, 5, 1); },
+  (f, x) => { f('#1a2250', x + 2, 4, 7, 10, SEAM); f('#7db6ff', x + 3, 5, 5, 3, PANE); f('#3f6fd0', x + 3, 8, 5, 5, PANE); f('#dce8ff', x + 3, 5, 1, 2, PANE); f('#f4f4f4', x + 1, 14, 9, 1); f('#aaa', x + 1, 15, 9, 1); }, // frame, sky, shade, glint, sill
 ];
 const PANELS: ((f: Fill, x: number) => void)[] = [
-  (f, x) => { f('#27479c', x, 0, 2, 3); f('#4f86e8', x, 0, 2, 1); },
-  (f, x) => { for (const y of [0, 5]) { f('#27479c', x, y, 4, 4); f('#4f86e8', x, y, 4, 1); f('#cfe8ff', x + 1, y + 1, 1, 1); } },
-  (f, x) => { for (const y of [1, 10]) { f('#27479c', x + 1, y, 9, 8); f('#4f86e8', x + 1, y, 9, 3); f('#cfe8ff', x + 2, y + 1, 2, 1); } },
+  (f, x) => { f('#27479c', x, 0, 2, 3, PANE); f('#4f86e8', x, 0, 2, 1, PANE); },
+  (f, x) => { for (const y of [0, 5]) { f('#27479c', x, y, 4, 4, PANE); f('#4f86e8', x, y, 4, 1, PANE); f('#cfe8ff', x + 1, y + 1, 1, 1, PANE); } },
+  (f, x) => { for (const y of [1, 10]) { f('#27479c', x + 1, y, 9, 8, PANE); f('#4f86e8', x + 1, y, 9, 3, PANE); f('#cfe8ff', x + 2, y + 1, 2, 1, PANE); } },
 ];
 const DOOR: ((f: Fill, w: number, dw: number) => void)[] = [ // dw = the door's width
-  (f, w, dw) => { const x = (w - dw) / 2; f('#3a2008', x - 1, 2, dw + 2, 3); f('#8a5a2b', x, 3, dw, 2); },
-  (f, w, dw) => { const x = (w - dw) / 2; f('#3a2008', x - 1, 3, dw + 2, 7); f('#7db6ff', x, 4, dw, 2); f('#8a5a2b', x, 6, dw, 3); f('#ffd23f', x + dw - 1, 7, 1, 1); f('#ffe9a0', (w >> 1) - 1, 1, 2, 1); f('#bdbdbd', x - 1, 9, dw + 2, 1); },
-  (f, w, dw) => { const x = (w - dw) / 2; f('#3a2008', x - 1, 5, dw + 2, 15); f('#8a5a2b', x, 6, dw, 14); f('#a8743c', x, 6, dw, 1); f('#7db6ff', x + 1, 7, dw - 2, 4); f('#ffd23f', x + dw - 2, 14, 1, 1); f('#ffe9a0', (w >> 1) - 1, 3, 2, 1); f('#bdbdbd', x - 2, 19, dw + 4, 1); },
+  (f, w, dw) => { const x = (w - dw) / 2; f('#3a2008', x - 1, 2, dw + 2, 3, SEAM); f('#8a5a2b', x, 3, dw, 2); },
+  (f, w, dw) => { const x = (w - dw) / 2; f('#3a2008', x - 1, 3, dw + 2, 7, SEAM); f('#7db6ff', x, 4, dw, 2, PANE); f('#8a5a2b', x, 6, dw, 3); f('#ffd23f', x + dw - 1, 7, 1, 1); f('#ffe9a0', (w >> 1) - 1, 1, 2, 1); f('#bdbdbd', x - 1, 9, dw + 2, 1); },
+  (f, w, dw) => { const x = (w - dw) / 2; f('#3a2008', x - 1, 5, dw + 2, 15, SEAM); f('#8a5a2b', x, 6, dw, 14); f('#a8743c', x, 6, dw, 1); f('#7db6ff', x + 1, 7, dw - 2, 4, PANE); f('#ffd23f', x + dw - 2, 14, 1, 1); f('#ffe9a0', (w >> 1) - 1, 3, 2, 1); f('#bdbdbd', x - 2, 19, dw + 4, 1); },
 ];
 const LOBBY: ((f: Fill, w: number) => void)[] = [ // two glass leaves in a dark surround, under a navy sign band with a gold rule; the doors take the two middle columns of a 4-column storey
-  (f, w) => { const x = (w >> 1) - 2; f('#1a2250', x, 1, 4, 4); f('#7db6ff', x + 1, 2, 2, 2); },
-  (f, w) => { const x = (w >> 1) - 4; f('#1a2250', x - 1, 1, 10, 2); f('#ffd23f', x + 1, 2, 6, 1); f('#2b3350', x - 1, 3, 10, 7); for (const d of [0, 5]) { f('#7db6ff', x + d, 4, 3, 3); f('#4a5a7a', x + d, 7, 3, 2); } f('#bdbdbd', x - 1, 9, 10, 1); },
+  (f, w) => { const x = (w >> 1) - 2; f('#1a2250', x, 1, 4, 4, SEAM); f('#7db6ff', x + 1, 2, 2, 2, PANE); },
+  (f, w) => { const x = (w >> 1) - 4; f('#1a2250', x - 1, 1, 10, 2); f('#ffd23f', x + 1, 2, 6, 1); f('#2b3350', x - 1, 3, 10, 7, SEAM); for (const d of [0, 5]) { f('#7db6ff', x + d, 4, 3, 3, PANE); f('#4a5a7a', x + d, 7, 3, 2); } f('#bdbdbd', x - 1, 9, 10, 1); },
   (f, w) => {
-    const x = (w >> 1) - 8; f('#1a2250', x - 2, 3, 20, 2); f('#ffd23f', x, 5, 16, 1); f('#2b3350', x - 2, 6, 20, 14);
-    for (const d of [0, 9]) { f('#7db6ff', x + d, 7, 7, 3); f('#3f6fd0', x + d, 10, 7, 4); f('#dce8ff', x + d + 1, 8, 2, 1); f('#4a5a7a', x + d, 14, 7, 5); f('#ffd23f', x + (d ? 9 : 6), 10, 1, 3); }
+    const x = (w >> 1) - 8; f('#1a2250', x - 2, 3, 20, 2); f('#ffd23f', x, 5, 16, 1); f('#2b3350', x - 2, 6, 20, 14, SEAM);
+    for (const d of [0, 9]) { f('#7db6ff', x + d, 7, 7, 3, PANE); f('#3f6fd0', x + d, 10, 7, 4, PANE); f('#dce8ff', x + d + 1, 8, 2, 1, PANE); f('#4a5a7a', x + d, 14, 7, 5); f('#ffd23f', x + (d ? 9 : 6), 10, 1, 3); }
     f('#bdbdbd', x - 3, 19, 22, 1);
   },
 ];
@@ -60,7 +58,7 @@ const facade = memo((cols: number, kind: string, L: number) => {
   return tex(cols * cw, h, (f, w) => {
     f(kind === 'glass' ? '#d8e4f8' : '#fff', 0, 0, w, h);
     if (L === 2) f('#e2e2e2', 0, 18, w, 1);
-    f('#c4c4c4', 0, h - 1, w, 1); // ledge
+    f('#c4c4c4', 0, h - 1, w, 1, SEAM); // ledge
     for (let c = 0; c < cols; c++) {
       if (entrance && Math.abs(c * cw + cw / 2 - w / 2) < [2, 4, 8][L]) continue;
       (kind === 'glass' ? PANELS : WINDOW)[L](f, c * cw);
@@ -95,11 +93,11 @@ const GLAZING: Record<string, [number, number, number, number][]> = { // the gla
 };
 const RIBBON: [number, number, number, number][] = [[1, 5, 1, 2], [2, 5, 1, 2], [4, 5, 1, 2]]; // a tower's storey, far, mid, near: floors to it, rows to a floor, rows of spandrel over the glass of a floor, rows of glass (a strip the width of the face)
 const HALL: ((f: Fill, w: number) => void)[] = [ // a flat's entrance: two glass leaves in a dark surround under a navy sign band with a gold rule, the leaves tall (the glass takes all but a low kickplate); the two middle columns of 4
-  (f, w) => { const x = (w >> 1) - 2; f('#1a2250', x, 1, 4, 4); f('#7db6ff', x + 1, 2, 2, 2); },
-  (f, w) => { const x = (w >> 1) - 4; f('#1a2250', x - 1, 1, 10, 2); f('#ffd23f', x + 1, 2, 6, 1); f('#2b3350', x - 1, 3, 10, 7); for (const d of [0, 5]) { f('#7db6ff', x + d, 4, 3, 2); f('#3f6fd0', x + d, 6, 3, 2); f('#4a5a7a', x + d, 8, 3, 1); } f('#bdbdbd', x - 1, 9, 10, 1); },
+  (f, w) => { const x = (w >> 1) - 2; f('#1a2250', x, 1, 4, 4, SEAM); f('#7db6ff', x + 1, 2, 2, 2, PANE); },
+  (f, w) => { const x = (w >> 1) - 4; f('#1a2250', x - 1, 1, 10, 2); f('#ffd23f', x + 1, 2, 6, 1); f('#2b3350', x - 1, 3, 10, 7, SEAM); for (const d of [0, 5]) { f('#7db6ff', x + d, 4, 3, 2, PANE); f('#3f6fd0', x + d, 6, 3, 2, PANE); f('#4a5a7a', x + d, 8, 3, 1); } f('#bdbdbd', x - 1, 9, 10, 1); },
   (f, w) => {
-    const x = (w >> 1) - 8; f('#1a2250', x - 2, 3, 20, 2); f('#ffd23f', x, 5, 16, 1); f('#2b3350', x - 2, 6, 20, 14);
-    for (const d of [0, 9]) { f('#7db6ff', x + d, 7, 7, 4); f('#3f6fd0', x + d, 11, 7, 6); f('#dce8ff', x + d + 1, 8, 2, 1); f('#4a5a7a', x + d, 17, 7, 2); f('#ffd23f', x + (d ? 9 : 6), 10, 1, 3); }
+    const x = (w >> 1) - 8; f('#1a2250', x - 2, 3, 20, 2); f('#ffd23f', x, 5, 16, 1); f('#2b3350', x - 2, 6, 20, 14, SEAM);
+    for (const d of [0, 9]) { f('#7db6ff', x + d, 7, 7, 4, PANE); f('#3f6fd0', x + d, 11, 7, 6, PANE); f('#dce8ff', x + d + 1, 8, 2, 1, PANE); f('#4a5a7a', x + d, 17, 7, 2); f('#ffd23f', x + (d ? 9 : 6), 10, 1, 3); }
     f('#bdbdbd', x - 3, 19, 22, 1);
   },
 ];
@@ -109,17 +107,17 @@ const PORTAL: [number, number, number, number][] = [[3, 3, 1, 1], [3, 4, 4, 3], 
 const portal = (f: Fill, L: number, night: boolean, x: number, w: number) => { // the lobby's doors in the w texels from x (its two middle columns, under the strip of the first floor): two glass leaves in a dark recess on a step, lit by night
   const [top, gt, gh, lw] = PORTAL[L], leaves = [x + 1, x + w - 1 - lw], h = STOREY[L][1];
   if (night) return leaves.forEach((lx) => lamp(f, L, lx, gt, lw, gh, 0xffe9c0));
-  f('#2b3350', x, top, w, h - top); f('#bdbdbd', x, h - 1, w, 1);
-  for (const lx of leaves) { f('#3f6fd0', lx, gt, lw, gh); f('#7db6ff', lx, gt, lw, [1, 2, 4][L]); if (L) f('#dce8ff', lx + 1, gt, L, 1); }
+  f('#2b3350', x, top, w, h - top, SEAM); f('#bdbdbd', x, h - 1, w, 1);
+  for (const lx of leaves) { f('#3f6fd0', lx, gt, lw, gh, PANE); f('#7db6ff', lx, gt, lw, [1, 2, 4][L], PANE); if (L) f('#dce8ff', lx + 1, gt, L, 1, PANE); }
 };
 // A window with its glass at (x, y), w x h: by day in a frame with a glint and a sill, by night a lamp if `tone` says it is lit. A curtain-wall `cell` is bare glass, lighter at the top.
 const BLUE = ['#1a2250', '#3f6fd0', '#7db6ff', '#dce8ff'], AQUA = ['#2b3a5c', '#5cc0d8', '#a8ecf6', '#f2feff']; // a pane's frame, glass, sky (the top of it) and glint: a house's, and a villa's, which is lighter
 const pane = (f: Fill, L: number, night: boolean, x: number, y: number, w: number, h: number, tone?: number, [frame, glass, sky, glint] = BLUE) => {
   if (night) return tone !== undefined && lamp(f, L, x, y, w, h, tone);
-  if (L === 2) { f(frame, x - 1, y - 1, w + 2, h + 2); f('#f4f4f4', x - 2, y + h + 1, w + 4, 1); f('#aaa', x - 2, y + h + 2, w + 4, 1); }
-  if (L === 1) { f(frame, x, y - 1, w, 1); f('#aaa', x - 1, y + h, w + 2, 1); }
-  f(glass, x, y, w, h); f(sky, x, y, w, L === 2 ? 3 : L ? 2 : 1);
-  if (L) f(glint, x, y, 1, L === 2 ? 2 : 1);
+  if (L === 2) { f(frame, x - 1, y - 1, w + 2, h + 2, SEAM); f('#f4f4f4', x - 2, y + h + 1, w + 4, 1); f('#aaa', x - 2, y + h + 2, w + 4, 1); }
+  if (L === 1) { f(frame, x, y - 1, w, 1, SEAM); f('#aaa', x - 1, y + h, w + 2, 1); }
+  f(glass, x, y, w, h, PANE); f(sky, x, y, w, L === 2 ? 3 : L ? 2 : 1, PANE);
+  if (L) f(glint, x, y, 1, L === 2 ? 2 : 1, PANE);
 };
 const villa = (f: Fill, L: number, night: boolean, x: number, y: number, w: number, h: number, tone: (c: number) => number | undefined) => { // a villa's window: aqua glass with two glints slanting across it (a long one and a short, from near and mid up); by night lamps 3 and 5 texels apart from mid up
   if (night) {
@@ -128,18 +126,18 @@ const villa = (f: Fill, L: number, night: boolean, x: number, y: number, w: numb
     return;
   }
   pane(f, L, false, x, y, w, h, undefined, AQUA);
-  if (L) for (const [a, n] of L === 2 ? [[3, 6], [8, 3]] : [[2, 3]]) for (let k = 0; k < n && a + k < w - 1 && k < h - 1; k++) f(AQUA[2], x + a + k, y + h - 2 - k, 1, 1);
+  if (L) for (const [a, n] of L === 2 ? [[3, 6], [8, 3]] : [[2, 3]]) for (let k = 0; k < n && a + k < w - 1 && k < h - 1; k++) f(AQUA[2], x + a + k, y + h - 2 - k, 1, 1, PANE);
 };
 const city = memo((cols: number, rows: string, L: number, night: boolean, seed: number) => {
   const kinds = rows.split(' '), [cw, h] = STOREY[L];
   return tex(cols * cw, kinds.length * h, (g, w, H) => {
     if (night) g('#000', 0, 0, w, H);
     kinds.forEach((kind, i) => {
-      const f: Fill = (c, x, y, bw, bh) => g(c, x, H - (i + 1) * h + y, bw, bh), [on, ...tones] = LAMPS[kind === 'lobby' ? 'flat' : kind === 'door' ? 'win' : kind]; // the storey's own coordinates, from its top
+      const f: Fill = (c, x, y, bw, bh, m) => g(c, x, H - (i + 1) * h + y, bw, bh, m), [on, ...tones] = LAMPS[kind === 'lobby' ? 'flat' : kind === 'door' ? 'win' : kind]; // the storey's own coordinates, from its top
       const lit = (p: number, ...k: number[]) => (rnd(seed, i, ...k) < p ? tones[Math.floor(rnd(seed, i, ...k, 1) * tones.length)] : undefined); // the tone of a window's lamp, if it is lit
-      const base = () => { if (!night) { f('#fff', 0, 0, w, h); if (L === 2) f('#e2e2e2', 0, 18, w, 1); f('#c4c4c4', 0, h - 1, w, 1); } }; // wall and ledge
+      const base = () => { if (!night) { f('#fff', 0, 0, w, h); if (L === 2) f('#e2e2e2', 0, 18, w, 1); f('#c4c4c4', 0, h - 1, w, 1, SEAM); } }; // wall and ledge
       const entry = (x0: number, n: number) => { // the original door (see DOOR), centred in the n columns from x0 on: by night its glass and the lamp over it
-        const sub: Fill = (c, x, y, bw, bh) => f(c, x0 + x, y, bw, bh), sw = n * cw, dw = [1, 3, 7][L] + (n % 2 ? 0 : 1), x = (sw - dw) / 2;
+        const sub: Fill = (c, x, y, bw, bh, m) => f(c, x0 + x, y, bw, bh, m), sw = n * cw, dw = [1, 3, 7][L] + (n % 2 ? 0 : 1), x = (sw - dw) / 2;
         if (!night) DOOR[L](sub, sw, dw);
         else if (L) { lamp(sub, L, L === 2 ? x + 1 : x, L === 2 ? 7 : 4, L === 2 ? dw - 2 : dw, L === 2 ? 4 : 2, 0xffc070); sub('#ffe9a0', (sw >> 1) - 1, L === 2 ? 3 : 1, 2, 1); }
       };
@@ -148,7 +146,7 @@ const city = memo((cols: number, rows: string, L: number, night: boolean, seed: 
         if (!night) f('#dde6f5', 0, 0, w, h); // the spandrel
         for (let fl = 0; fl < nf; fl++) {
           const y = fl * ph + y0, p = Math.min(1, on * (0.55 + 0.9 * rnd(seed, i, fl, 7))); // a floor has more of its windows lit, or fewer: some floors are dark, some are on
-          if (!night) { if (L === 2) f('#9db0d4', 0, y - 1, w, 1); f('#3f6fd0', 0, y, w, gh); f('#7db6ff', 0, y, w, 1); } // a shadow under the slab near, the glass, and the sky in it
+          if (!night) { if (L === 2) f('#9db0d4', 0, y - 1, w, 1); f('#3f6fd0', 0, y, w, gh, PANE); f('#7db6ff', 0, y, w, 1, PANE); } // a shadow under the slab near, the glass, and the sky in it
           else for (let c = 0; c < cols; c++) {
             if (door(c) && fl) continue; // the doors' recess is below the first floor's strip
             const t = door(c) ? 0xffe9c0 : lit(p, fl, c);
@@ -158,7 +156,7 @@ const city = memo((cols: number, rows: string, L: number, night: boolean, seed: 
         if (kind === 'atrium') portal(f, L, night, (cols / 2 - 1) * cw, 2 * cw);
       } else if (kind === 'clad') {
         base();
-        if (!night) for (let x = 0, b = [2, 3, 4][L]; x < w; x += b) f(x % (2 * b) ? '#fff' : '#d6d6d6', x, 0, 1, h - (L === 2 ? 2 : 1)); // a seam to every board, every other one picked out
+        if (!night) for (let x = 0, b = [2, 3, 4][L]; x < w; x += b) f(x % (2 * b) ? '#fff' : '#d6d6d6', x, 0, 1, h - (L === 2 ? 2 : 1), SEAM); // a seam to every board, every other one picked out
         for (let j = 0, n = Math.max(1, Math.round(cols / 2)), sw = [1, 2, 4][L]; j < n; j++) villa(f, L, night, Math.round(((j + 0.5) * w) / n - sw / 2), WIDE.lounge.y[L], sw, WIDE.lounge.h[L], (c) => lit(on, j, c));
       } else if (kind === 'foyer' || kind in WIDE) {
         base();
@@ -186,8 +184,8 @@ const roofTex = memo((L: number) => tex(ROOF >> (2 - L), ROOF >> (2 - L), (f, n)
   f('#fff', 0, 0, n, n);
   for (let y = 0; y < n; y += c) {
     if (L === 2) f('#d4d4d4', 0, y + 2, n, 1);
-    f('#a8a8a8', 0, y + c - 1, n, 1);
-    if (L) f('#bdbdbd', y % (2 * c) ? c : 0, y, 1, c - 1);
+    f('#a8a8a8', 0, y + c - 1, n, 1, SEAM);
+    if (L) f('#bdbdbd', y % (2 * c) ? c : 0, y, 1, c - 1, SEAM);
   }
 }, 1));
 // sign face, W x H near texels (a level draws it on 1/4, 1/2 or all of them): a 1-texel frame when tall enough, and its text (the hand-drawn 3 x 5 letters, or a pictogram) in the middle,
@@ -273,11 +271,11 @@ const GLASS = ['#9bb9e6', '#7799d3', '#5f83bd', '#4a6ba3']; // the pane above th
 const curtain = memo((w: number, H: number, m: number, seed: number, L: number, night: boolean) => {
   const W = texels(w, L), T = texels(H, L), M = (m * DENSITY) / 2 ** (2 - L), n = Math.floor(H / m + 1e-6), F = [2, 4, 4][L], P = M / F, row = (k: number) => Math.round(k * M); // texels across and up, a module's height (not a whole number), whole modules, floors to a module and a floor's height
   return tex(W, T, (f) => {
-    const at = (c: string, x: number, y: number, bw = 1, bh = 1) => f(c, x, T - y - bh, bw, bh); // y counts up from the wall's foot
-    const brace = (c: string, dy = 0) => { // both diagonals of every module, corner to corner
-      for (let k = 0; k < n; k++) for (let y0 = row(k), h = row(k + 1) - y0, N = Math.max(W, h), i = 0; i < N; i++) { const t = i / (N - 1), x = Math.round(t * (W - 1)), y = y0 + Math.round(t * (h - 1)) + dy; at(c, x, y); at(c, W - 1 - x, y); }
+    const at = (c: string, x: number, y: number, bw = 1, bh = 1, m?: Mask) => f(c, x, T - y - bh, bw, bh, m); // y counts up from the wall's foot
+    const brace = (c: string, dy = 0, m?: Mask) => { // both diagonals of every module, corner to corner
+      for (let k = 0; k < n; k++) for (let y0 = row(k), h = row(k + 1) - y0, N = Math.max(W, h), i = 0; i < N; i++) { const t = i / (N - 1), x = Math.round(t * (W - 1)), y = y0 + Math.round(t * (h - 1)) + dy; at(c, x, y, 1, 1, m); at(c, W - 1 - x, y, 1, 1, m); }
     };
-    f(night ? '#000' : GLASS[1], 0, 0, W, T);
+    f(night ? '#000' : GLASS[1], 0, 0, W, T, !night && PANE); // the glass: gloss, set back from the bracing, belts and posts (which stand out flat)
     if (night) for (let j = 0; (j + 0.5) * P < T; j++) { // the floors: a strip of lamps in each, near the belts fewer of them
       const p = Math.min(1, (!L || (j % F && j % F < F - 1) ? 0.9 : 0.4) * (0.4 + rnd(seed, j, 7))), y = Math.round((j + 0.5) * P) - (L === 2 ? 1 : 0);
       for (let x = 1, len = 1; x < W - 1; x += len + 1) {
@@ -288,9 +286,9 @@ const curtain = memo((w: number, H: number, m: number, seed: number, L: number, 
     } else {
       for (let k = 0; k < n; k++) for (let y0 = row(k), h = row(k + 1) - y0, y = 0; y < h; y++) { // the panes: the X leaves the sky above it, the ground below it and a side to the left and right
         const t = (y + 0.5) / h, x = Math.round(t * W), lo = Math.min(x, W - x), hi = Math.max(x, W - x);
-        at(GLASS[t < 0.5 ? 2 : 0], lo, y0 + y, hi - lo);
+        at(GLASS[t < 0.5 ? 2 : 0], lo, y0 + y, hi - lo, 1, PANE);
       }
-      if (L === 2) { for (let j = 1; j * P < T - 1; j++) if (j % F) at('#7a9ad2', 1, Math.round(j * P), W - 2); brace(GLASS[3], -1); } // near: the floors between the belts, and a shadow under the braces
+      if (L === 2) { for (let j = 1; j * P < T - 1; j++) if (j % F) at('#7a9ad2', 1, Math.round(j * P), W - 2, 1, PANE); brace(GLASS[3], -1, PANE); } // near: the floors between the belts, and a shadow under the braces
     }
     brace('#ffffff');
     for (let k = 0; k <= n; k++) at(night ? '#ffffff' : '#e9f0fb', 0, Math.min(T - 1, row(k)), W); // a belt over every module
@@ -300,7 +298,7 @@ const curtain = memo((w: number, H: number, m: number, seed: number, L: number, 
 // The roof, a triangle from its eave (the foot of the texture) to the apex: glass in panes between mullions, framed in white, and by night the frame alone, lit (the frame is a texel inside the roof's own edge: a texel that straddles it is half off the face)
 const skylight = memo((w: number, s: number, L: number, night: boolean) => tex(texels(w, L), texels(s, L), (f, W, S) => {
   const p = [1, 2, 4][L], mid = (W - 1) / 2;
-  f(night ? '#000' : '#e4eeff', 0, 0, W, S);
+  f(night ? '#000' : '#e4eeff', 0, 0, W, S, !night && PANE); // the panes (the mullions and the frame are drawn over them, flat)
   if (!night && L) for (let k = 0; k < Math.max(W, S); k += p) { f('#b9cdee', k, 0, 1, S); f('#b9cdee', 0, k, W, 1); }
   for (let y = 0; y < S; y++) { const d = Math.round((mid * y) / (S - 1)); for (const x of [Math.round(mid) - d + 1, Math.round(mid) + d - 1]) f('#ffffff', Math.max(0, Math.min(W - 1, x)), y, 1, 1); } // the two slopes
   f('#ffffff', 0, S - 1, W, 1);
@@ -365,7 +363,7 @@ const brick = memo((w: number, h: number, d: number) => {
 const stoneTex = memo((L: number) => tex(STONE >> (2 - L), STONE >> (2 - L), (f, n) => { // courses of ashlar, a mortar row under each, the joints staggered from one course to the next
   const c = [4, 2, 4][L], b = [4, 4, 8][L];
   f('#fff', 0, 0, n, n);
-  for (let r = 0; r * c < n; r++) { f('#bdbdbd', 0, r * c + c - 1, n, 1); for (let x = (r & 1) * (b >> 1); x < n; x += b) f('#d4d4d4', x, r * c, 1, c - 1); }
+  for (let r = 0; r * c < n; r++) { f('#bdbdbd', 0, r * c + c - 1, n, 1, SEAM); for (let x = (r & 1) * (b >> 1); x < n; x += b) f('#d4d4d4', x, r * c, 1, c - 1, SEAM); }
 }, 1));
 const stoneMat = memo((c: number) => lodMap(toon(c), stoneTex));
 export const stone = (g: THREE.Group, w: number, h: number, d: number, color: number, x = 0, y = 0, z = 0) => part(g, brick(w, h, d), h, stoneMat(color), x, y, z); // a block of masonry

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { hd, lamps, lit, setLamps, spot, U, type Pbr } from './light';
+import { ORM, hd, lamps, lit, setLamps, spot, texOf, U, type Pbr } from './light';
+import { canvas, flatMask, maskOf } from './art';
 import { sky, updateSky } from './sky';
 
 // Board scale: a tile cell is 3 * BOARD_K world units. Buildings, props, tokens and text keep their size; only the tile (and with it the camera
@@ -26,19 +27,69 @@ function drain(d?: IdleDeadline) {
   if (renderer) for (const end = performance.now() + (d?.timeRemaining() ?? 8); later.length && performance.now() < end;) later.shift()!();
   if (later.length) idle(drain);
 }
-// A material whose map has one drawing per level: make(level) -> texture. Every draw takes the level in view (nothing is registered anywhere, so nothing outlives the material).
+// A material whose map has one drawing per level: make(level, hd) -> texture. Every draw takes the level in view (nothing is registered anywhere, so nothing outlives the material).
 // The level in view is made when it is first drawn, the other two (and their upload) when the page is idle, so a level switch is a pointer swap by the time anyone zooms;
 // one that comes sooner makes its level on the spot. `slot` is the map it fills: the colour (`map`), or the lamps (`emissiveMap`, drawn on the same grid, see `nightlit`): a material can have both.
-export const lodMap = <M extends THREE.Material & { map: THREE.Texture | null }>(mat: M, make: (L: number) => THREE.Texture, slot: 'map' | 'emissiveMap' = 'map'): M => {
-  const maps = (mat.userData.maps ??= []) as THREE.Texture[], at = slot === 'map' ? 0 : 3, was = mat.onBeforeRender; // maps: all the drawings, for disposeTree (the colour's three, then the lamps')
-  const get = (L: number) => (maps[at + L] ??= make(L));
-  mat.onBeforeRender = (...a) => { was.apply(mat, a); if (lod.n >= 0) Object.assign(mat, { [slot]: get(lod.n) }); };
+// HD-2D never swaps levels: it draws a lit material from `chainOf`, the three drawings as the mips of one texture, so every pixel takes the level it needs (see light.ts hdSample). A `make` that takes `hd` has a drawing of its
+// own for the chain, which `lodMap` asks it for (the ring of a tile's edge, see labels.ts); the others share the restrained look's. A drawing's mask (art.ts `maskOf`) goes through the same levels, as the texture `ormMap` in light.ts.
+export const lodMap = <M extends THREE.Material & { map: THREE.Texture | null }>(mat: M, make: (L: number, hd: boolean) => THREE.Texture, slot: 'map' | 'emissiveMap' = 'map'): M => {
+  const maps = (mat.userData.maps ??= []) as THREE.Texture[], was = mat.onBeforeRender, toony = mat instanceof THREE.MeshToonMaterial; // maps: every texture made for the material, for disposeTree. Only a toon material's shader reads the chain
+  const mine = <T extends THREE.Texture>(t: T) => (maps.push(t), (t.userData.lod = true), t); // flagged: its filters are lodMap's to set (see `toon`)
+  const drawn: THREE.Texture[] = [], get = (L: number) => (drawn[L] ??= mine(make(L, false)));
+  let ch: THREE.Texture | undefined;
+  const chain = () => {
+    if (ch) return ch;
+    const src = [2, 1, 0].map((L) => (make.length > 1 ? make(L, true) : get(L))), cs = src.map((t) => t.image as HTMLCanvasElement);
+    let t = chains.get(cs[0]);
+    if (!t) {
+      const ms = cs.map(maskOf);
+      chains.set(cs[0], (t = chainOf(cs, src[0])));
+      if (slot === 'map' && ms.some(Boolean)) t.userData.orm = chainOf(cs.map((c, k) => ms[k] ?? flatMask(c)), src[0], true);
+    }
+    if (t.userData.orm) mine(t.userData.orm);
+    if (slot === 'map') texOf(mat).uLv.value.forEach((v, k) => v.set(cs[k].width, cs[k].height));
+    return (ch = mine(t));
+  };
+  mat.onBeforeRender = (...a) => {
+    was.apply(mat, a);
+    const chained = hd.on && toony;
+    if (chained) Object.assign(mat, { [slot]: chain() });
+    else if (lod.n >= 0) Object.assign(mat, { [slot]: get(lod.n) });
+    if (slot === 'map' && toony) { const u = texOf(mat), orm = chained ? (ch!.userData.orm as THREE.Texture | undefined) : undefined; u.ormMap.value = orm ?? ORM; u.uOrm.value = +!!orm; } // the restrained look has no use for a mask
+  };
   if (typeof document !== 'undefined') { // the idle pre-upload needs the renderer: there is none under Node
     if (!later.length) idle(drain);
     for (const L of [0, 1, 2]) later.push(() => renderer.initTexture(get(L)));
+    if (toony) {
+      const job = () => { const c = chain(); renderer.initTexture(c); if (c.userData.orm) renderer.initTexture(c.userData.orm); }; // HD-2D's chain: made now for a material made while it is on, and by `warm` before it is switched on
+      (mat.userData.warm ??= []).push(job);
+      if (hd.on) later.push(job);
+    }
   }
   return mat;
 };
+// The three drawings of a texture (`cs`, near to far: canvases) as the mips of one texture. Mips must halve exactly and a drawing does not always (a wall is 31 texels tall near and 15 mid), so a drawing is padded up to the size its mip
+// needs, its edge texels repeated (on the right and at the top: it rests on the bottom left, where UV 0 is once the upload has flipped it), and its own size goes to the shader (`uLv`) for the grid of that mip. The mips past the third are
+// boxed down from the far one. A texture that repeats (the roof, the stone, the length of the side wall) halves exactly, so is never padded: the padding would be what the repeat wraps to. `mask`: the chain of masks (linear, not colour).
+const padded = (c: HTMLCanvasElement, w: number, h: number) => (w === c.width && h === c.height ? c : canvas(w, h, (g) => {
+  const [cw, ch] = [c.width, c.height], [dx, dy] = [w - cw, h - ch];
+  g.imageSmoothingEnabled = false;
+  g.drawImage(c, 0, dy);
+  g.drawImage(c, 0, 0, cw, 1, 0, 0, cw, dy); // the rows above it
+  g.drawImage(c, cw - 1, 0, 1, ch, cw, dy, dx, ch); // the columns to its right
+  g.drawImage(c, cw - 1, 0, 1, 1, cw, 0, dx, dy); // and the corner
+}));
+const halved = (c: HTMLCanvasElement) => canvas(Math.max(1, c.width >> 1), Math.max(1, c.height >> 1), (g, w, h) => { g.imageSmoothingQuality = 'high'; g.drawImage(c, 0, 0, w, h); });
+const chainOf = (cs: HTMLCanvasElement[], like: THREE.Texture, mask = false) => {
+  const [w, h] = [(c: HTMLCanvasElement) => c.width, (c: HTMLCanvasElement) => c.height].map((side) => Math.max(...cs.map((c, k) => side(c) << k)));
+  const mips = cs.map((c, k) => padded(c, w >> k, h >> k));
+  for (let c = mips[2]; c.width > 1 || c.height > 1;) mips.push((c = halved(c)));
+  const t = new THREE.CanvasTexture(mips[0]);
+  Object.assign(t, { mipmaps: mips, generateMipmaps: false, magFilter: THREE.LinearFilter, minFilter: THREE.LinearMipmapLinearFilter, wrapS: like.wrapS, wrapT: like.wrapT, colorSpace: mask ? THREE.NoColorSpace : like.colorSpace });
+  t.repeat.copy(like.repeat); t.offset.copy(like.offset);
+  return t;
+};
+const chains = new WeakMap<HTMLCanvasElement, THREE.Texture>(); // the chain of a set of drawings, by its near one: materials that draw alike (the 92 side walls) share it, and so its upload
 
 // ---- Pixel pipeline: the scene renders at 1/PX of the canvas size and CSS upscales it with nearest-neighbour, so an art pixel is PX = 2 CSS px at every zoom: the
 // same grid as the UI frames. A buffer pixel bigger than a texel would average texels away, so a level is shown once its texels are a whole buffer pixel tall.
@@ -73,10 +124,17 @@ scene.background = new THREE.Color(0x14213d);
 const GRAD = new THREE.DataTexture(new Uint8Array([66, 90, 118, 150, 188, 224, 255]), 7, 1, THREE.RedFormat);
 GRAD.minFilter = GRAD.magFilter = THREE.NearestFilter;
 GRAD.needsUpdate = true;
+// A plain pixel texture (one drawing, see pixelTexture) is read with nearest taps by the restrained look and with bilinear ones by HD-2D's pixel filter (light.ts hdSample): a lit material puts its textures in the look
+// it is drawn in, as it is drawn (nothing is registered anywhere). A lodMap's drawings are flagged, and left alone: the restrained look keeps them nearest, and HD-2D reads its chain instead.
+const follow = (t: THREE.Texture | null) => {
+  const min = hd.on ? THREE.LinearMipmapLinearFilter : THREE.NearestMipmapNearestFilter;
+  if (t && !t.userData.lod && t.minFilter !== min) { t.minFilter = min; t.magFilter = hd.on ? THREE.LinearFilter : THREE.NearestFilter; t.needsUpdate = true; }
+};
 // `pbr`: how the material answers the HD-2D light (see light.ts); the default is a matte stone.
 export const toon = (color: THREE.ColorRepresentation, extra: THREE.MeshToonMaterialParameters = {}, pbr?: Pbr) => {
   const m = new THREE.MeshToonMaterial({ color, gradientMap: GRAD, ...extra });
   m.onBeforeCompile = lit;
+  m.onBeforeRender = () => { follow(m.map); follow(m.emissiveMap); };
   if (pbr) m.userData.pbr = pbr;
   return m;
 };
@@ -404,9 +462,22 @@ function look(on: boolean) {
   dirtyShadow();
   if (!on) hdMod?.release();
 }
+// The chains of every lit material (see lodMap) are made and uploaded before HD-2D is switched on: made in its first frame they stall it for over a second. A few ms at a time, like the levels, but not in the idle time, which a page
+// that draws has too little of (the wait would be seconds). The GPU is the slow part (it draws the canvases as it takes them in), so each slice waits for a fence: it is never more than a slice behind, and the switch has no backlog to wait out.
+const warm = () => new Promise<void>((done) => {
+  const jobs = new Set<() => void>(), gl = renderer.getContext() as WebGL2RenderingContext;
+  scene.traverse((o) => { if (o instanceof THREE.Mesh) for (const m of [o.material].flat()) m.userData.warm?.forEach((j: () => void) => jobs.add(j)); });
+  const run = () => {
+    for (const end = performance.now() + 6; jobs.size && performance.now() < end;) { const [j] = jobs; jobs.delete(j); j(); }
+    if (!jobs.size) return done();
+    const fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0)!, poll = () => (gl.getSyncParameter(fence, gl.SYNC_STATUS) === gl.SIGNALED ? (gl.deleteSync(fence), run()) : void setTimeout(poll, 4));
+    poll();
+  };
+  run();
+});
 export async function setLighting(on: boolean) {
   wanted = on;
-  if (on) hdMod ??= await import('./hd2d');
+  if (on) { hdMod ??= await import('./hd2d'); if (!hd.on) await warm(); }
   if (wanted === on && hd.on !== on) look(on);
 }
 
