@@ -93,9 +93,9 @@ export class Room extends DurableObject<Env> implements Host {
     if (this.game?.S.over) this.linger ||= Date.now() + OVER_MS;
     const { code, host, dev, settings, idle, expires, linger, seats } = this, saved = this.game?.saved;
     if (saved && saved.ckpt !== this.ckpt) this.ctx.storage.kv.put('ckpt', JSON.stringify((this.ckpt = saved.ckpt))); // a checkpoint is never changed, only replaced (see `Game.mark`): it is written when it is a new one
-    const json = JSON.stringify({ code, host, dev, settings, idle, expires, linger, seats, game: saved && { tape: saved.tape, due: saved.due, lapsed: saved.lapsed } } satisfies Stored);
+    const json = JSON.stringify({ code, host, dev, settings, idle, expires, linger, seats, game: saved && { tape: saved.tape, due: saved.due, lapsed: saved.lapsed, pausedAt: saved.pausedAt } } satisfies Stored);
     if (json !== this.stored) this.ctx.storage.kv.put('room', (this.stored = json));
-    const at = Math.min(expires, ...[idle, linger, this.game?.due ?? 0, ...seats.map((s) => s.drop)].filter(Boolean)); // every stored room has a finite alarm, even if a deploy cuts all sockets without a close event
+    const at = Math.min(expires, ...[idle, linger, this.game?.pausedAt ? 0 : this.game?.due ?? 0, ...seats.map((s) => s.drop)].filter(Boolean)); // every stored room has a finite alarm, even if a deploy cuts all sockets without a close event; a paused game's frozen deadline is none
     if (at >= this.alarmAt) return;
     void this.ctx.storage.setAlarm((this.alarmAt = at));
   }
@@ -176,7 +176,7 @@ export class Room extends DurableObject<Env> implements Host {
   /** A seat or the settings changed: tell the room, and write it down. */
   private changed() { this.broadcastRoom(); this.save(); }
   /** Where the game stands, for a client with nothing to go by: one that joined or came back, or one whose turn has just started over (see `restore`). */
-  private snapshot(s: Seat) { if (this.game) this.send(s, { t: 'game', me: s.pi, state: this.game.S, ask: this.game.pendingEv }); }
+  private snapshot(s: Seat) { if (this.game) this.send(s, { t: 'game', me: s.pi, state: this.game.S, ask: this.game.pendingEv, paused: !!this.game.pausedAt }); }
   private fail(ws: WebSocket, why: Fail) {
     ws.send(JSON.stringify({ t: 'fail', why } satisfies S2C));
     ws.close(1000, why);
@@ -287,6 +287,7 @@ export class Room extends DurableObject<Env> implements Host {
       }
       case 'start': if (!this.game && host && this.seats.length >= 2) this.start(); break;
       case 'answer': if (this.game && s.pi >= 0) this.game.answer(s.pi, msg.id, msg.v); break;
+      case 'pause': if (this.dev && host && typeof msg.on === 'boolean') this.game?.setPaused(msg.on); break;
       case 'again': if (this.game?.S.over) this.reset(); break;
     }
   }

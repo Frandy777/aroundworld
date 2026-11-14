@@ -4,12 +4,12 @@ import { canMortgage, command } from '../../shared/state';
 import type { Cmd, NewsCard, Notice, Prompt } from '../../shared/types';
 import { hold } from '../asks';
 import { quickGame } from '../controller';
-import { devUrl } from '../net';
+import { devUrl, send } from '../net';
 import { POS } from '../render/layout';
 import { camera, controls, dirtyShadow, fitZoom, jumpTo, lod, resetView, viewAngles } from '../render/scene';
 import { clock, wallHour } from '../render/sky';
 import { loop, playStrike } from '../stage';
-import { G, actionBtn, hd2d, selectedTile, session, stageOnly, useCell } from '../store';
+import { G, actionBtn, hd2d, paused, selectedTile, session, stageOnly, useCell } from '../store';
 import { openAlert, openAsk, openNews, openNotice } from './open';
 
 // ---- The dev panel: available whenever opened with ?dev=1 (title, lobby or game), and in any dev room ----
@@ -49,7 +49,7 @@ const LOD_NAMES = ['far', 'mid', 'near'] as const;
 
 export function Debug() {
   const { view, room } = useCell(session), run = useCell(actionBtn)?.reply, sel = useCell(selectedTile);
-  const isHd = useCell(hd2d), bare = useCell(stageOnly);
+  const isHd = useCell(hd2d), bare = useCell(stageOnly), isPaused = useCell(paused);
   const [open, setOpen] = useState(false), [, setTick] = useState(0), [busy, setBusy] = useState(false);
   const [who, setWho] = useState(0), [draws, setDraws] = useState('3,4'), [cash, setCash] = useState('1000');
   const [tile, setTile] = useState(1), [lv, setLv] = useState(0), [mort, setMort] = useState(false), [kind, setKind] = useState('notice'), [json, setJson] = useState(() => sample('notice'));
@@ -128,6 +128,9 @@ export function Debug() {
           </Field>
           {room?.dev && S && (
             <>
+              <div className="pl-row">
+                <button className={`btn sm ${isPaused ? 'on' : ''}`} onClick={() => send({ t: 'pause', on: !isPaused })}>{isPaused ? 'RESUME GAME' : 'PAUSE GAME'}</button>
+              </div>
               <div className="note">{run ? 'Commands run before the roll.' : 'Commands work while ROLL DICE is up.'}</div>
               <Field label="PLAYER"><div className="seg">{S.players.map((p, i) => <button key={i} className={who === i ? 'on' : ''} disabled={!!p.out} onClick={() => setWho(i)}>{p.name}</button>)}</div></Field>
               <Field label="NEXT DRAWS (dice, news card #...)">

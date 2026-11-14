@@ -6,7 +6,7 @@ import { clearDice, hideDice, hop, jump, placeAt, removeToken, rollDice, setActi
 import { POS } from './render/layout';
 import { finishTweens, pace, wait } from './render/scene';
 import { enterDemo, enterGame, focusTok, playStrike, selectTile, setOwner, showState, tokenSpot } from './stage';
-import { G, actionBtn, activeTab, autoFocus, bump, bumpAssets, cashEls, clearCards, countdown, floatText, floats, hudLive, lastRoll, selectedTile, session, tip, toast, toasts, viewedPlayer, waitingFor, type Button, type Open } from './store';
+import { G, actionBtn, activeTab, autoFocus, bump, bumpAssets, cashEls, clearCards, countdown, floatText, floats, hudLive, lastRoll, paused, selectedTile, session, tip, toast, toasts, viewedPlayer, waitingFor, type Button, type Open } from './store';
 import { openAsk, openCasino, openNews, openNotice, openOrder, openResults } from './ui/open';
 import { money } from './ui/bits';
 
@@ -64,6 +64,7 @@ function reset() {
   forget();
   shown = null;
   tick = null; asked = -1; showClock();
+  paused.set(false);
   kept = null;
   casino = null;
   clearCards();
@@ -85,7 +86,8 @@ export function exitToDemo() {
 export function push(evs: Ev[]) {
   for (const ev of evs) {
     if (ev.t === 'close') close(ev.id); // a closed question comes down at once, not when the director gets to it
-    else if (ev.t === 'clock') { tick = ev.ms ? { ms: ev.ms, end: performance.now() + ev.ms } : null; showClock(); } // and its clock is counted from the moment it is told: the question it belongs to may be queued behind a long card
+    else if (ev.t === 'clock') { tick = ev.ms ? { ms: ev.of ?? ev.ms, end: performance.now() + ev.ms } : null; showClock(); } // and its clock is counted from the moment it is told: the question it belongs to may be queued behind a long card
+    else if (ev.t === 'paused') paused.set(ev.on); // a dev room's freeze: gauges and card timers stand still (a clock ev on resume re-arms them)
     else queue.push(ev);
   }
   void pump();
@@ -103,8 +105,9 @@ async function pump() {
 }
 
 /** The screen as a snapshot says the game is now (joining a running game, or coming back to it). */
-export function restore(m: { me: number; state: GameState; ask: Ev | null }) {
+export function restore(m: { me: number; state: GameState; ask: Ev | null; paused?: boolean }) {
   reset();
+  paused.set(!!m.paused);
   Object.assign(G, { S: m.state, me: m.me });
   viewedPlayer.set(m.me); selectedTile.set(-1); activeTab.set('tile'); hudLive.set(true);
   session.set({ ...session.get(), view: 'game' });

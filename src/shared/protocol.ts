@@ -18,12 +18,13 @@ export type C2S =
   | { t: 'start' }
   | { t: 'bot'; seat: number } // dev room, host: put a bot on an empty seat, or send away the one on it
   | { t: 'answer'; id: number; v: unknown }
+  | { t: 'pause'; on: boolean } // dev room, host: freeze every question's clock (the game still takes real answers)
   | { t: 'again' } // after the game: back to the lobby
   | { t: 'ping' };
 
 export type S2C =
   | { t: 'room'; room: RoomInfo }
-  | { t: 'game'; me: number; state: GameState; ask: Ev | null } // a full snapshot (join, reconnect): `me` is the receiver's player index
+  | { t: 'game'; me: number; state: GameState; ask: Ev | null; paused?: boolean } // a full snapshot (join, reconnect): `me` is the receiver's player index; `paused` is a dev room's frozen clocks
   | { t: 'ev'; ev: Ev[] }
   | { t: 'fail'; why: Fail };
 

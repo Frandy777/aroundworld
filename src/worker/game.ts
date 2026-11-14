@@ -22,7 +22,7 @@ export interface Host {
   save(): void; // the game waits: write down where it stands
   readonly dev: boolean; // a dev room: its roll question also takes the commands of the dev panel
 }
-interface Pending { id: number; to: number; p: Prompt; ev: Ev; resolve(a: Answer): void; due: number } // due: when it answers itself (epoch ms; 0: it waits)
+interface Pending { id: number; to: number; p: Prompt; ev: Ev; resolve(a: Answer): void; due: number; ms: number } // due: when it answers itself (epoch ms; 0: it waits). ms: the total it was armed with (a resumed gauge is proportioned by it)
 // What the next move of a player is bent by (news events). They never show: the news card said it.
 export interface Mods { fuel: boolean; half: boolean; back: boolean; magnet: boolean }
 const noMods = (): Mods => ({ fuel: false, half: false, back: false, magnet: false });
@@ -30,7 +30,7 @@ const noMods = (): Mods => ({ fuel: false, half: false, back: false, magnet: fal
 // What a restart keeps of a game: how a turn began (a checkpoint), and what that turn has taken from outside since (the tape: its dice, and the answers it was given; `k` is 'rnd' or the kind of prompt answered).
 interface Entry { k: string; v: unknown }
 export interface Ckpt { S: GameState; mods: Mods[]; nextId: number; gone: number[]; turn: number; round: number; rig: number[] }
-export interface Saved { ckpt: Ckpt; tape: Entry[]; due: number; lapsed: number }
+export interface Saved { ckpt: Ckpt; tape: Entry[]; due: number; lapsed: number; pausedAt: number }
 
 /** The game before its first turn. */
 export const fresh = (players: { name: string; color: number }[], settings: Settings): Ckpt => ({
@@ -107,6 +107,7 @@ export class Game {
   private replay: Entry[] | null = null; // the tape while it plays back after a restart; null once the game is live
   private wasDue = 0; // the clock the open question had before the restart
   private lapsed = 0; // questions in a row that ran out of time (a bot's do not count; an answer clears it): see LAPSE_MAX
+  pausedAt = 0; // a dev room's pause: the epoch ms the game froze at. While set, no question's clock runs (answers are still taken) and a pending `due` keeps its frozen deadline
   private caughtUp?: () => void; // the playback is over
 
   /** A game standing at a checkpoint: a new one (`fresh`), or the one a restart found. */
@@ -123,7 +124,7 @@ export class Game {
   /** When the open question answers itself (epoch ms; 0: it waits). */
   get due() { return this.pending?.due ?? 0; }
   /** What a restart needs to bring the game back. */
-  get saved(): Saved { return { ckpt: this.ckpt, tape: this.tape, due: this.due, lapsed: this.lapsed }; }
+  get saved(): Saved { return { ckpt: this.ckpt, tape: this.tape, due: this.due, lapsed: this.lapsed, pausedAt: this.pausedAt }; }
 
   // ---- Chance and the tape ----
   // The game is a chain of awaits, which a restart cannot carry over. A turn can be played again though: from its checkpoint, fed from the tape instead of the dice and the
@@ -173,7 +174,7 @@ export class Game {
   // ---- Prompts ----
   ask(to: number, p: Prompt): Promise<Answer> {
     return new Promise((resolve) => {
-      const id = this.nextId++, ev: Ev = { t: 'ask', id, to, p }, pend: Pending = { id, to, p, ev, resolve, due: 0 }, replaying = !!this.replay;
+      const id = this.nextId++, ev: Ev = { t: 'ask', id, to, p }, pend: Pending = { id, to, p, ev, resolve, due: 0, ms: 0 }, replaying = !!this.replay;
       const past = this.next(p.k);
       if (past) return resolve(past.v as Answer);
       this.pending = pend;
@@ -192,7 +193,9 @@ export class Game {
     pend.resolve(v);
   }
   private arm(pend: Pending) {
+    if (this.pausedAt) { this.emit({ t: 'clock', ms: 0 }); return; } // frozen: whatever `due` the question has (0 if it was asked in the freeze) is kept, to be moved forward on resume
     const bot = this.host.bot(pend.to), ms = this.host.anyOnline() ? (bot ? BOT_MS : this.host.online(pend.to) ? ASK_MS : OFFLINE_MS) : 0; // nobody is watching: the game waits
+    pend.ms = ms;
     pend.due = ms && Date.now() + ms;
     this.emit({ t: 'clock', ms: bot ? 0 : ms }); // everybody sees the time left (a bot's beat is not worth a gauge)
   }
@@ -207,10 +210,23 @@ export class Game {
   }
   /** Somebody connected or left: the clock on the open question runs differently now. */
   presence() { if (this.pending) this.arm(this.pending); }
+  /** A dev room's pause: no question's clock runs and none is counted a lapse, but answers are still taken. On resume the pending deadline moves forward by the freeze; a question asked in the freeze gets its clock now. */
+  setPaused(on: boolean) {
+    if (on === !!this.pausedAt) return;
+    if (on) this.pausedAt = Date.now();
+    else {
+      const shift = Date.now() - this.pausedAt, pend = this.pending;
+      this.pausedAt = 0;
+      if (pend?.due) { pend.due += shift; this.emit({ t: 'clock', ms: pend.due - Date.now(), of: pend.ms || undefined }); } // its clock picks up where it stood
+      else if (pend) this.arm(pend); // asked in the freeze: it gets the clock its presence allows
+    }
+    this.emit({ t: 'paused', on });
+    this.host.save();
+  }
   /** The clock of the open question may have run out: then the default answer is taken (true). */
   tick(now: number) {
     const pend = this.pending;
-    if (!pend?.due || pend.due > now) return false;
+    if (this.pausedAt || !pend?.due || pend.due > now) return false;
     if (!this.host.bot(pend.to)) this.lapsed++;
     this.settle(pend, fallback(pend.p));
     return true;
@@ -329,10 +345,10 @@ export class Game {
   }
 
   /** After a restart: play the turn in progress again from its checkpoint, fed from the tape. Resolves once it stands where it stood; rejects when the code no longer plays it the same way. */
-  resume({ tape, due, lapsed }: Omit<Saved, 'ckpt'>) {
+  resume({ tape, due, lapsed, pausedAt }: Omit<Saved, 'ckpt'>) {
     if (this.S.over) return Promise.resolve();
     return new Promise<void>((caughtUp, fail) => {
-      this.replay = tape; this.wasDue = due; this.lapsed = lapsed ?? 0; this.caughtUp = caughtUp; // a game saved before the count has none
+      this.replay = tape; this.wasDue = due; this.lapsed = lapsed ?? 0; this.pausedAt = pausedAt ?? 0; this.caughtUp = caughtUp; // a game saved before the count (or before pausing) has none
       this.run(true).then(caughtUp, (err) => { if (this.replay) fail(err); else console.error('game crashed', err); });
     });
   }

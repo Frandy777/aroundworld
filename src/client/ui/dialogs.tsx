@@ -5,7 +5,7 @@ import { canPick } from '../../shared/state';
 import type { CasinoView, NewsCard as News, Notice, OrderPass, Player, Prompt, RankRow } from '../../shared/types';
 import { reply } from '../asks';
 import { pace } from '../render/scene';
-import { state, useCell, G, peeking, type Cell } from '../store';
+import { state, useCell, G, paused, peeking, type Cell } from '../store';
 import { Blocks, Die, Face, Flag, Icon, Pips, Rich, hex, money, tileHead } from './bits';
 import { TileBody } from './tile';
 
@@ -52,7 +52,7 @@ function useAuto(ms: number, fn: () => void) {
     const t = setInterval(() => {
       const now = performance.now(), dt = now - last;
       last = now;
-      if (held.current || peeking.get() || document.hidden) return; // ... or while the cards are set aside, or the tab is away
+      if (held.current || peeking.get() || paused.get() || document.hidden) return; // ... or while the cards are set aside, the dev room is frozen, or the tab is away
       gone += (dt * pace.speed) / ms;
       setTicks(Math.max(0, Math.ceil((1 - gone) * TICKS)));
     }, 50);

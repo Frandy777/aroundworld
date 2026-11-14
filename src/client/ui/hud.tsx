@@ -3,17 +3,17 @@ import { LEVEL_NAMES, REGIONS, TILES, depInterest, maxLevel } from '../../shared
 import { maxRounds } from '../../shared/state';
 import { leaveRoom } from '../controller';
 import { CAM, focusTok, lookAtTile } from '../stage';
-import { G, actionBtn, activeTab, cards, cashEls, countdown, floats, hudLive, lastRoll, peeking, selectedTile, session, state, statsOf, tip, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
+import { G, actionBtn, activeTab, cards, cashEls, countdown, floats, hudLive, lastRoll, paused, peeking, selectedTile, session, state, statsOf, tip, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
 import { Die, Face, Flag, Icon, Named, Pips, Rich, hex, money, tileHead } from './bits';
 import { openMenu, openRules } from './open';
 import { TileBody } from './tile';
 
 // ---- Top bar ----
 function Topbar() {
-  const S = useGame(), room = useCell(session).room, last = maxRounds(S);
+  const S = useGame(), room = useCell(session).room, last = maxRounds(S), p = useCell(paused);
   return (
     <header id="topbar" className="box">
-      <div id="round">ROUND <b>{S.round}</b> {last === Infinity ? <>&middot; ENDLESS</> : `/ ${last}`}</div>
+      <div id="round">ROUND <b>{S.round}</b> {last === Infinity ? <>&middot; ENDLESS</> : `/ ${last}`}{p && <> <span className="badge blue">PAUSED</span></>}</div>
       <div className="tools">
         <button className="btn sm" id="btn-help" onClick={() => void openRules()}><Icon n="help" /></button>
         <button className="btn sm" id="btn-menu" onClick={() => void openMenu(room!.code, leaveRoom)}><Icon n="menu" /></button>
@@ -44,9 +44,9 @@ function useRoll(cash: number) {
 // The time the game still gives a player to answer, as a gauge on their card that everybody sees (see `countdown`). A new clock (a new question, or the server setting it again) is a new gauge: it
 // starts from what was left of the time as it went up, and runs down by itself in CSS.
 function Clock({ i }: { i: number }) {
-  const c = useCell(countdown);
+  const c = useCell(countdown), p = useCell(paused);
   if (c?.pi !== i) return null;
-  return <div className="clock" key={c.end}><i style={{ '--w': `${(c.left * 100) / c.ms}%`, '--t': `${c.left}ms` } as CSSProperties} /></div>;
+  return <div className="clock" key={c.end}><i style={{ '--w': `${(c.left * 100) / c.ms}%`, '--t': `${c.left}ms`, animationPlayState: p ? 'paused' : undefined } as CSSProperties} /></div>;
 }
 
 function PCard({ i, on, viewing }: { i: number; on: boolean; viewing: boolean }) {

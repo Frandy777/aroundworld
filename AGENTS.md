@@ -55,6 +55,7 @@ await window.__aw.isolate(28);                     // tile 28 alone over its plo
 // Room & in-game dev commands (commands run while ROLL DICE is active):
 await window.__aw.quickGame(3);
 window.__aw.cmd({ c: 'own', i: 1, o: { p: 0, lv: 3, m: false } });
+window.__aw.pause(true);                    // dev room: freeze every question's clock server-side (answers still work); false resumes. state().gamePaused reads it
 ```
 
 ### Batch Visual Comparison (`npm run shots`)

@@ -3,13 +3,14 @@ import { TILES } from '../shared/data';
 import { command } from '../shared/state';
 import type { Cmd } from '../shared/types';
 import { leaveRoom, quickGame } from './controller';
+import { send } from './net';
 import { LOT, PAD, POS } from './render/layout';
 import { U, hd } from './render/light';
 import { camera, controls, dirtyShadow, finishTweens, fitZoom, hdCam, jumpTo, lod, renderer, scene, setLighting, viewAngles } from './render/scene';
 import { clock, sky, wallHour } from './render/sky';
 import { FLOAT } from './render/world';
 import { cam, isolateTile, loop, playStrike, rebuildTile, selectTile, setLot } from './stage';
-import { G, actionBtn, hd2d, session, stageOnly } from './store';
+import { G, actionBtn, hd2d, paused, session, stageOnly } from './store';
 
 // ---- Dev bridge (development builds only, loaded from main.tsx) ----
 // URL flags set the stage on boot (?dev=1&hd=1&hour=0&tile=1&zoom=2&autostart=1&clean=1&ui=0);
@@ -97,6 +98,7 @@ function readState() {
     az: +az.toFixed(2),
     autoRotate: controls.autoRotate,
     paused: loop.paused,
+    gamePaused: paused.get(),
     scale: loop.scale,
     clean: stageOnly.get(),
     ui: !document.getElementById('root')!.hidden,
@@ -144,6 +146,8 @@ export function initDev() {
       if (opts.scale !== undefined) loop.scale = Math.max(0, opts.scale);
       loop.draw();
     },
+    // A dev room's real pause: no question's clock runs on the server (the game still takes answers). Render-side freeze stays `setLoop`'s own.
+    pause: (on: boolean) => send({ t: 'pause', on }),
     step: async (dt: number) => { loop.step(dt); await nextFrame(); },
     scrub: async (t: number) => { loop.scrub(t); await nextFrame(); }, // the world clock to t outright: `tick`-driven models pose there exactly
     // A lot's look, with no room and no turn: { p: player | -1 vacant, lv, m: mortgaged, sign: false hides the SALE board on a vacant lot }
