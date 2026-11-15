@@ -200,11 +200,14 @@ export const fxOf = <M extends THREE.MeshBasicMaterial>(m: M) => {
 export const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -600, 600);
 camera.layers.enable(LAYER_FX); // the restrained look draws both layers in one pass; HD-2D's camera (hdCam) takes them one at a time
 export const ELEV = THREE.MathUtils.degToRad(52);
-camera.position.set(0, Math.sin(ELEV) * 150, Math.cos(ELEV) * 150);
+// The camera stands ORBIT from its target. The view is orthographic, so the picture never shows the distance, but the near and far planes cut the world at 600 of it: a camera that drifts out past the far plane
+// loses the whole board (the restrained look then draws only its background). orbitTo keeps the camera's horizontal radius, not its distance, so a reset of the tilt after a focus's low one (25°) pushed it out 1.47 times each time: the controls hold it.
+const ORBIT = 150;
+camera.position.set(0, Math.sin(ELEV) * ORBIT, Math.cos(ELEV) * ORBIT);
 
 export const controls = new OrbitControls(camera); // listens to nothing until initScene connects it to the canvas
 Object.assign(controls, {
-  enableDamping: true, dampingFactor: 0.12, screenSpacePanning: false,
+  enableDamping: true, dampingFactor: 0.12, screenSpacePanning: false, minDistance: ORBIT, maxDistance: ORBIT,
   maxZoom: 3, minPolarAngle: THREE.MathUtils.degToRad(22), maxPolarAngle: THREE.MathUtils.degToRad(68), // minZoom: see resize
 });
 controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
@@ -370,7 +373,7 @@ export function updateCamera(dt: number) {
 export function overview(lift: number) {
   goal = null; // the orbit is its own motion: nothing left over from a game should pull it
   controls.target.set(0, lift, 0);
-  camera.position.set(0, Math.sin(ELEV) * 150 + lift, Math.cos(ELEV) * 150);
+  camera.position.set(0, Math.sin(ELEV) * ORBIT + lift, Math.cos(ELEV) * ORBIT);
   camera.zoom = 1.1;
   camera.updateProjectionMatrix();
 }
@@ -384,9 +387,9 @@ export function viewAngles() {
 /** Put the camera on `(x, lift, z)` at once, with no tween or damping lag, and mark shadows to redraw. */
 export function jumpTo(x: number, z: number, zoom: number | 'fit' = camera.zoom, elev = THREE.MathUtils.radToDeg(ELEV), az = 0, lift = 0) {
   goal = null;
-  const el = THREE.MathUtils.degToRad(elev), a = THREE.MathUtils.degToRad(az), h = Math.cos(el) * 150;
+  const el = THREE.MathUtils.degToRad(elev), a = THREE.MathUtils.degToRad(az), h = Math.cos(el) * ORBIT;
   controls.target.set(x, lift, z);
-  camera.position.set(x + Math.sin(a) * h, lift + Math.sin(el) * 150, z + Math.cos(a) * h);
+  camera.position.set(x + Math.sin(a) * h, lift + Math.sin(el) * ORBIT, z + Math.cos(a) * h);
   camera.zoom = THREE.MathUtils.clamp(zoom === 'fit' ? fitZoom : zoom, controls.minZoom, controls.maxZoom);
   camera.updateProjectionMatrix();
   const damp = controls.enableDamping;
