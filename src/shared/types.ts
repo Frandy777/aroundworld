@@ -43,10 +43,10 @@ export interface OrderPass { group: number[]; rolls: [number, number][] } // one
 export interface RankRow { p: number; net: number }
 
 // The casino card is one card across several steps; every step carries all of it.
-export type CasinoRoll = [a: number, b: number, gain: number, stake: number];
+export type CasinoRoll = [a: number, b: number, gain: number, stake: number, num?: number]; // num: the number a lucky bet rode on
 export interface CasinoView {
   cid: number; v: CasinoVariant;
-  stage: 'bet' | 'again' | 'play' | 'end' | 'cash'; // 'play': lucky's roll-or-leave choice; 'end': the result stays up a moment; 'cash': the player cashed out, the card just closes
+  stage: 'bet' | 'again' | 'end' | 'cash'; // 'again': a further wager on offer (it may be declined); 'end': the result stays up a moment; 'cash': the player cashed out, the card just closes
   bet: number; max: number; // `max`: the largest bet on offer while betting
   rolls: CasinoRoll[]; won: number; jail: boolean; // `jail`: set at the end
 }
@@ -72,7 +72,7 @@ export type Cmd =
   | { c: 'cash'; pi: number; v: number } // set a player's cash
   | { c: 'own'; i: number; o: Owned | null } // give a tile to a player (null: back to the bank)
   | { c: 'goto'; pi: number; i: number; land: boolean }; // jump to a tile; `land`: and stop there, which is the turn (it takes the roll's place)
-export type Answer = boolean | number[] | null | { act: 'roll'; bet: number } | { act: 'cash' } | { amt: number; n: number } | Cmd;
+export type Answer = boolean | number[] | null | { act: 'roll'; bet: number; num?: number } | { act: 'cash' } | { amt: number; n: number } | Cmd;
 
 // ---- Events: the one stream the game is told in ----
 export type Ev =

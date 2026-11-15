@@ -84,7 +84,7 @@ function answerFor(p) {
       }
       return p.items.slice(0, 1).map((x) => x.i);
     }
-    case 'casino': return p.view.stage === 'bet' || p.view.stage === 'play' ? { act: 'roll', bet: p.view.bet } : { act: 'cash' };
+    case 'casino': return p.view.stage === 'bet' ? { act: 'roll', bet: p.view.bet, num: 6 } : { act: 'cash' };
     default: return false;
   }
 }
