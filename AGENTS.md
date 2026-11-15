@@ -13,7 +13,7 @@
 
 ## Commands & Verification
 
-- `npm run check` — TypeScript check only (`tsc -b`; `typecheck` is an alias). No rules tests or model scans.
+- `npm run check` — TypeScript check only (`tsc -b`; `typecheck` is an alias).
 - `npm run inspect -- <model...>` — Opt-in model diagnostics (e.g. `las-vegas hong-kong`): per-level mesh/triangle counts, bounds and overhangs. Requires explicit model names; no assertions or full-scene sweep.
 - `npm run build` — Full typecheck + client & Worker production build.
 - `npm run shots` — Runs `scripts/shot-matrix.mjs` via headless Chrome (probes `localhost:5173`–`5176`, checks WebGL/GLSL/console errors, writes `/tmp/aw-shots/matrix[-<tile>].png` + `.json`). Run `node scripts/shot-matrix.mjs --help` for all flags and `--list` JSON schema.
@@ -39,16 +39,16 @@ Choose verification by the behavior affected, not just the filename (`game.ts` c
 ## Testing
 
 - Scope: game rules and tile effects only — buying/upgrading, rent, passing vs landing, abilities and their interactions, legal player choices, deposits, bankruptcy, turns and final ranking. Each test must describe a player-visible rule or a concrete rule regression.
+- Never add or expand tests outside this scope unless the user explicitly requests that scope expansion; general requests to implement, fix, refactor, verify, or improve coverage don't authorize it. This covers new test files, assertions added to existing tests, and test-like checks in scripts/CI (renaming them diagnostics doesn't exempt them). Don't add out-of-scope tests as precautionary regressions or incidental cleanup. Continue under the verification policy above.
 - Do not add tests for UI/copy, rendering/shaders, model budgets, logs, simple reducer assignments, dev-panel commands, or transport/storage internals. Recovery scenarios belong here only when they verify a specific game consequence (e.g. bankruptcy persists or a payment occurs once).
 - Keep coverage restrained: a representative normal case and meaningful boundaries/interactions. No coverage targets, exhaustive combinations, snapshots of whole state/event logs, or duplicate coverage of the same rule at every implementation layer.
-- **Rules/effects changes are test-first:** before editing business code, add or update the focused rule test with the intended outcome, then run it and confirm it fails for the expected behavioral reason (not setup/import errors). Only then change the implementation and rerun the affected suites above. Bug fixes first reproduce the rule regression. Behavior-preserving refactors use existing tests; do not invent a failing test or expand scope just to satisfy the workflow.
+- **Rules/effects changes are test-first:** before editing business code, add or update the focused rule test with the intended outcome, then run it and confirm it fails for the expected behavioral reason (not setup/import errors). Only then change the implementation and rerun the affected suites above. Bug fixes first reproduce the rule regression. Behavior-preserving refactors use existing tests; do not invent a failing test just to satisfy the workflow.
 - Tests live in `test/` as `*.test.ts`; `test/harness.ts` is the shared setup, not a test. Never put tests in `src/` — and never `import` a test from there.
 - Each test file opens with a comment block stating the rules it verifies. Rule/feature descriptions belong there, not in `src/` comments (which stay *why*-comments).
-- The harness esbuild-bundles `src/worker` + `src/shared` into a data-URL module (Node can't strip `game.ts`'s constructor parameter properties), then exposes:
-  - `start(n, { dev, settings, rig })` — boots a game and waits for the first ask; default rig makes the turn order seat order.
-  - State setup through events: `give(i, p, lv, m, paid)` / `seize(i)`, `setCash`, `putAt`, `setDep`, `setFlag`, plus readers `cash(pi)` / `cur()`.
-  - Driving via the pending roll question's dev commands: `draw(v)` rigs the next random draws, `goto(pi, i)` lands a tile as the whole turn, `roll(dice)` walks for real (pass effects apply), `idle()` burns the asked player's turn on a Jail visit; `answer(v)` / `asked(k)` / `playUntil(pred, answerer)` handle prompts (`benign` declines everything, `idler` idles every roll).
-  - `h.pending` is the open ask (`to`, `p`); `h.evs` the full event log.
+- `test/harness.ts` (each helper is commented there) bundles `src/worker` + `src/shared` with esbuild and exposes:
+  - `start(n, { dev, settings, rig })` — boots a game and waits for the first ask; default rig makes turn order = seat order. `h.pending` is the open ask, `h.evs` the event log.
+  - Setup via events: `give` / `seize`, `setCash`, `putAt`, `setDep`, `setFlag`; readers `cash` / `cur`.
+  - Driving via the roll question's dev commands: `draw`, `idle`, `goto` (lands a tile as the whole turn), `roll(dice)` (walks for real, pass effects apply); prompts via `answer`, `asked`, `playUntil` with `benign` / `idler` answerers.
 - Drive games deterministically through these — never stub `Math.random` or `Date.now`. Assert on rule outcomes (`cash`, `own`, flags, `tile`) and relevant gameplay events, not on copy, log/toast text, or replay/transport details. Expected outcomes must come from the rule, not recompute the implementation under test.
 
 ## Scene Automation & Visual Testing
@@ -72,7 +72,6 @@ await window.__aw.click('SKIP'); // data-id, text/prefix, or selector on top mod
 
 - **Batch visual sheets (`scripts/shot-matrix.mjs`)** — `--tile(s)`, `--iso`, and `--lots` accept tile indices, names, or kind slugs; read output PNGs directly to inspect visuals:
 ```bash
-npm run shots # (pixel, hd2d) x (12, 18, 0h) -> /tmp/aw-shots/matrix.png
 node scripts/shot-matrix.mjs --tile=28 --iso=1 --nosign=1 --az=-35,0,35,145 --zooms=0.6,2.4 --hours=12 # isolated turntable + LOD
 node scripts/shot-matrix.mjs --tile="Las Vegas" --lx=-0.3 --ly=1.5 --lz=0.45 --zoom=3 --crop=420x340 --scale=2 # lot-space close-up (--lot=1 for origin; or --tx/--tz/--lift)
 node scripts/shot-matrix.mjs --tile=13 --lv=3 --m=1 --lots=14:1:2,15:-1:0:0:0 --time=0,1 --q=vol=1 # neighbour context, clock poses, extra URL query
