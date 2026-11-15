@@ -82,14 +82,14 @@ test('concede mid mortgage-pick: the ask\'s continuation must not touch the esta
   await goto(g, h, A, 3);
   const pick = h.pending;
   assert(pick && pick.p.k === 'pick' && pick.p.rule.k === 'raise' && pick.to === A, 'mortgage-to-pay question is up');
-  const bCash = cash(g, B);
+  const bCash = cash(g, B); // the cash part of the rent is already paid
   g.concede(A); // gives up instead of picking
   await settle();
   assert.equal(g.S.players[A].out, 1);
   assert.equal(g.S.own[1], undefined, 'A\'s properties went to the bank, unmortgaged');
   assert.equal(g.S.own[2], undefined);
   assert.equal(g.S.own[3].p, B, 'B keeps Sydney');
-  assert.equal(cash(g, B), bCash, 'B received nothing — the estate went to the bank');
+  assert.equal(cash(g, B), bCash, 'B keeps what was paid — the estate went to the bank');
   assert(!h.pending || h.pending.to !== A, 'no question left for A');
   g.dispose(); // 2p left, endless: the game runs on
 });
@@ -112,8 +112,8 @@ test('the creditor concedes mid pick: the payment goes to the bank', async () =>
   await answer(g, h, [1]); // A mortgages Wellington
   assert.equal(g.S.own[1].m, true, 'Wellington mortgaged');
   assert.equal(g.S.own[1].p, A);
-  assert.equal(cash(g, A), 500 + 800 - 650, 'A paid the 650 rent — to the bank, not to B');
-  assert.equal(cash(g, B), 0, 'B collected nothing');
+  assert.equal(cash(g, A), 800 - 150, 'the rest of the 650 rent went to the bank, not to B');
+  assert.equal(cash(g, B), 0, 'bankruptcy took what B had collected');
   g.dispose();
 });
 

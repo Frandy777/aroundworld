@@ -1,9 +1,9 @@
 // Paying what the cash can't cover, and leaving the room.
-//   shortfall — first any fixed deposit is withdrawn early (public.test), then a pick mortgages lots
-//               at half their lot value until the need is met; when even the cheapest lot can't be
-//               spared there is nothing to choose and everything is mortgaged; and when that still
-//               can't reach it the player goes bankrupt: the creditor gets what could be raised
-//               (cash + half lot values) and the estate returns to the bank.
+//   shortfall — first any fixed deposit is withdrawn early (public.test), then the player's cash is
+//               handed over and the rest is raised by a pick mortgaging lots at half their lot value;
+//               when even the cheapest lot can't be spared there is nothing to choose and everything
+//               is mortgaged; and when that still can't reach it the player goes bankrupt: the creditor
+//               gets what could be raised (cash + half lot values) and the estate returns to the bank.
 //   forfeit   — a player who leaves the room answers nothing more: an open question settles with its
 //               default and they go bankrupt when their next turn comes (staying in the room and
 //               giving up is `concede`, covered in concede.test).
@@ -15,7 +15,7 @@ import { start, give, setCash, draw, goto, idle, answer, asked, settle, cash, ti
 const WEL = tileAt('Wellington'), CAN = tileAt('Canberra'), SYD = tileAt('Sydney'), BANK = kindAt('bank');
 const LUCKY = TILES.findIndex((t) => t.kind === 'casino' && t.variant === 'lucky');
 
-test('a shortfall opens a mortgage pick at half the lot value', async () => {
+test('a shortfall hands over the cash first, then opens a mortgage pick at half the lot value', async () => {
   const { g, h } = await start(2);
   const [A, B] = g.S.order;
   give(g, WEL, A, 0); // half of 1600 → 800
@@ -26,7 +26,10 @@ test('a shortfall opens a mortgage pick at half the lot value', async () => {
   const pick = asked(h, 'pick');
   assert.equal(pick.to, A);
   assert.equal(pick.p.rule.k, 'raise');
-  assert.equal(pick.p.rule.need, 650);
+  assert.equal(cash(g, A), 0, 'the cash is already paid');
+  assert.equal(cash(g, B), START_CASH + 500, 'the creditor received it');
+  assert.equal(pick.p.rule.cash, 0);
+  assert.equal(pick.p.rule.need, 150, 'what is still owed');
   assert.deepEqual(pick.p.items, [
     { i: WEL, lv: 0, amt: 800 },
     { i: CAN, lv: 0, amt: 900 },
@@ -34,7 +37,7 @@ test('a shortfall opens a mortgage pick at half the lot value', async () => {
   await answer(g, h, [WEL]);
   assert.equal(g.S.own[WEL].m, true);
   assert.equal(g.S.own[CAN].m, false, 'spared');
-  assert.equal(cash(g, A), 500 + 800 - 650);
+  assert.equal(cash(g, A), 800 - 150);
   assert.equal(cash(g, B), START_CASH + 650);
 });
 
@@ -43,12 +46,12 @@ test('when even the cheapest lot cannot be spared, everything is mortgaged witho
   const [A, B] = g.S.order;
   give(g, WEL, A, 0); give(g, CAN, A, 0); // half values 800 + 900
   give(g, SYD, B, 2); // rent 1300
-  setCash(g, A, 300); // 300+1700 covers it — but never without the cheapest
+  setCash(g, A, 300); // pays the 300 in cash; the other 1,000 needs both lots — never without the cheapest
   await goto(g, h, A, SYD);
   assert.equal(g.S.own[WEL].m, true);
   assert.equal(g.S.own[CAN].m, true);
   assert(!h.evs.some((e) => e.t === 'ask' && e.p.k === 'pick'), 'nothing to choose, nothing asked');
-  assert.equal(cash(g, A), 300 + 1700 - 1300);
+  assert.equal(cash(g, A), 1700 - 1000);
   assert.equal(cash(g, B), START_CASH + 1300);
   assert.equal(h.pending.to, B);
 });

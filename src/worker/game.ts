@@ -293,7 +293,7 @@ export class Game {
     this.toast(m`${T(i)}: ${this.nm(o.p)} earns ${money(vals[o.lv])}`, 'good');
     this.give(o.p, vals[o.lv], m`${T(i, true)}: ${why}`, bank);
   }
-  /** Take `amt` from a player for the bank or for `to`. A shortfall first withdraws any fixed deposit (no interest), then mortgages at half the lot value. False when they went bankrupt instead. */
+  /** Take `amt` from a player for the bank or for `to`. A shortfall first withdraws any fixed deposit (no interest), hands over what cash is left, then mortgages at half the lot value for the rest. False when they went bankrupt instead. */
   async pay(pi: number, amt: number, why: Msg | string, to: number | null = null): Promise<boolean> {
     const S = this.S, p = S.players[pi];
     if (amt <= 0) return true;
@@ -305,21 +305,23 @@ export class Game {
       this.toast(`${p.name} withdrew a deposit early (no interest)`, 'bad');
     }
     if (p.cash < amt) {
-      const items = this.mortgageable(pi, 0.5), raised = p.cash + items.reduce((s, x) => s + (x.amt ?? 0), 0);
-      if (raised < amt) {
+      const had = p.cash, rest = amt - had, items = this.mortgageable(pi, 0.5), raised = items.reduce((s, x) => s + (x.amt ?? 0), 0);
+      if (had) { if (to === null || S.players[to].out) this.cash(pi, -had, m`${why} (part)`); else this.xfer(pi, to, had, m`${why} (part)`); }
+      if (raised < rest) {
         this.notice({ title: 'BANKRUPT!', sub: [p.name], tone: 0xb13e53, label: 'OH NO...', danger: true, long: true, body: [
           { k: 'face', p: pi },
-          note(`${p.name} owes ${money(amt)} but can only raise ${money(raised)} (cash + deposit + mortgage value). ${to !== null ? S.players[to].name + ' receives what can be raised.' : 'The bank takes everything.'}`)] });
-        if (to !== null) this.xfer(pi, to, raised, m`${why} (bankrupt)`, p.cash);
+          note(`${p.name} owes ${money(amt)} but can only raise ${money(had + raised)} (cash + deposit + mortgage value). ${to !== null ? S.players[to].name + ' receives what can be raised.' : 'The bank takes everything.'}`)] });
+        if (to !== null && raised) this.xfer(pi, to, raised, m`${why} (bankrupt)`, 0);
         this.goBankrupt(pi);
         return false;
       }
-      const forced = raised - Math.min(...items.map((x) => x.amt ?? 0)) < amt; // short even without the cheapest: every property goes, nothing to choose
-      if (forced) this.toast(`${p.name} must mortgage every property to pay ${money(amt)}`, 'bad');
-      const sel = forced ? items.map((x) => x.i) : (await this.ask(pi, { k: 'pick', of: 'tile', title: 'MORTGAGE TO PAY', sub: [`${p.name} owes ${money(amt)}`], tone: 0x3b7bd9,
-        hint: `You can't afford this. Mortgage properties (each pays half its lot value) to raise at least ${money(amt - p.cash)}.`, items, rule: { k: 'raise', cash: p.cash, need: amt }, label: 'MORTGAGE & PAY' })) as number[];
+      const forced = raised - Math.min(...items.map((x) => x.amt ?? 0)) < rest; // short even without the cheapest: every property goes, nothing to choose
+      if (forced) this.toast(`${p.name} must mortgage every property to pay ${money(rest)}`, 'bad');
+      const sel = forced ? items.map((x) => x.i) : (await this.ask(pi, { k: 'pick', of: 'tile', title: 'MORTGAGE TO PAY', sub: [`${p.name} owes ${money(rest)}`], tone: 0x3b7bd9,
+        hint: `You can't afford this. Mortgage properties (each pays half its lot value) to raise at least ${money(rest)}.`, items, rule: { k: 'raise', cash: 0, need: rest }, label: 'MORTGAGE & PAY' })) as number[];
       if (p.out) return false; // gave up while picking: the estate already went to the bank, there is nothing to mortgage
       this.mortgage(pi, sel, 0.5);
+      amt = rest;
     }
     if (to === null || S.players[to].out) this.cash(pi, -amt, why); // a creditor who went out meanwhile leaves the payment to the bank
     else this.xfer(pi, to, amt, why);
