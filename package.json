@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b",
-    "check": "tsc -b && node scripts/check.mjs",
+    "check": "tsc -b",
+    "inspect": "node scripts/inspect.mjs",
+    "test": "node --test test/",
     "shots": "node scripts/shot-matrix.mjs",
     "deploy": "npm run build && wrangler deploy"
   },

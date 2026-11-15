@@ -13,10 +13,43 @@
 
 ## Commands & Verification
 
-- `npm run check` — Primary fast check (<1s; prefer over `typecheck`): `tsc -b` + `scripts/check.mjs` (shader `#include`/patch anchors, board/reducer/math, and headless build/bake/tick/owner/lamp/bounds/budget checks for every registered model). `npm run check -- <model...>` (slug-matched, e.g. `las-vegas hong-kong`) prints a per-level mesh/tri budget, bounds, and overhang report.
+- `npm run check` — TypeScript check only (`tsc -b`; `typecheck` is an alias). No rules tests or model scans.
+- `npm run inspect -- <model...>` — Opt-in model diagnostics (e.g. `las-vegas hong-kong`): per-level mesh/triangle counts, bounds and overhangs. Requires explicit model names; no assertions or full-scene sweep.
 - `npm run build` — Full typecheck + client & Worker production build.
 - `npm run shots` — Runs `scripts/shot-matrix.mjs` via headless Chrome (probes `localhost:5173`–`5176`, checks WebGL/GLSL/console errors, writes `/tmp/aw-shots/matrix[-<tile>].png` + `.json`). Run `node scripts/shot-matrix.mjs --help` for all flags and `--list` JSON schema.
+- `npm test` — Runs the game-rules unit tests in `test/` via `node --test` (Node ≥ 26 strips the `.ts` types natively).
+- `node --test test/special.test.ts` — Runs only the named rule suite; pass several file paths for related rules.
 - **Dev server**: Do **not** start one unless asked. Probe `http://localhost:5173` first; if none is running (worktree/checkout), pass `--serve` to `shot-matrix.mjs` for a throwaway `vite --port 0`.
+
+Choose verification by the behavior affected, not just the filename (`game.ts` contains both isolated effects and shared settlement). Never run check, test, build and shots as a default completion checklist.
+
+| Change | Verification |
+| --- | --- |
+| Docs, comments, wording only | No rules tests or build. |
+| UI, styles, animation, models | No rules tests; use `check` for TypeScript changes and targeted inspection/shots when the visual change needs them. |
+| One tile rule or effect | Its test file, plus suites for affected interactions. |
+| News effect | `test/news.test.ts`, plus affected tile suites. |
+| Shared payments, rent, movement, bankruptcy, turns, rule data/reducer, or test harness | Full rules suite (`npm test`). |
+| Tests only | Changed test files. |
+| Build config, dependencies, deployment preparation | Build when relevant; rules tests only if their execution or game behavior is affected. |
+
+- Run `check` for production TypeScript changes; a build already includes it, so do not run both for the same revision.
+- After verification passes, rerun only if relevant code changes, a failure, or a new concern warrants it. Report what ran and any relevant limitation.
+
+## Testing
+
+- Scope: game rules and tile effects only — buying/upgrading, rent, passing vs landing, abilities and their interactions, legal player choices, deposits, bankruptcy, turns and final ranking. Each test must describe a player-visible rule or a concrete rule regression.
+- Do not add tests for UI/copy, rendering/shaders, model budgets, logs, simple reducer assignments, dev-panel commands, or transport/storage internals. Recovery scenarios belong here only when they verify a specific game consequence (e.g. bankruptcy persists or a payment occurs once).
+- Keep coverage restrained: a representative normal case and meaningful boundaries/interactions. No coverage targets, exhaustive combinations, snapshots of whole state/event logs, or duplicate coverage of the same rule at every implementation layer.
+- **Rules/effects changes are test-first:** before editing business code, add or update the focused rule test with the intended outcome, then run it and confirm it fails for the expected behavioral reason (not setup/import errors). Only then change the implementation and rerun the affected suites above. Bug fixes first reproduce the rule regression. Behavior-preserving refactors use existing tests; do not invent a failing test or expand scope just to satisfy the workflow.
+- Tests live in `test/` as `*.test.ts`; `test/harness.ts` is the shared setup, not a test. Never put tests in `src/` — and never `import` a test from there.
+- Each test file opens with a comment block stating the rules it verifies. Rule/feature descriptions belong there, not in `src/` comments (which stay *why*-comments).
+- The harness esbuild-bundles `src/worker` + `src/shared` into a data-URL module (Node can't strip `game.ts`'s constructor parameter properties), then exposes:
+  - `start(n, { dev, settings, rig })` — boots a game and waits for the first ask; default rig makes the turn order seat order.
+  - State setup through events: `give(i, p, lv, m, paid)` / `seize(i)`, `setCash`, `putAt`, `setDep`, `setFlag`, plus readers `cash(pi)` / `cur()`.
+  - Driving via the pending roll question's dev commands: `draw(v)` rigs the next random draws, `goto(pi, i)` lands a tile as the whole turn, `roll(dice)` walks for real (pass effects apply), `idle()` burns the asked player's turn on a Jail visit; `answer(v)` / `asked(k)` / `playUntil(pred, answerer)` handle prompts (`benign` declines everything, `idler` idles every roll).
+  - `h.pending` is the open ask (`to`, `p`); `h.evs` the full event log.
+- Drive games deterministically through these — never stub `Math.random` or `Date.now`. Assert on rule outcomes (`cash`, `own`, flags, `tile`) and relevant gameplay events, not on copy, log/toast text, or replay/transport details. Expected outcomes must come from the rule, not recompute the implementation under test.
 
 ## Scene Automation & Visual Testing
 
