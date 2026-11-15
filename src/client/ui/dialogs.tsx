@@ -143,9 +143,22 @@ export function PickCard({ id, p }: { id: number; p: Of<'pick'> }) {
   const [sel, setSel] = useState<number[]>([]);
   const sum = sel.reduce((s, i) => s + (p.items.find((x) => x.i === i)?.amt ?? 0), 0);
   const ok = canPick(r, sel.length, sum);
-  const msg = r.k === 'one' ? r.msg : r.k === 'any' ? 'You receive' : r.k === 'redeem' ? `Cash ${money(r.cash)}. Cost` : `Cash ${money(r.cash)}. Need ${money(r.need)}`;
   const toggle = (i: number) => setSel(sel.includes(i) ? sel.filter((x) => x !== i) : r.k === 'one' ? [i] : [...sel, i]);
   const priced = p.items.some((x) => x.amt !== undefined);
+  const short = r.k === 'raise' ? r.need - r.cash - sum : 0; // a forced mortgage: what the debt still lacks (negative: the surplus stays)
+  const tally = r.k === 'raise' ? (
+    <div className="rows">
+      <div className="row"><span>Selected raises</span><b className={sum ? 'good' : ''}>+{money(sum)}</b></div>
+      <div className="row sum"><span>{short > 0 ? 'Still to pay' : 'Covered'}</span><b className={short > 0 ? 'bad' : 'good'}>{short > 0 ? money(short) : `+${money(-short)}`}</b></div>
+    </div>
+  ) : r.k === 'redeem' ? (
+    <div className="rows">
+      <div className="row"><span>Cost</span><b>{money(sum)}</b></div>
+      <div className="row sum"><span>Cash left</span><b className={sum > r.cash ? 'bad' : ''}>{money(r.cash - sum)}</b></div>
+    </div>
+  ) : (
+    <div className="row sum"><span>{r.k === 'one' ? r.msg : 'You receive'}</span>{priced && <b>{money(sum)}</b>}</div>
+  );
   return (
     <Card title={p.title} sub={<Rich m={p.sub} />} tone={p.tone} foot={<>
       {p.skip && <Btn id="skip" onClick={() => reply(id, null)}>{p.skip}</Btn>}
@@ -164,7 +177,7 @@ export function PickCard({ id, p }: { id: number; p: Of<'pick'> }) {
           </div>
         );
       })}</div>
-      <div className="row sum"><span>{msg}</span>{priced && <b>{money(sum)}</b>}</div>
+      {tally}
     </Card>
   );
 }

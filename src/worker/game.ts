@@ -318,7 +318,7 @@ export class Game {
       const forced = raised - Math.min(...items.map((x) => x.amt ?? 0)) < rest; // short even without the cheapest: every property goes, nothing to choose
       if (forced) this.toast(`${p.name} must mortgage every property to pay ${money(rest)}`, 'bad');
       const sel = forced ? items.map((x) => x.i) : (await this.ask(pi, { k: 'pick', of: 'tile', title: 'MORTGAGE TO PAY', sub: [`${p.name} owes ${money(rest)}`], tone: 0x3b7bd9,
-        hint: `You can't afford this. Mortgage properties (each pays half its lot value) to raise at least ${money(rest)}.`, items, rule: { k: 'raise', cash: 0, need: rest }, label: 'MORTGAGE & PAY' })) as number[];
+        hint: 'You can\'t afford this. Mortgage properties to cover it: each pays half its lot value.', items, rule: { k: 'raise', cash: 0, need: rest }, label: 'MORTGAGE & PAY' })) as number[];
       if (p.out) return false; // gave up while picking: the estate already went to the bank, there is nothing to mortgage
       this.mortgage(pi, sel, 0.5);
       amt = rest;
