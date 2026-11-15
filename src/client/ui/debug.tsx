@@ -9,12 +9,13 @@ import { POS } from '../render/layout';
 import { camera, controls, dirtyShadow, fitZoom, jumpTo, lod, resetView, viewAngles } from '../render/scene';
 import { clock, wallHour } from '../render/sky';
 import { loop, playStrike } from '../stage';
-import { G, actionBtn, hd2d, paused, selectedTile, session, stageOnly, useCell } from '../store';
+import { G, actionBtn, hd2d, paused, selectedTile, session, stageOnly, useCell, type View } from '../store';
 import { openAlert, openAsk, openNews, openNotice } from './open';
 
 // ---- The dev panel: available whenever opened with ?dev=1 (title, lobby or game), and in any dev room ----
-// Scene controls (look, sky clock, camera readout, animation pace, strike test, quick 4P start) work everywhere, including over the SEED demo board;
-// game-state commands answer the roll question (`Game.debug`), so they light up in a dev room while ROLL DICE is waiting.
+// Three tabs, by what they touch. SCENE is the view alone (look, camera, sky clock, animation pace, a strike on a tile): it works everywhere, including over the SEED demo board.
+// GAME is the room: a target (tile, player) and the commands that use it, which answer the roll question (`Game.debug`), so they light up in a dev room while ROLL DICE is waiting. CARDS previews a card from its JSON.
+// All three stay mounted (hidden when not shown), so a half-typed value or an edited card is still there on coming back; the tile picked is shared by SCENE and GAME.
 
 const SAMPLES: Record<string, Notice | NewsCard | Prompt> = {
   notice: {
@@ -42,17 +43,136 @@ function preview(text: string) {
   } catch (err) { void openAlert('PREVIEW', String(err)); }
 }
 
-const Field = ({ label, children }: { label: string; children: ReactNode }) => <div className="field"><label>{label}</label>{children}</div>;
+// A Field is a heading ruled out to its readout (`note`) over the controls it names. A Seg is one row of choices or view buttons: [label, lit, press, disabled].
+type Opt = [label: ReactNode, on: boolean, click: () => void, off?: boolean];
+const Seg = ({ opts, cls = '' }: { opts: Opt[]; cls?: string }) => (
+  <div className={`seg ${cls}`}>{opts.map(([label, on, click, off], i) => <button key={i} className={on ? 'on' : ''} disabled={off} onClick={click}>{label}</button>)}</div>
+);
+const Field = ({ label, note, children }: { label: string; note?: ReactNode; children: ReactNode }) => <div className="field"><label>{label}{note !== undefined && <b>{note}</b>}</label>{children}</div>;
+// The tile every tab acts on, with what a tab can do to it beside the list
+const TilePick = ({ tile, set, children }: { tile: number; set: (i: number) => void; children?: ReactNode }) => (
+  <div className="pl-row">
+    <select value={tile} onChange={(e) => set(+e.target.value)}>{TILES.map((t) => <option key={t.i} value={t.i}>{t.i} {t.name}{t.variant ? ` (${t.variant})` : ''}</option>)}</select>
+    {children}
+  </div>
+);
+const focusTile = (i: number) => { controls.autoRotate = false; jumpTo(POS[i].x, POS[i].z, 2); loop.draw(); };
 const mod24 = (h: number) => ((h % 24) + 24) % 24;
 const hhmm = (h: number) => new Date(mod24(h) * 36e5).toISOString().slice(11, 16);
 const LOD_NAMES = ['far', 'mid', 'near'] as const;
 
+interface Pane { show: boolean; tile: number; setTile: (i: number) => void }
+
+function Scene({ show, tile, setTile, view, bump }: Pane & { view: View; bump: () => void }) {
+  const isHd = useCell(hd2d), bare = useCell(stageOnly), { elev } = viewAngles();
+  const wall = wallHour(), hour = clock.stop ?? mod24(wall + clock.shift);
+  const setClock = (shift: number, stop: number | null) => { clock.shift = shift; clock.stop = stop; dirtyShadow(); loop.draw(); bump(); };
+  const seek = (h: number) => setClock(clock.stop === null ? mod24(h - wall) : clock.shift, clock.stop === null ? null : mod24(h));
+  const toggleStop = () => setClock(clock.stop === null ? clock.shift : mod24(clock.stop - wall), clock.stop === null ? hour : null);
+  const setPace = (paused: boolean, scale = loop.scale) => { loop.paused = paused; loop.scale = scale; loop.draw(); bump(); };
+  const cam = (f: () => void) => () => { controls.autoRotate = false; f(); bump(); }; // a jump of the camera stops the title's orbit
+  const fireStrike = () => { const from = (tile + Math.floor(TILES.length / 2)) % TILES.length; void playStrike(from, tile); };
+  const orbit: Opt[] = view === 'game' ? [] : [['ORBIT', controls.autoRotate, () => { controls.autoRotate = !controls.autoRotate; bump(); }]];
+  return (
+    <div className="bd" hidden={!show}>
+      <Field label="TILE">
+        <TilePick tile={tile} set={setTile}>
+          <button className="btn sm" onClick={() => { focusTile(tile); bump(); }}>FOCUS</button>
+          <button className="btn sm" onClick={fireStrike}>STRIKE</button>
+        </TilePick>
+      </Field>
+      <Field label="LOOK">
+        <Seg opts={[['PIXEL', !isHd, () => hd2d.set(false)], ['HD-2D', isHd, () => hd2d.set(true)], ['STAGE ONLY', bare, () => stageOnly.set(!bare)]]} />
+      </Field>
+      <Field label="CAMERA" note={`z ${camera.zoom.toFixed(2)} · fit ${fitZoom.toFixed(2)} · ${LOD_NAMES[lod.n] ?? '-'} · ${Math.round(elev)}°`}>
+        <Seg opts={[['FIT', false, cam(() => { jumpTo(0, 0, 'fit'); loop.draw(); })], ['RESET', false, cam(() => void resetView())], ...orbit]} />
+      </Field>
+      <Field label="TIME OF DAY" note={hhmm(hour)}>
+        <input type="range" min={0} max={24} step="any" value={hour} onChange={(e) => seek(+e.target.value)} />
+        <Seg opts={[
+          ['PAUSE', clock.stop !== null, toggleStop],
+          ['LIVE', clock.stop === null && !clock.shift, () => setClock(0, null)],
+          ...[0, 6.2, 12, 18].map((h): Opt => [hhmm(h), clock.stop === h, () => setClock(0, h)]),
+        ]} />
+      </Field>
+      <Field label="ANIMATION">
+        <Seg opts={[
+          ['PAUSE', loop.paused, () => setPace(!loop.paused)],
+          ...[0.25, 1, 2].map((s): Opt => [`${s}x`, !loop.paused && loop.scale === s, () => setPace(false, s)]),
+          ['+0.2s', false, () => { loop.step(0.2); bump(); }, !loop.paused],
+        ]} />
+      </Field>
+    </div>
+  );
+}
+
+// One line each, so the panel does not change height as the game goes from one state to the next
+const STATUS = {
+  none: ['NO GAME', 'Start one with QUICK 4P.'],
+  plain: ['NOT DEV', 'This room is not a dev room.'],
+  wait: ['WAITING', 'Wait for your ROLL DICE.'],
+  go: ['READY', 'Commands run before the roll.'],
+} as const;
+
+function Game({ show, tile, setTile }: Pane) {
+  const { room } = useCell(session), run = useCell(actionBtn)?.reply, isPaused = useCell(paused), S = G.S;
+  const [who, setWho] = useState(0), [lv, setLv] = useState(0), [mort, setMort] = useState(false), [draws, setDraws] = useState('3,4'), [cash, setCash] = useState('1000');
+  const aim = TILES[tile], cap = maxLevel(aim), level = Math.min(lv, cap), mortgaged = mort && canMortgage(aim);
+  const btn = (label: string, c: Cmd, cls = '') => <button className={`btn sm ${cls}`} disabled={!S || !run || !command(S, c)} onClick={() => run?.(c)}>{label}</button>;
+  const st = !S ? 'none' : !room?.dev ? 'plain' : run ? 'go' : 'wait';
+  return (
+    <div className="bd" hidden={!show}>
+      <div className="note"><span className={`badge ${st === 'go' ? 'gold' : 'dim'}`}>{STATUS[st][0]}</span>{STATUS[st][1]}</div>
+      {S && room?.dev && (
+        <>
+          <Field label="TARGET">
+            <TilePick tile={tile} set={setTile}><button className="btn sm" onClick={() => focusTile(tile)}>FOCUS</button></TilePick>
+            <Seg cls="fit" opts={S.players.map((p, i): Opt => [p.name, who === i, () => setWho(i), !!p.out])} />
+          </Field>
+          <Field label="TELEPORT">
+            <div className="pl-row fill">{btn('MOVE', { c: 'goto', pi: who, i: tile, land: false })}{btn('LAND', { c: 'goto', pi: who, i: tile, land: true }, 'primary')}</div>
+          </Field>
+          <Field label="DEED">
+            <Seg opts={[...[0, 1, 2, 3].map((n): Opt => [`Lv ${n}`, level === n, () => setLv(n), n > cap]), ['MORT', mortgaged, () => setMort(!mort), !canMortgage(aim)]]} />
+            <div className="pl-row fill">{btn('GIVE', { c: 'own', i: tile, o: { p: who, lv: level, m: mortgaged } })}{btn('CLEAR', { c: 'own', i: tile, o: null })}</div>
+          </Field>
+          <div className="pair">
+            <Field label="CASH">
+              <div className="pl-row"><input inputMode="numeric" value={cash} onChange={(e) => setCash(e.target.value)} />{btn('SET', { c: 'cash', pi: who, v: Number(cash) })}</div>
+            </Field>
+            <Field label="ROOM">
+              <button className={`btn sm ${isPaused ? 'on' : ''}`} onClick={() => send({ t: 'pause', on: !isPaused })}>PAUSE GAME</button>
+            </Field>
+          </div>
+          <Field label="NEXT DRAWS (dice, news card #...)">
+            <div className="pl-row"><input value={draws} onChange={(e) => setDraws(e.target.value)} />{btn('SET', { c: 'draw', v: draws.split(/\D+/).filter(Boolean).map(Number) })}</div>
+          </Field>
+        </>
+      )}
+    </div>
+  );
+}
+
+function Cards({ show }: { show: boolean }) {
+  const [kind, setKind] = useState('notice'), [json, setJson] = useState(() => sample('notice'));
+  return (
+    <div className="bd" hidden={!show}>
+      <Field label="SAMPLE">
+        <div className="pl-row">
+          <select value={kind} onChange={(e) => { setKind(e.target.value); setJson(sample(e.target.value)); }}>{Object.keys(SAMPLES).map((k) => <option key={k}>{k}</option>)}</select>
+          <button className="btn sm" onClick={() => preview(json)}>SHOW</button>
+        </div>
+      </Field>
+      <Field label="JSON"><textarea rows={10} spellCheck={false} value={json} onChange={(e) => setJson(e.target.value)} /></Field>
+    </div>
+  );
+}
+
+const TABS = ['scene', 'game', 'cards'] as const;
+
 export function Debug() {
-  const { view, room } = useCell(session), run = useCell(actionBtn)?.reply, sel = useCell(selectedTile);
-  const isHd = useCell(hd2d), bare = useCell(stageOnly), isPaused = useCell(paused);
-  const [open, setOpen] = useState(false), [, setTick] = useState(0), [busy, setBusy] = useState(false);
-  const [who, setWho] = useState(0), [draws, setDraws] = useState('3,4'), [cash, setCash] = useState('1000');
-  const [tile, setTile] = useState(1), [lv, setLv] = useState(0), [mort, setMort] = useState(false), [kind, setKind] = useState('notice'), [json, setJson] = useState(() => sample('notice'));
+  const { view, room } = useCell(session), sel = useCell(selectedTile);
+  const [open, setOpen] = useState(false), [tab, setTab] = useState<(typeof TABS)[number]>('scene'), [tile, setTile] = useState(1), [, setTick] = useState(0), [busy, setBusy] = useState(false);
   useEffect(() => { if (sel >= 0) setTile(sel); }, [sel]);
   useEffect(() => {
     if (!open) return;
@@ -61,95 +181,19 @@ export function Debug() {
   }, [open]);
 
   if (!devUrl && !room?.dev) return null;
-  const S = G.S, bumpUi = () => setTick((n) => n + 1);
-  const wall = wallHour(), hour = clock.stop ?? mod24(wall + clock.shift);
-  const setClock = (shift: number, stop: number | null) => { clock.shift = shift; clock.stop = stop; dirtyShadow(); loop.draw(); bumpUi(); };
-  const seek = (h: number) => setClock(clock.stop === null ? mod24(h - wall) : clock.shift, clock.stop === null ? null : mod24(h));
-  const toggleStop = () => setClock(clock.stop === null ? clock.shift : mod24(clock.stop - wall), clock.stop === null ? hour : null);
-
-  const { elev } = viewAngles(), lodLabel = LOD_NAMES[lod.n] ?? '-';
-  const aim = TILES[tile], cap = maxLevel(aim), level = Math.min(lv, cap), mortgaged = mort && canMortgage(aim);
-  const btn = (label: string, c: Cmd, cls = '') => <button className={`btn sm ${cls}`} disabled={!S || !run || !command(S, c)} onClick={() => run?.(c)}>{label}</button>;
-  const fireStrike = () => { const from = (tile + Math.floor(TILES.length / 2)) % TILES.length; void playStrike(from, tile); };
-  const setPace = (paused: boolean, scale = loop.scale) => { loop.paused = paused; loop.scale = scale; loop.draw(); bumpUi(); };
-
+  const bump = () => setTick((n) => n + 1), pane = (t: (typeof TABS)[number]) => ({ show: tab === t, tile, setTile });
   return (
     <aside id="dev">
-      <button className="btn sm" onClick={() => setOpen(!open)}>DEV</button>
-      {open && (
-        <div className="box"><div className="bd">
-          <Field label={`LOOK & VIEW  z ${camera.zoom.toFixed(2)} / fit ${fitZoom.toFixed(2)} · ${lodLabel} · ${Math.round(elev)}°`}>
-            <div className="seg">
-              <button className={!isHd ? 'on' : ''} onClick={() => hd2d.set(false)}>PIXEL</button>
-              <button className={isHd ? 'on' : ''} onClick={() => hd2d.set(true)}>HD-2D</button>
-              <button className={bare ? 'on' : ''} onClick={() => stageOnly.set(!bare)}>STAGE ONLY</button>
-              {view !== 'game' && <button className={controls.autoRotate ? 'on' : ''} onClick={() => { controls.autoRotate = !controls.autoRotate; bumpUi(); }}>ORBIT</button>}
-            </div>
-            <div className="seg">
-              <button onClick={() => { controls.autoRotate = false; jumpTo(0, 0, 'fit'); loop.draw(); bumpUi(); }}>FIT</button>
-              <button onClick={() => { controls.autoRotate = false; jumpTo(POS[tile].x, POS[tile].z, 2); loop.draw(); bumpUi(); }}>FOCUS TILE</button>
-              <button onClick={() => { controls.autoRotate = false; void resetView(); bumpUi(); }}>RESET</button>
-            </div>
-          </Field>
-          <Field label={`TIME OF DAY ${hhmm(hour)}`}>
-            <input type="range" min={0} max={24} step="any" value={hour} onChange={(e) => seek(+e.target.value)} />
-            <div className="seg">
-              <button className={clock.stop !== null ? 'on' : ''} onClick={toggleStop}>PAUSE</button>
-              <button className={clock.stop === null && !clock.shift ? 'on' : ''} onClick={() => setClock(0, null)}>LIVE</button>
-              {[0, 6.2, 12, 18].map((h) => <button key={h} onClick={() => setClock(0, h)}>{hhmm(h)}</button>)}
-            </div>
-          </Field>
-          <Field label="PACE & STAGE FX">
-            <div className="seg">
-              <button className={loop.paused ? 'on' : ''} onClick={() => setPace(!loop.paused)}>PAUSE</button>
-              {[0.25, 1, 2].map((s) => <button key={s} className={!loop.paused && loop.scale === s ? 'on' : ''} onClick={() => setPace(false, s)}>{s}x</button>)}
-              <button disabled={!loop.paused} onClick={() => { loop.step(0.2); bumpUi(); }}>+0.2s</button>
-            </div>
-          </Field>
-          <Field label="TILE">
-            <select value={tile} onChange={(e) => setTile(+e.target.value)}>{TILES.map((t) => <option key={t.i} value={t.i}>{t.i} {t.name}{t.variant ? ` (${t.variant})` : ''}</option>)}</select>
-            <div className="pl-row">
-              <button className="btn sm" onClick={() => { controls.autoRotate = false; jumpTo(POS[tile].x, POS[tile].z, 2); loop.draw(); bumpUi(); }}>LOOK</button>
-              <button className="btn sm" onClick={fireStrike}>STRIKE</button>
-              {!S && <button className="btn sm primary" disabled={busy} onClick={() => { setBusy(true); void quickGame(3).finally(() => setBusy(false)); }}>QUICK 4P</button>}
-            </div>
-            {room?.dev && S && (
-              <>
-                <div className="pl-row">
-                  {btn('MOVE', { c: 'goto', pi: who, i: tile, land: false })}{btn('LAND', { c: 'goto', pi: who, i: tile, land: true }, 'primary')}
-                  {btn('GIVE', { c: 'own', i: tile, o: { p: who, lv: level, m: mortgaged } })}{btn('CLEAR', { c: 'own', i: tile, o: null })}
-                </div>
-                <div className="seg">
-                  {[0, 1, 2, 3].map((n) => <button key={n} className={level === n ? 'on' : ''} disabled={n > cap} onClick={() => setLv(n)}>Lv {n}</button>)}
-                  <button className={mortgaged ? 'on' : ''} disabled={!canMortgage(aim)} onClick={() => setMort(!mort)}>MORT</button>
-                </div>
-              </>
-            )}
-          </Field>
-          {room?.dev && S && (
-            <>
-              <div className="pl-row">
-                <button className={`btn sm ${isPaused ? 'on' : ''}`} onClick={() => send({ t: 'pause', on: !isPaused })}>{isPaused ? 'RESUME GAME' : 'PAUSE GAME'}</button>
-              </div>
-              <div className="note">{run ? 'Commands run before the roll.' : 'Commands work while ROLL DICE is up.'}</div>
-              <Field label="PLAYER"><div className="seg">{S.players.map((p, i) => <button key={i} className={who === i ? 'on' : ''} disabled={!!p.out} onClick={() => setWho(i)}>{p.name}</button>)}</div></Field>
-              <Field label="NEXT DRAWS (dice, news card #...)">
-                <div className="pl-row"><input value={draws} onChange={(e) => setDraws(e.target.value)} />{btn('SET', { c: 'draw', v: draws.split(/\D+/).filter(Boolean).map(Number) })}</div>
-              </Field>
-              <Field label="CASH">
-                <div className="pl-row"><input inputMode="numeric" value={cash} onChange={(e) => setCash(e.target.value)} />{btn('SET', { c: 'cash', pi: who, v: Number(cash) })}</div>
-              </Field>
-            </>
-          )}
-          <Field label="CARD PREVIEW">
-            <div className="pl-row">
-              <select value={kind} onChange={(e) => { setKind(e.target.value); setJson(sample(e.target.value)); }}>{Object.keys(SAMPLES).map((k) => <option key={k}>{k}</option>)}</select>
-              <button className="btn sm" onClick={() => preview(json)}>SHOW</button>
-            </div>
-            <textarea rows={6} spellCheck={false} value={json} onChange={(e) => setJson(e.target.value)} />
-          </Field>
-        </div></div>
-      )}
+      <div className="dock">
+        <button className={`btn sm ${open ? 'on' : ''}`} onClick={() => setOpen(!open)}>DEV</button>
+        {!G.S && <button className="btn sm primary" disabled={busy} onClick={() => { setBusy(true); void quickGame(3).finally(() => setBusy(false)); }}>QUICK 4P</button>}
+      </div>
+      <div className="box" hidden={!open}>
+        <nav className="tabs">{TABS.map((t) => <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>{t.toUpperCase()}</button>)}</nav>
+        <Scene {...pane('scene')} view={view} bump={bump} />
+        <Game {...pane('game')} />
+        <Cards show={tab === 'cards'} />
+      </div>
     </aside>
   );
 }

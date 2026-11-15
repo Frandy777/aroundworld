@@ -135,12 +135,26 @@ button, [data-tile], .pcard, .item { cursor: var(--cur-hand); }
 
 #camctl { position: fixed; right: 14px; bottom: 28px; width: var(--col); display: flex; justify-content: space-between; z-index: 11; } /* one row as wide as the column: six 50px buttons, 4px apart */
 #camctl .btn { margin: 0; padding-inline: 3px; }
-/* Dev panel (a dev room): above the cards, so that it can be used with one open. It takes the top-left corner (the button has no margin, to be flush with it), and ends above ROLL DICE, over the bay (see #actions): the rest scrolls */
+/* Dev panel (a dev room): above the cards, so that it can be used with one open. It takes the top-left corner (the dock's buttons have no margin, to be flush with it), and ends above ROLL DICE, over the bay (see #actions): the rest scrolls.
+   Its tabs are the side panel's, and each tab is a .bd of its own, so each scrolls apart. A label is a heading ruled out to its readout (the <b>); a flat segment sets a view or a choice, a bevelled button runs a command in the room */
 #dev { position: fixed; left: 14px; top: 12px; width: 340px; z-index: 50; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
-#dev > .btn { margin: 0; }
-#dev .box { width: 100%; }
-#dev .bd { max-height: calc(var(--bay) - 164px); }
-:root:not(:has(#hud)) #dev .bd { max-height: calc(100vh - 80px); }
+#dev .dock { display: flex; gap: 6px; }
+#dev .dock .btn, #dev .field > .btn, #dev .pl-row .btn { margin: 0; }
+#dev .box { width: 100%; display: flex; flex-direction: column; max-height: calc(var(--bay) - 148px); }
+:root:not(:has(#hud)) #dev .box { max-height: calc(100vh - 64px); }
+#dev .bd { min-height: 0; gap: 8px; }
+#dev .bd > * { flex: none; } /* a short window scrolls the body, it never squeezes a row */
+#dev .field > label { display: flex; align-items: center; gap: 8px; }
+#dev .field > label::after { content: ''; flex: 1; height: 2px; background: var(--navy); }
+#dev .field > label b { order: 1; }
+#dev .seg button { min-width: 0; padding-inline: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#dev .seg.fit button { flex: auto; } /* each as wide as its name: a fourth of the row would cut "Bot Amber" short */
+#dev .pl-row { gap: 6px; }
+#dev .pl-row.fill .btn { flex: 1; }
+#dev .pair { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
+#dev .pair .btn { white-space: nowrap; }
+#dev .note { padding-inline: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* the status line stays one line, with or without the scrollbar */
+#dev .note .badge { margin: 0 6px 0 0; }
 #dev select { width: 100%; cursor: var(--cur-hand); }
 #dev textarea { width: 100%; resize: vertical; }
 #dev input[type=range] { width: 100%; margin: 4px 0; accent-color: var(--gold); cursor: var(--cur-hand); }
