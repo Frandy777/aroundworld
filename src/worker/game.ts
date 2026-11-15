@@ -528,7 +528,7 @@ export class Game {
       if (!price) this.log(m`${P(pi)} ${what}`); // a free one has no payment to say it — and adds nothing to the lot value
       this.own(i, { ...o, lv, paid: (o.paid ?? o.lv * t.up) + price });
       this.toast(m`${T(i)} upgraded to Lv ${String(lv)}`, 'good');
-      this.bonus('New York', [300, 500, 700], m`${P(pi)} upgraded ${T(i, true)}`);
+      this.bonus('New York', [200, 300, 500], m`${P(pi)} upgraded ${T(i, true)}`);
       return;
     }
     const owner = S.players[o.p];
