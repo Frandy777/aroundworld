@@ -1,6 +1,7 @@
 /* Modal cards */
 .modal { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; background: rgba(8, 10, 28, 0.55); animation: fade 0.2s steps(3); }
 .modal::before { content: ''; position: absolute; inset: 0; pointer-events: none; background: repeating-conic-gradient(rgba(0, 0, 0, 0.22) 0 25%, transparent 0 50%) 0 0 / 4px 4px; }
+:root:has(#hud) .modal { padding-right: var(--cr); } /* over the HUD a card is centred in the stage, what the column leaves (as the toasts are); padding, not a smaller box, so the dim still covers the column */
 @keyframes fade { from { opacity: 0; } }
 .card { width: min(480px, 92vw); max-height: 88vh; display: flex; flex-direction: column; animation: pop 0.3s steps(5); }
 .card.wide { width: min(640px, 94vw); }
