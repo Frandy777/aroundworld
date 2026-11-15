@@ -56,6 +56,7 @@ Choose verification by the behavior affected, not just the filename (`game.ts` c
 Never click through Lobby UI, monkey-patch `Date.now`, `import('/src/...')` from console (loads duplicate HMR modules), or hand-write CDP capture scripts. Use URL flags, `window.__aw` (`src/client/dev.ts`), or `shot-matrix.mjs`.
 
 - **URL flags** (`/?dev=1&...`): `dev=1` (DEV panel; drops stale non-dev lobbies), `autostart=1` / `bots=1..3` / `fresh=1` (fresh bot game straight to HUD), `hd=1|0`, `hour=0..24` (`0` midnight, `6.2` sunrise, `12` noon, `18` dusk), `speed=N`, `paused=1`, `tile=0..91`, `x=N`, `z=N`, `lift=N`, `zoom=fit|N`, `elev=deg`, `az=deg`, `rot=0|1` (instant camera jump), `clean=1` (hide chrome, keep DEV), `ui=0` (hide `#root`).
+- **Window size**: the UI has one layout, for a wide window (`width ≥ 348px + 110vh` and `height ≥ 760px`); any other window is covered by the `#narrow` mask (`Narrow` in `ui/hud.tsx`, `style.css`). Drive or shoot the HUD at a size that clears it (e.g. `--size=1600x900`: `--autostart` at the matrix default `960x540` only shows the mask); `clean=1` and `ui=0` hide the mask too.
 
 - **`window.__aw` runtime bridge**:
 ```js

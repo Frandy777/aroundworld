@@ -299,7 +299,7 @@ export function render() {
 }
 
 // The zoom that shows the whole board, which with its margin is 52 * BOARD_K world units across: a canvas wider than tall is bound by its height (leaving room above and below for the bars), a narrow one by its width.
-// In a game, in the overlay layout, the column floats over the canvas, and the page says how far it reaches into it from the right edge (--cr): the view then looks at the middle of what it leaves,
+// In a game, the column floats over the canvas, and the page says how far it reaches into it from the right edge (--cr): the view then looks at the middle of what it leaves,
 // the stage, and the board is fitted to it, to its whole height (the action bar, over the bottom, is not made room for).
 let framed = false;
 export let fitZoom = 0.5; // worked out by resize

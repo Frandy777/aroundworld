@@ -17,7 +17,7 @@
 html, body { margin: 0; height: 100%; overflow: hidden; background: #14213d; font: var(--fs) / 20px var(--font); font-synthesis: none; -webkit-font-smoothing: none; color: var(--txt); user-select: none; cursor: var(--cur-arrow); }
 b { font-weight: normal; color: #fff; } /* one pixel weight only: emphasis = brighter colour, never faux-bold */
 [hidden] { display: none !important; }
-#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; } /* the window, until a game has its HUD: then the stage (see HUD) */
+#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; } /* the window, whatever floats over it (see HUD) */
 #gl.hot { cursor: var(--cur-hand); }
 button, input { font-family: inherit; }
 button, [data-tile], .pcard, .item { cursor: var(--cur-hand); }
@@ -67,20 +67,16 @@ button, [data-tile], .pcard, .item { cursor: var(--cur-hand); }
 .hint { margin: 0; color: var(--dim); text-shadow: 0 2px 0 var(--ink); }
 .ver { color: var(--dim); opacity: 0.8; text-shadow: 0 2px 0 var(--ink); }
 
-/* HUD, in three layouts by the room the window has. The 3D canvas is the window; once the HUD is up it is the stage: the window less the rails (--sl --sr --st --sb) that the panels take.
-   Overlay (the rules below): the whole board fits beside a 320px column, so the panels float over the canvas, all at the right and as wide as the column: the top bar over the players over the panel, and the camera buttons at the bottom (one row).
-   The camera centres the board in what the column leaves of the canvas: --cr is how far it covers it from the right (its width and a gap), see scene.ts. The action bar is not made room for: it floats over the canvas, in a tall window in the bay at the bottom of the board (see below).
-   Dock: a narrower window. The top bar is over the stage, and the players and the panel are one column beside it.
-   Stack: a window taller than wide. The top bar, the players, the stage and the panel go one under the other. */
+/* HUD, in one layout, for a wide window (any other is covered by the mask, see the end of this section). The 3D canvas is the window: the whole board fits beside a 320px column, so the panels float over it, all at the right and as wide as the column: the top bar over the players over the panel, and the camera buttons at the bottom (one row).
+   The camera centres the board in what the column leaves of the canvas: --cr is how far it covers it from the right (its width and a gap), see scene.ts. The action bar is not made room for: it floats over the canvas, in the bay at the bottom of the board (see #actions). */
 @property --cr { syntax: '<length>'; inherits: true; initial-value: 0px; }
-:root { --sl: 0px; --sr: 0px; --st: 0px; --sb: 0px; --m: 14px; --hh: 74px; --col: clamp(260px, 32vw, 320px); --cb: 110px; --cr: calc(var(--col) + 2 * var(--m)); }
-:root:has(#hud) #gl { left: var(--sl); top: var(--st); width: calc(100% - var(--sl) - var(--sr)); height: calc(100% - var(--st) - var(--sb)); }
+:root { --m: 14px; --hh: 74px; --col: clamp(260px, 32vw, 320px); --cb: 110px; }
 #topbar { position: fixed; top: 12px; left: calc(100% - 14px - var(--col)); right: 14px; height: var(--hh); display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 2px 10px; z-index: 12; }
 #round { white-space: nowrap; } #round b { color: var(--gold); font: 34px / 36px var(--font-hd); vertical-align: -2px; }
 @keyframes blink { 50% { opacity: 0.6; } }
 .tools { display: flex; }
 
-/* The column: the players over the panel. In the overlay layout it floats at the right, under the top bar (the column's width, its first row), and reaches down to above
+/* The column: the players over the panel. It floats at the right, under the top bar (the column's width, its first row), and reaches down to above
    the camera buttons, with the panel filling what the players leave: the window less 12 + the bar + 10 at the top, and 28 + the buttons' 50 + 10 at the bottom (110px + the bar: --cb).
    No wider than 320px, or in a short window it covers the top-right tiles of the whole-board view (the board is centred there, and ~0.96 x the window height wide) */
 #col { position: fixed; top: calc(12px + var(--hh) + 10px); right: 14px; width: var(--col); height: calc(100vh - var(--cb) - var(--hh)); display: flex; flex-direction: column; gap: 10px; z-index: 11; }
@@ -105,7 +101,7 @@ button, [data-tile], .pcard, .item { cursor: var(--cur-hand); }
 .pcard .sub span { display: flex; align-items: center; gap: 4px; }
 .badge { font: var(--fs) / 20px var(--font); padding: 0 6px; background: var(--red); color: #fff; margin-left: 4px; text-shadow: none; box-shadow: 0 0 0 2px var(--ink), inset 0 2px rgba(255, 255, 255, 0.3), inset 0 -2px rgba(0, 0, 0, 0.3); }
 .badge.blue { background: #6a3fb5; }
-/* Whose turn it is: the pointer hangs off the card's left edge, centred on it (9px is half its height). It needs ~26px free at the card's left: the stack and two-across layouts below hide it, where the gold frame carries the mark */
+/* Whose turn it is: the pointer hangs off the card's left edge, centred on it (9px is half its height) */
 .pcard.on::before { content: ''; position: absolute; left: -26px; top: 50%; margin-top: -9px; width: 16px; height: 18px; background: var(--spr-tri) center / contain no-repeat; image-rendering: pixelated; animation: blink 0.8s steps(2) infinite; }
 /* The clock of the player the game waits for (see Clock): a gauge set into the foot of their card, over its frame (the 2px of padding and the 8px of border), so the cards keep their height.
    It runs down in the 20 steps of a card's fuse (see useAuto), over the time that was left as it went up: --w is how full it starts, --t how long it has to run */
@@ -123,22 +119,24 @@ button, [data-tile], .pcard, .item { cursor: var(--cur-hand); }
 .logline { padding: 4px 0; border-bottom: 2px dotted rgba(255, 255, 255, 0.14); color: var(--mist); }
 .logline i { color: var(--dim); font-style: normal; margin-right: 6px; }
 
-/* Centred by layout (auto margins), never by translate(-50%): a half-pixel transform would resample the frames and the text */
-#actions { position: fixed; bottom: 26px; left: 0; right: 0; margin: 0 auto; width: max-content; display: flex; align-items: center; gap: 14px; z-index: 12; }
+/* Centred by layout (auto margins), never by translate(-50%): a half-pixel transform would resample the frames and the text.
+   It goes in the bay that the loop leaves open at the bottom of the board (6 x 4 cells), where in the default view it covers no tile: the dice result over the button, low in the bay, the bar's bottom edge level with the map's bottom edge — the south edge of the loop,
+   8 cells (48 world units) south of the board's centre, which is at half the window's height (the view at 52° shortens depth to 0.788). The board, 104 world units across with its margin, is fitted to the stage (what the column leaves: --cr) by its width or its height,
+   whichever it meets first (see fitZoom in scene.ts): the edge is 48/104 of the projected height below the centre. --bay is still the bay's centre (6 cells south), which the dev panel, in the top-left corner, ends over */
+:root { --bay: calc(50vh + 36 / 104 * min(0.788 * (100vw - var(--cr)), 100vh)); }
+#actions { position: fixed; bottom: calc(50vh - 48 / 104 * min(0.788 * (100vw - var(--cr)), 100vh)); left: 0; right: var(--cr); margin: 0 auto; width: max-content; display: flex; flex-direction: column; align-items: center; gap: 8px; z-index: 12; }
 #actions .btn { animation: pulse 1.2s steps(2) infinite; }
 @keyframes pulse { 50% { translate: 0 -2px; } }
 .dice-chip { display: flex; align-items: center; gap: 8px; padding: 4px 12px 2px; font: 34px / 36px var(--font-hd); color: var(--gold); text-shadow: 2px 2px 0 var(--brown); }
 .dice-chip .die { width: 32px; height: 32px; }
 
-#camctl { position: fixed; right: 14px; bottom: 28px; width: var(--col); display: flex; justify-content: space-between; z-index: 11; } /* one row as wide as the column: six 50px buttons, 4px apart. Its bottom is in line with the action bar's buttons where the bar is at the bottom (its 26px and their 2px margin) */
+#camctl { position: fixed; right: 14px; bottom: 28px; width: var(--col); display: flex; justify-content: space-between; z-index: 11; } /* one row as wide as the column: six 50px buttons, 4px apart */
 #camctl .btn { margin: 0; padding-inline: 3px; }
-/* Dev panel (a dev room): above the cards, so that it can be used with one open. It is on the left, where the top bar's left edge is in a short window (the button has no margin, to be flush with it), and ends above ROLL DICE (the rest scrolls).
-   In a wide, tall window it takes the top-left corner instead (see the overlay rule) */
-#dev { position: fixed; left: 328px; top: calc(12px + var(--hh) + 10px); width: 340px; z-index: 50; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+/* Dev panel (a dev room): above the cards, so that it can be used with one open. It takes the top-left corner (the button has no margin, to be flush with it), and ends above ROLL DICE, over the bay (see #actions): the rest scrolls */
+#dev { position: fixed; left: 14px; top: 12px; width: 340px; z-index: 50; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 #dev > .btn { margin: 0; }
 #dev .box { width: 100%; }
-#dev .bd { max-height: calc(100vh - 270px); }
-:root:not(:has(#hud)) #dev { left: 14px; top: 12px; }
+#dev .bd { max-height: calc(var(--bay) - 164px); }
 :root:not(:has(#hud)) #dev .bd { max-height: calc(100vh - 80px); }
 #dev select { width: 100%; cursor: var(--cur-hand); }
 #dev textarea { width: 100%; resize: vertical; }
@@ -157,63 +155,21 @@ button, [data-tile], .pcard, .item { cursor: var(--cur-hand); }
 .float.hud { margin-left: -320px; text-align: right; --dy: -28px; } /* beside a card's cash: its right end sits at x, and it rises less */
 @keyframes float { to { transform: translateY(var(--dy, -64px)); opacity: 0; } }
 
-@media (max-width: 800px) { .tagline { font: var(--fs) / 20px var(--font); } }
-
-/* Compact cards: the face, the name over the cash. In the dock layout, and in the overlay one under 1240px high: the full cards of four players are 550px of the column, which leaves the panel too little */
-@media (width < calc(670px + 96vh)), (height < 1240px) {
+/* Compact cards: the face, the name over the cash, in a window under 1240px high: the full cards of four players are 550px of the column, which leaves the panel too little */
+@media (height < 1240px) {
   #players { gap: 6px; }
   .pcard .nm { font: var(--fs) / 20px var(--font); }
   .pcard .cash { font: var(--fs-md) / 28px var(--font-md); }
   .pcard .sub { display: none; }
 }
 
-/* A window under 760px high has no room in the column for the top bar (four players would overflow it): it stays where it was, over the board,
-   and the column goes up to the top and down to above the camera buttons */
-@media (height < 760px) {
-  :root { --cr: 0px; } /* the board is centred in the window and fitted to all of it, with room above and below for the bar over its top: as before */
-  #topbar { left: 328px; right: 348px; }
-  #col { top: 12px; height: calc(100vh - 100px); }
-}
-
-/* The overlay in a window 760px high or more: the action bar goes in the bay that the loop leaves open at the bottom of the board (6 x 4 cells), where in the default view it covers no tile: the dice result over the button,
-   low in the bay, the bar's bottom edge level with the map's bottom edge — the south edge of the loop, 8 cells (48 world units) south of the board's centre, which is at half the window's height (the view at 52°
-   shortens depth to 0.788). The board, 104 world units across with its margin, is fitted to the stage (what the column leaves: --cr) by its width or its height, whichever it meets first (see fitZoom in scene.ts):
-   the edge is 48/104 of the projected height below the centre. --bay is still the bay's centre (6 cells south), which the dev panel, in the top-left corner, ends over */
-@media (width >= calc(670px + 96vh)) and (height >= 760px) {
-  :root { --bay: calc(50vh + 36 / 104 * min(0.788 * (100vw - var(--cr)), 100vh)); }
-  #actions { right: var(--cr); bottom: calc(50vh - 48 / 104 * min(0.788 * (100vw - var(--cr)), 100vh)); flex-direction: column; gap: 8px; }
-  #dev { left: 14px; top: 12px; }
-  #dev .bd { max-height: calc(var(--bay) - 164px); }
-}
-
-/* Dock: a window with no room for the overlay (a 14px | 320px column on each side of the board), or too short for the players and the panel to share a side.
-   The top bar sits over the stage, the players and the panel are one column beside it */
-@media (width < calc(670px + 96vh)), (height < 620px) {
-  :root { --sl: var(--m); --sr: calc(var(--col) + 2 * var(--m)); --st: calc(var(--m) + var(--hh) + 10px); --sb: var(--m); --cr: 0px; }
-  #hud::before { content: ''; position: fixed; z-index: 10; left: var(--sl); top: var(--st); right: var(--sr); bottom: var(--sb); border: 6px solid transparent; border-image: var(--fr-well) 3 / 6px; pointer-events: none; image-rendering: pixelated; } /* the stage's frame, over the edge of the canvas */
-  #topbar { top: var(--m); left: var(--sl); right: var(--sr); }
-  #col { top: var(--m); bottom: var(--m); height: auto; max-height: none; }
-  #actions { left: var(--sl); right: var(--sr); bottom: calc(var(--sb) + 14px); max-width: calc(100vw - var(--sl) - var(--sr) - 28px); flex-wrap: wrap; justify-content: center; }
-  #camctl { top: calc(var(--st) + 8px); right: calc(var(--sr) + 8px); bottom: auto; width: auto; flex-wrap: wrap; justify-content: flex-end; max-width: calc(100vw - var(--sl) - var(--sr) - 16px); } /* the top and bottom of the whole board are free (it is wider than tall): the buttons are one row up there */
-  #camctl .btn { margin: 2px; padding-inline: 8px; } /* as buttons are elsewhere: the overlay's are narrower, to fit six in the column */
-  @media (max-width: 519px) { #camctl .btn { padding-inline: 3px; margin: 1px; } }
-  #toasts { top: calc(var(--st) + 70px); left: var(--sl); right: var(--sr); } /* under the camera buttons */
-  #dev { left: calc(var(--sl) + 10px); top: calc(var(--st) + 10px); max-width: calc(100vw - 2 * var(--m) - 10px); } /* inside the stage's frame (6px) and 4px from it, as the camera buttons are at the other corner */
-  @media (min-aspect-ratio: 1/1) and (height < 560px) { #players { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); } .pcard { grid-template-columns: 1fr; } .face, .pcard.on::before { display: none; } } /* two cards across, without their faces, to leave the panel its room */
-}
-
-/* Stack: a window taller than wide. From the top: the bar, the players (all across, or two by two in a narrow window), the stage, the panel */
-@media (max-aspect-ratio: 1/1) {
-  :root { --ph: 70px; --pnl: clamp(168px, 24dvh, 260px); --sr: var(--m); --st: calc(var(--m) + var(--hh) + var(--ph) + 16px); --sb: calc(var(--m) + var(--pnl) + 8px); }
-  #col { display: contents; }
-  #players { position: fixed; top: calc(var(--m) + var(--hh) + 8px); left: var(--m); right: var(--m); height: var(--ph); display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); z-index: 11; }
-  .pcard.on::before { display: none; }
-  #side { position: fixed; left: var(--m); right: var(--m); bottom: var(--m); height: var(--pnl); z-index: 11; }
-}
-@media (max-aspect-ratio: 1/1) and (max-width: 739px) {
-  :root:has(#players > :nth-child(3)) { --ph: 146px; }
-  #players { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  @media (max-width: 399px) { .pcard { column-gap: 6px; } }
+/* The mask: a window with no room for the HUD above is covered by it, and asked for a wider one or fullscreen. The room: 760px high at least, and a stage (what the column and its margins, 348px, leave) 1.1 x the window's height across or more,
+   which is about 3:2 or wider, and holds the laptops' 16:10 in fullscreen. The board fills a stage 1.27 x the height across (104 world units, 0.788 as deep); in a narrower one it is fitted by its width (see fitZoom in scene.ts), at ~87% of its size here
+   (~78% in HD-2D, whose lens widens its foot). The window that has the room takes the mask off, and gives --cr: behind the mask the camera fits the board to the whole canvas, as on the title */
+#narrow { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 14px; background: var(--dither) 0 0 / 4px 4px, var(--ink); } /* over everything: the cards (z 40), the fullscreen button (45) and the dev panel (50) */
+@media (width >= calc(348px + 110vh)) and (height >= 760px) {
+  :root { --cr: calc(var(--col) + 2 * var(--m)); }
+  #narrow { display: none; }
 }
 
 /* Multiplayer: who is who on a card, and the lobby's rows */

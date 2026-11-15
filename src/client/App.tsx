@@ -1,6 +1,6 @@
 import { session, stageOnly, useCell } from './store';
 import { Debug } from './ui/debug';
-import { Hud, Overlays, Tip } from './ui/hud';
+import { Hud, Narrow, Overlays, Tip } from './ui/hud';
 import { Lobby, Title } from './ui/title';
 
 export function App() {
@@ -13,6 +13,7 @@ export function App() {
       {import.meta.env.DEV && <Debug />}
       {!bare && <Tip />}
       {!bare && <Overlays />}
+      {!bare && <Narrow />}
     </>
   );
 }

@@ -4,7 +4,7 @@ import { maxRounds } from '../../shared/state';
 import { leaveRoom } from '../controller';
 import { send } from '../net';
 import { CAM, focusTok, lookAtTile } from '../stage';
-import { G, actionBtn, activeTab, cards, cashEls, countdown, floats, hd2d, hudLive, lastRoll, paused, peeking, selectedTile, session, state, statsOf, tip, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
+import { G, actionBtn, activeTab, cards, cashEls, countdown, floats, fullscreen, hd2d, hudLive, lastRoll, paused, peeking, selectedTile, session, state, statsOf, tip, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
 import { Die, Face, Flag, FullBtn, Icon, Named, Pips, Rich, hex, money, tileHead } from './bits';
 import { openMenu, openRules } from './open';
 import { TileBody } from './tile';
@@ -196,5 +196,19 @@ export function Overlays() {
       <div id="floats">{fs.map((f) => <div key={f.id} className={`float ${f.cls}`} style={{ left: f.x, top: f.y }}>{f.text}</div>)}</div>
       <div id="modals" hidden={aside}>{cs.map((c) => <Fragment key={c.key}>{c.node}</Fragment>)}</div>
     </>
+  );
+}
+
+// The HUD is made for one window shape (see #narrow in style.css): the page covers any other with this, and shows it by itself, so there is nothing to track here. Fullscreen is only offered while it is not on: once it is, only a wider screen helps.
+export function Narrow() {
+  const fs = useCell(fullscreen);
+  return (
+    <div id="narrow">
+      <div className="card box">
+        <div className="hd"><span>WIDER SCREEN NEEDED</span></div>
+        <div className="bd"><div className="note">AroundWorld is made for a wide screen. Widen the window or go fullscreen, or play on a wider display.</div></div>
+        <div className="ft">{!fs && document.fullscreenEnabled && <button className="btn primary" onClick={() => fullscreen.set(true)}>FULLSCREEN <kbd>F</kbd></button>}</div>
+      </div>
+    </div>
   );
 }
