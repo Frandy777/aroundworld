@@ -26,6 +26,8 @@ let first: ((err: string | null) => void) | null = null;
 
 export function send(msg: C2S) { if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); }
 export const answer = (id: number, v: unknown) => send({ t: 'answer', id, v });
+/** The socket's own readyState; -1 while there is none (never connected, or let go). */
+export const link = () => (ws ? ws.readyState : -1);
 
 /** Enter a room (an empty code creates one). Resolves null once in, else why not. */
 export function open(code: string, name: string, dev = devUrl): Promise<string | null> {

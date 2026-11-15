@@ -19,6 +19,11 @@
 //   node scripts/shot-matrix.mjs --looks=pixel --hours=0,12,18 --vs --expect=same
 //   node scripts/shot-matrix.mjs --list=shots.json --out=/tmp/aw-shots/new --cmp=/tmp/aw-shots/old
 // No dev server where the script runs (worktree, delegated checkout): --serve spawns `vite --port 0` for the run.
+// Whichever way the server is found it is checked against /__aw-id (the checkout it serves): another worktree's server is
+// never shot as this one. Named HUD scenes run a fresh dev room to a resting state, then freeze its clocks:
+//   node scripts/shot-matrix.mjs --scene=buy --out=/tmp/aw-shots/buy            # one named scene, 1600x900
+//   node scripts/shot-matrix.mjs --list='[{"name":"mort","scene":"mortgage"}]' --out=/tmp/aw-shots/mort
+// A failed run writes fail.json (+ a last screenshot) next to the output: the phase, the error, the server's identity and the page's own __aw.diag().
 
 import { spawn, spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
@@ -38,6 +43,9 @@ if (args.help) {
   console.log(`Usage: node scripts/shot-matrix.mjs [options]
 
 Target:   [--url=http://localhost:5173] [--serve]      without --url/--serve, ports 5173-5176 are probed
+          Servers prove their checkout via /__aw-id; one serving another worktree (or an older build
+          without the endpoint) is rejected — restart it or pass --serve.
+          [--scene=buy|news|mortgage|casino|spectate]   one named HUD scene (fresh dev room, ends paused); same as a --list shot with "scene"
           [--q=vol=1&x=2]                              extra query for the page URL
 Rows:     [--looks=pixel,hd2d] [--zooms=fit|N,...] [--elevs=deg,...] [--tiles=N|name,...] [--owners=p,...] [--lv=0,1,2,3]
 Cols:     [--hours=12,18,0] [--az=deg,...] [--time=sec,...]
@@ -54,13 +62,16 @@ Compare:  [--vs[=git-ref]] [--cmp=dir] [--expect=same]  BEFORE | AFTER | DIFF pe
 Output:   [--crop=WxH] [--dx=px] [--dy=px] [--scale=N] [--cols=N] [--raw[=dir]] [--size=WxH] [--dpr=1]
           [--out=matrix.png | shot dir | list sheet.png] [--sheet[=out.png]] [--list='<json array>'|file.json]
           default matrix out: /tmp/aw-shots/matrix.png, or matrix-<tile tags>.png when --tile(s) is given
-          --list: <out>/<name>.png per shot, <out>/sheet.png, <out>/run.json (matrix: <out>.json) with the arguments and git sha to rerun it
+          default size: 960x540, or 1600x900 when the HUD is shot (--autostart, --scene, or a "scene"/"ui" shot)
+          --list: <out>/<name>.png per shot, <out>/sheet.png, <out>/run.json (matrix: <out>.json) with the arguments, git sha and the served identity
+          a failed run also writes fail.json (+ fail.png) beside the output: phase, error, server identity, the page's __aw.diag()
 
 Tiles take an index, a name or a kind (--tile=rio|"Las Vegas"|bank, slug-matched); names resolve in --tile(s),
 --iso, --lots' first field and the --list shot's tile/iso/lots too.
 
-Shot object (--list): {name, tile, tx, tz, x, z, lift, lot, lx, ly, lz, zoom, elev, az, hour, hd, ui, time, iso,
-  setlot:{p,lv,m,sign}, lots:[[t,p,lv,m,sign]], strike:[from,to,sec], crop:[x,y,w,h]|{w,h,dx,dy}, scale}`);
+Shot object (--list): {name, tile, tx, tz, x, z, lift, lot, lx, ly, lz, zoom, elev, az, hour, hd, ui, time, iso, scene,
+  setlot:{p,lv,m,sign}, lots:[[t,p,lv,m,sign]], strike:[from,to,sec], crop:[x,y,w,h]|{w,h,dx,dy}, scale}
+  scene: a named HUD scene (see __aw.scenarios) run before the shot's view is posed`);
   process.exit(0);
 }
 
@@ -84,10 +95,14 @@ const tileIx = (v, what = '--tile') => {
 };
 const tileTag = (v) => (/^\d+$/.test(String(v).trim()) ? `t${tileIx(v)}` : String(v).toLowerCase().replace(/['’]/g, '').replace(/[\s_.]+/g, '-')); // the tag a --tile token adds to the default output name
 
-const shotList = args.list !== undefined
+let shotList = args.list !== undefined
   ? JSON.parse(fs.existsSync(args.list) ? fs.readFileSync(args.list, 'utf8') : args.list)
   : null;
 if (shotList !== null && !Array.isArray(shotList)) die('--list must be a JSON array (inline or a file path)');
+if (args.scene !== undefined) { // a named HUD scene (see scenarios.ts): its own fresh dev room, played to a resting state
+  if (shotList) die('--scene and --list do not mix: put "scene" on the shot entries instead');
+  shotList = [{ name: args.scene, scene: args.scene, ui: true }];
+}
 if (shotList) for (const s of shotList) { // names resolve up front, so a bad one fails before Chrome even opens
   if (s.tile !== undefined) s.tile = tileIx(s.tile, 'shot.tile');
   if (s.iso !== undefined && s.iso !== true) s.iso = tileIx(s.iso, 'shot.iso');
@@ -96,12 +111,14 @@ if (shotList) for (const s of shotList) { // names resolve up front, so a bad on
 
 const looks = (args.looks ?? 'pixel,hd2d').split(',').map((s) => s.trim()).filter(Boolean);
 const hours = (args.hours ?? '12,18,0').split(',').map((s) => Number(s.trim())).filter(Number.isFinite);
-const [width, height] = (args.size ?? '960x540').split('x').map(Number);
+// HUD shots need the wide layout (the #narrow mask covers anything else): autostart and named scenes get 1600x900 unless --size says otherwise; bare model shots keep the old default.
+const hud = args.autostart === '1' || args.scene !== undefined || !!shotList?.some((s) => s.scene || s.ui);
+const [width, height] = (args.size ?? (hud ? '1600x900' : '960x540')).split('x').map(Number);
 const dpr = Number(args.dpr ?? 1);
 const tileTokens = (args.tiles ?? args.tile)?.split(',').map((s) => s.trim()).filter(Boolean);
 const tiles = tileTokens ? tileTokens.map((s) => tileIx(s, '--tile')) : [undefined];
 // Default output is split per tile set, so parallel runs shooting different landmarks never overwrite each other's matrix.png
-const outFile = args.out ?? (shotList ? '/tmp/aw-shots/list' : `/tmp/aw-shots/matrix${tileTokens ? `-${tileTokens.map(tileTag).join('-')}` : ''}.png`);
+const outFile = args.out ?? (shotList ? (args.scene ? `/tmp/aw-shots/scene-${args.scene}` : '/tmp/aw-shots/list') : `/tmp/aw-shots/matrix${tileTokens ? `-${tileTokens.map(tileTag).join('-')}` : ''}.png`);
 const files = !!shotList && !outFile.endsWith('.png'); // list mode with --out a directory: one PNG per shot there; --out=x.png is just the sheet
 const sheetOut = shotList // the sheet: --sheet=file.png, else --out itself when it ends in .png, else <out>/sheet.png
   ? args.sheet !== undefined && args.sheet !== '1' ? args.sheet : (outFile.endsWith('.png') ? outFile : path.join(outFile, 'sheet.png'))
@@ -147,6 +164,7 @@ const freeze = compare || args.freeze !== undefined; // a frozen world: every sh
 
 // ---- Processes and temp dirs: all swept at exit, however the run ends ----
 const repo = path.resolve(import.meta.dirname, '..');
+const REPO = fs.realpathSync(repo); // the canonical path of this checkout, compared against a server's /__aw-id `root`
 const git = (...a) => { const r = spawnSync('git', a, { cwd: repo, encoding: 'utf8' }); return r.status === 0 ? r.stdout.trim() : null; };
 const vsSha = vs ? git('rev-parse', '--verify', `${vs}^{commit}`) ?? die(`--vs: no commit "${vs}"`) : null;
 const procs = new Set(), tmps = [];
@@ -165,47 +183,91 @@ process.on('exit', () => {
   for (const d of tmps) fs.rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
-const chromeBin = process.env.CHROME_BIN ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-if (!fs.existsSync(chromeBin)) die(`Chrome binary not found at "${chromeBin}". Set CHROME_BIN to a Chromium/Chrome executable.`);
+const chromeBin = process.env.CHROME_BIN ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'; // checked at run time: a missing browser is a run failure (fail.json), not a usage error
 
 // ---- Dev servers: vite spawned in a directory, and the working tree's (--url, --serve, or the usual ports probed) ----
+// A server says which checkout and which process it is at /__aw-id (vite.config.ts, dev only). Probing must never
+// shoot another worktree's server as this one: only an identity that matches REPO counts. A spawned server is held to
+// the same check when the endpoint exists; a tree from an old commit may not have it, and that is fine — its directory
+// is known because this run put it there.
+const servers = new Map(); // url -> what is known about the dev server answering there
+// A thrown error that fails the run: `phase` says which stage it died at (written into fail.json), and `server` —
+// when set — is reported as the observed/requested server instead of the live map's entry.
+const fail = (msg, phase, server) => { throw Object.assign(new Error(msg), { phase, server }); };
+async function serverId(u) {
+  try {
+    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 1500);
+    try { // the bound covers the body too: a stalled response stream must not wait forever on headers already in
+      const res = await fetch(`${u}/__aw-id`, { signal: ctrl.signal });
+      return res.ok ? await res.json() : null; // null: nothing there, or a build from before the endpoint
+    } finally { clearTimeout(timer); }
+  } catch { return null; }
+}
+
 async function startVite(cwd) {
-  const proc = track(spawn('npx', ['vite', '--port', '0'], { cwd, stdio: ['ignore', 'pipe', 'inherit'] }));
-  const url = await new Promise((resolve, reject) => {
-    let buf = '';
-    const timer = setTimeout(() => reject(new Error(`vite printed no Local URL within 30s:\n${buf}`)), 30_000);
-    proc.stdout.on('data', (c) => {
-      buf += c;
-      const m = buf.match(/Local:\s+(https?:\/\/\S+)/) ?? buf.match(/(https?:\/\/(?:localhost|127\.0\.0\.1):\d+)/);
-      if (m) { clearTimeout(timer); resolve(m[1].replace(/\/$/, '')); }
+  try {
+    const proc = track(spawn('npx', ['vite', '--port', '0'], { cwd, stdio: ['ignore', 'pipe', 'inherit'] }));
+    const url = await new Promise((resolve, reject) => {
+      let buf = '';
+      const timer = setTimeout(() => reject(new Error(`vite printed no Local URL within 30s:\n${buf}`)), 30_000);
+      proc.stdout.on('data', (c) => {
+        buf += c;
+        const m = buf.match(/Local:\s+(https?:\/\/\S+)/) ?? buf.match(/(https?:\/\/(?:localhost|127\.0\.0\.1):\d+)/);
+        if (m) { clearTimeout(timer); resolve(m[1].replace(/\/$/, '')); }
+      });
+      proc.once('exit', (code) => { clearTimeout(timer); reject(new Error(`vite exited early (${code}):\n${buf}`)); });
+      proc.once('error', (e) => { clearTimeout(timer); reject(new Error(`vite could not start: ${e.message}`)); });
     });
-    proc.once('exit', (code) => { clearTimeout(timer); reject(new Error(`vite exited early (${code}):\n${buf}`)); });
-  }).catch((e) => die(e.message));
-  return [url, proc];
+    const id = await serverId(url);
+    if (id && id.root !== fs.realpathSync(cwd)) fail(`spawned vite at ${url} reports root ${id.root}, not ${fs.realpathSync(cwd)}`, 'server', { url, saw: id });
+    return [url, proc, id];
+  } catch (e) {
+    throw Object.assign(e, { phase: e.phase ?? 'server' });
+  }
 }
 
 async function workingTreeUrl() {
+  const found = (url, id, via) => (servers.set(url, { url, id, via }), servers.get(url));
   if (args.serve !== undefined) {
-    const [url] = await startVite(repo);
-    console.log(`--serve: spawned vite at ${url}`);
-    return url;
+    const [url, , id] = await startVite(repo);
+    if (!id) fail(`--serve: the spawned vite at ${url} has no /__aw-id — this checkout's vite.config.ts should provide it`, 'server', { url });
+    console.log(`--serve: spawned vite at ${url} (${id.root}, pid ${id.pid})`);
+    return found(url, id, 'serve');
   }
   const given = args.url?.replace(/\/$/, '');
-  const candidates = given ? [given] : [5173, 5174, 5175, 5176].map((p) => `http://localhost:${p}`);
-  for (const u of candidates) {
-    try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 1200);
-      const res = await fetch(u, { signal: ctrl.signal });
-      const body = await res.text();
-      clearTimeout(timer);
-      if (given || body.includes('id="gl"')) { // probing: only a page mounting the GL canvas is our dev server
-        if (!given) console.log(`dev server found at ${u}`);
-        return u;
-      }
-    } catch { /* try the next port */ }
+  if (given) {
+    const id = await serverId(given);
+    if (!id) {
+      let app = false;
+      try { app = (await (await fetch(given, { signal: AbortSignal.timeout(1200) })).text()).includes('id="gl"'); } catch { /* nothing there */ }
+      fail(app
+        ? `--url: ${given} answers like this app but has no /__aw-id — it was built before that endpoint; restart the dev server to pick up vite.config.ts.`
+        : `--url: ${given} has no /__aw-id (unreachable, or not this app at all). Check the address, or pass --serve.`,
+        'server', { requested: given, want: REPO, saw: app ? 'this app, no /__aw-id' : null });
+    }
+    if (id.root !== REPO) fail(`--url: ${given} serves ${id.root}, but this run wants ${REPO}. Start a dev server in this checkout or pass --serve.`, 'server', { requested: given, want: REPO, saw: id });
+    console.log(`dev server at ${given} serves ${id.root} (pid ${id.pid})`);
+    return found(given, id, 'url');
   }
-  return die(`No dev server reachable at ${candidates.join(', ')}. Pass --url=http://localhost:<port> or --serve to spawn one.`);
+  const others = [], stale = [];
+  for (const p of [5173, 5174, 5175, 5176]) {
+    const u = `http://localhost:${p}`, id = await serverId(u);
+    if (id) {
+      if (id.root === REPO) { console.log(`dev server found at ${u} (${id.root}, pid ${id.pid})`); return found(u, id, 'probe'); }
+      others.push(`${u} serves ${id.root}`);
+      continue;
+    }
+    try { // no identity: it may still be this app's page — a server from before the endpoint answers it but cannot be trusted
+      const body = await (await fetch(u, { signal: AbortSignal.timeout(1200) })).text();
+      if (body.includes('id="gl"')) stale.push(u);
+    } catch { /* nothing listening */ }
+  }
+  const why = [
+    ...others.map((s) => `  - ${s}`),
+    ...stale.map((u) => `  - ${u} answers like this app but has no /__aw-id (built before it — restart the server to pick up vite.config.ts)`),
+  ];
+  fail(`No dev server for this checkout (${REPO}) on localhost:5173-5176.${why.length ? `\n${why.join('\n')}` : ''}\nPass --url=http://localhost:<port> or --serve to spawn one here.`,
+    'server', { want: REPO, probed: [5173, 5174, 5175, 5176].map((p) => `http://localhost:${p}`), saw: why });
 }
 
 function waitWsEndpoint(proc) {
@@ -218,6 +280,7 @@ function waitWsEndpoint(proc) {
       if (m) { clearTimeout(timer); resolve(m[1]); }
     });
     proc.once('exit', (code) => { clearTimeout(timer); reject(new Error(`Chrome exited early (${code}):\n${stderr}`)); });
+    proc.once('error', (e) => { clearTimeout(timer); reject(new Error(`Chrome could not start: ${e.message}`)); });
   });
 }
 
@@ -227,6 +290,11 @@ class Cdp {
     this.seq = 0;
     this.pending = new Map();
     this.events = [];
+    // A dead socket must not leave a send pending forever: a shot's failure path (diag, a last screenshot, the
+    // process's own cleanup) only runs once the in-flight call gives up.
+    const gone = (e) => { for (const p of this.pending.values()) p.reject(e); this.pending.clear(); };
+    ws.addEventListener('close', () => gone(new Error('the DevTools socket closed')));
+    ws.addEventListener('error', () => gone(new Error('the DevTools socket errored')));
     ws.addEventListener('message', (ev) => {
       const msg = JSON.parse(String(ev.data));
       if (msg.id) {
@@ -270,14 +338,19 @@ async function capture(base, dir, quiet = false) {
     'about:blank',
   ], { stdio: ['ignore', 'ignore', 'pipe'] }));
   const cells = [], errors = [];
+  let phase = 'launch', cdp = null, sessionId = null, evalJs = null;
   try {
     const wsUrl = await waitWsEndpoint(chrome);
     const ws = new WebSocket(wsUrl);
-    await new Promise((res, rej) => { ws.addEventListener('open', res, { once: true }); ws.addEventListener('error', rej, { once: true }); });
-    const cdp = new Cdp(ws);
+    await new Promise((res, rej) => {
+      const t = setTimeout(() => rej(new Error('the DevTools socket never opened')), 10_000);
+      ws.addEventListener('open', () => { clearTimeout(t); res(); }, { once: true });
+      ws.addEventListener('error', () => { clearTimeout(t); rej(new Error('the DevTools socket failed')); }, { once: true });
+    });
+    cdp = new Cdp(ws);
 
     const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
-    const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
+    ({ sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true }));
     cdp.events.push((m) => {
       if (m.sessionId !== sessionId) return;
       if (m.method === 'Runtime.exceptionThrown') errors.push(m.params.exceptionDetails?.text ?? 'Uncaught exception');
@@ -293,9 +366,10 @@ async function capture(base, dir, quiet = false) {
     // A frozen world is paused from its first frame, so that whatever integrates the frame time (the globe's spin, the ambient ships) stands where it began in every session.
     // A game cannot be: its animations need the clock, so there only HOLD (below) stops it, once the room is up.
     const entryUrl = `${base}/?dev=1&fresh=1${autostart ? '&autostart=1' : `&ui=0${freeze ? '&paused=1' : ''}`}${query}`;
+    phase = 'boot';
     await cdp.send('Page.navigate', { url: entryUrl }, sessionId);
 
-    const evalJs = async (expression) => {
+    evalJs = async (expression) => {
       const res = await cdp.send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }, sessionId);
       if (res.exceptionDetails) throw new Error(res.exceptionDetails.exception?.description ?? res.exceptionDetails.text);
       return res.result?.value;
@@ -312,6 +386,7 @@ async function capture(base, dir, quiet = false) {
     const settle = `window.__aw.setView({ rotate: false, zoom: 'fit', x: 0, z: 0, lift: 0${freeze ? ', az: 0' : ''} })`;
     await evalJs(settle);
     await evalJs(settle);
+    phase = 'prepare';
 
     const snap = async (label, out) => {
       const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' }, sessionId);
@@ -343,12 +418,14 @@ async function capture(base, dir, quiet = false) {
       // ---- Scripted shots: each entry poses its own view and writes <out>/<name>.png ----
       for (const [i, s] of shotList.entries()) {
         const name = s.name ?? `shot${i}`;
+        phase = `shot "${name}"`;
+        if (s.scene) await evalJs(`window.__aw.scenario(${JSON.stringify(s.scene)})`); // a named scene: fresh dev room, driven to its resting state
         if (s.iso) await evalJs(`window.__aw.isolate(${s.iso === true ? (s.tile ?? tiles[0] ?? 0) : s.iso})`);
         await setLots(s.lots ?? []);
         if (s.setlot !== undefined) await evalJs(`window.__aw.setLot(${s.tile ?? tiles[0] ?? 0}, ${JSON.stringify(s.setlot)}).then(() => window.__aw.step(0.6))`);
         await evalJs(`(async () => { const a = window.__aw, s = ${JSON.stringify(s)};
           ${freeze ? `await ${HOLD};` : ''}
-          const v = { hd: s.hd ?? true, hour: s.hour ?? 12, rotate: !!s.rotate, ui: s.ui ?? ${autostart}, zoom: s.zoom ?? (s.tile !== undefined ? 3 : 'fit') };
+          const v = { hd: s.hd ?? true, hour: s.hour ?? 12, rotate: !!s.rotate, ui: s.ui ?? (${autostart} || !!s.scene), zoom: s.zoom ?? (s.tile !== undefined ? 3 : 'fit') };
           if (s.tile !== undefined) {
             const P = a.refs.POS[s.tile];
             if (s.lot || s.lx !== undefined || s.ly !== undefined || s.lz !== undefined) { // lot space: over the props origin, ly up from the plot top
@@ -371,6 +448,7 @@ async function capture(base, dir, quiet = false) {
       }
     } else {
       // ---- Matrix: rows = looks x zooms x elevs x tiles x owners x lvs, cols = hours x azs x times ----
+      phase = 'shots';
       for (const look of looks) {
         const hd = look === 'hd2d' || look === 'hd' || look === '1';
         for (const zoom of zooms) for (const elev of elevs) for (const tile of tiles) for (const p of owners) for (const lv of lvs) {
@@ -406,6 +484,17 @@ async function capture(base, dir, quiet = false) {
     }
     ws.close();
     return { cells, errors };
+  } catch (e) {
+    e.phase = phase;
+    e.url = base;
+    // What the page had to say for itself when it failed — a shot of it and its own `diag()`. Both are bounded: a dead
+    // page answers with a fast error, a stalled one is given up on, so saving the failure never hangs the run.
+    const within = (p, ms) => Promise.race([p, new Promise((_, rj) => setTimeout(() => rj(new Error('diag timed out')), ms))]);
+    if (evalJs && sessionId) {
+      try { e.scene = await within(evalJs('window.__aw?.diag?.() ?? null'), 3000); } catch { e.scene = null; }
+      try { e.png = (await within(cdp.send('Page.captureScreenshot', { format: 'png' }, sessionId), 3000)).data; } catch { /* the page is already gone: the JSON still says where it stopped */ }
+    }
+    throw e;
   } finally {
     await stop(chrome);
     fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
@@ -420,24 +509,29 @@ async function baseline(ref, sha) {
   const plan = crypto.createHash('sha1').update(JSON.stringify([Object.entries(args).filter(([k]) => !skip.has(k)).sort(), shotList, fs.readFileSync(import.meta.filename, 'utf8')])).digest('hex').slice(0, 12);
   const dir = path.join(cacheDir, `${sha.slice(0, 12)}-${plan}`);
   const runs = [1, 2].map((n) => path.join(dir, String(n)));
-  if (fs.existsSync(dir)) { fs.utimesSync(dir, new Date(), new Date()); return { runs, errors: [] }; }
+  if (fs.existsSync(dir)) { fs.utimesSync(dir, new Date(), new Date()); return { runs, errors: [], cached: dir }; } // the cache is the source; no server was started for it this run
 
   console.log(`--vs: shooting ${ref} (${sha.slice(0, 8)}) from a throwaway copy, twice`);
   const tree = tmp('aw-tree-');
-  if (spawnSync('sh', ['-c', 'git archive "$0" | tar -x -C "$1"', sha, tree], { cwd: repo }).status !== 0) die(`--vs: git archive ${sha} failed`);
-  const modules = path.join(repo, 'node_modules');
-  if (spawnSync('cp', ['-cR', modules, tree]).status !== 0) spawnSync('cp', ['-R', modules, tree]); // an APFS clone is instant, a plain copy is not
-  const [url, vite] = await startVite(tree);
-  const aside = `${dir}.${process.pid}`; // built next to its place and renamed in, so a parallel run never reads half of it
-  const errors = [];
   try {
-    for (const n of [1, 2]) errors.push(...(await capture(url, path.join(aside, String(n)), true)).errors);
-  } catch (e) { return die(`--vs: ${ref} could not be shot: ${e.message}`); }
-  finally { await stop(vite); }
-  try { fs.renameSync(aside, dir); } catch { fs.rmSync(aside, { recursive: true, force: true }); } // another run got there first
-  const old = fs.readdirSync(cacheDir).map((n) => path.join(cacheDir, n)).sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs).slice(8);
-  for (const d of old) fs.rmSync(d, { recursive: true, force: true });
-  return { runs, errors };
+    if (spawnSync('sh', ['-c', 'git archive "$0" | tar -x -C "$1"', sha, tree], { cwd: repo }).status !== 0) fail(`--vs: git archive ${sha} failed`, 'setup');
+    const modules = path.join(repo, 'node_modules');
+    if (spawnSync('cp', ['-cR', modules, tree]).status !== 0) spawnSync('cp', ['-R', modules, tree]); // an APFS clone is instant, a plain copy is not
+    const [url, vite, id] = await startVite(tree); // a throwaway server of that commit's tree: /__aw-id may not exist on old commits, and then the directory is the identity — this run put it there
+    servers.set(url, { url, id: id ?? null, via: 'vs-baseline', dir: tree });
+    const aside = `${dir}.${process.pid}`; // built next to its place and renamed in, so a parallel run never reads half of it
+    const errors = [];
+    try {
+      for (const n of [1, 2]) errors.push(...(await capture(url, path.join(aside, String(n)), true)).errors);
+    } finally { await stop(vite); }
+    try { fs.renameSync(aside, dir); } catch { fs.rmSync(aside, { recursive: true, force: true }); } // another run got there first
+    const old = fs.readdirSync(cacheDir).map((n) => path.join(cacheDir, n)).sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs).slice(8);
+    for (const d of old) fs.rmSync(d, { recursive: true, force: true });
+    return { runs, errors, url };
+  } catch (e) {
+    if (!e.phase?.startsWith?.('baseline(')) e.phase = `baseline(${ref}) ${e.phase ?? 'setup'}`;
+    throw e;
+  }
 }
 
 // ---- Post-processing in Python PIL: crop + NEAREST upscale, files, the contact sheet, or the compare sheet with its numbers ----
@@ -506,23 +600,52 @@ else:
 // ---- Run ----
 fs.mkdirSync(outDir, { recursive: true });
 let rows = null;
+// A failed run still leaves what it knows behind: phase, the error, the server's identity, the page's own `diag()`, and a
+// last screenshot if the page still answered. Written next to the output (survives the temp sweep), then exit non-zero.
+async function writeFail(e, url) {
+  const f = shotList ? path.join(outDir, 'fail.json') : runFile.replace(/\.json$/, '-fail.json');
+  try {
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    if (e.png) fs.writeFileSync(f.replace(/\.json$/, '.png'), Buffer.from(e.png, 'base64'));
+    fs.writeFileSync(f, JSON.stringify({
+      argv: process.argv.slice(2),
+      cwd: process.cwd(), // where the command ran; `server` is who actually served the page
+      phase: e.phase ?? null,
+      error: e.message ?? String(e),
+      server: e.server ?? servers.get(e.url ?? url) ?? { url: e.url ?? url ?? null },
+      scene: e.scene ?? null,
+      stack: e.stack,
+      git: { sha: git('rev-parse', 'HEAD'), dirty: !!git('status', '--porcelain') },
+    }, null, 2));
+    console.error(`Failure details saved to ${f}${e.png ? ' (+screenshot)' : ''}`);
+  } catch (w) { console.error(`could not save failure details to ${f}: ${w.message}`); }
+}
+// One way out for every run-stage failure — server, browser, page or post-processing: the error keeps its phase,
+// fail.json is written (a screenshot too when the page still answered), the tracked processes are swept, exit 1.
+let runPhase = 'launch', base = null;
 try {
-  const base = await workingTreeUrl();
-  const { cells, errors } = await capture(base, tmp('aw-frames-'));
+  if (!fs.existsSync(chromeBin)) fail(`Chrome binary not found at "${chromeBin}". Set CHROME_BIN to a Chromium/Chrome executable.`, 'launch');
+  runPhase = 'server';
+  base = await workingTreeUrl();
+  runPhase = 'capture';
+  const { cells, errors } = await capture(base.url, tmp('aw-frames-'));
 
-  let cmp = null, beforeErrors = [];
+  runPhase = 'compare';
+  let cmp = null, beforeErrors = [], vsPart = null;
   if (vs) {
     const b = await baseline(vs, vsSha);
     beforeErrors = b.errors;
+    vsPart = { ref: vs, sha: vsSha, ...(b.url ? { server: servers.get(b.url) ?? { url: b.url } } : { cache: b.cached }) }; // a cache hit means no baseline server ran this time
     const at = (d) => (c, i) => ({ file: path.join(d, `f${i}.png`), crop: c.crop, scale: c.scale });
     cmp = { names: [`BEFORE ${vs} (${vsSha.slice(0, 8)})`, 'AFTER working tree'], before: cells.map(at(b.runs[0])), noise: cells.map((c, i) => [at(b.runs[0])(c, i), at(b.runs[1])(c, i)]) };
   } else if (cmpDir) {
-    const again = await capture(base, tmp('aw-frames-'), true);
+    const again = await capture(base.url, tmp('aw-frames-'), true);
     const before = cells.map((c) => ({ file: path.join(cmpDir, path.basename(c.out)) }));
-    for (const c of before) if (!fs.existsSync(c.file)) die(`--cmp: ${c.file} is missing (the earlier run needs the same shot names)`);
+    for (const c of before) if (!fs.existsSync(c.file)) fail(`--cmp: ${c.file} is missing (the earlier run needs the same shot names)`, 'compare');
     cmp = { names: [`BEFORE ${cmpDir}`, 'AFTER working tree'], before, noise: cells.map((c, i) => [c, again.cells[i]]) };
   }
 
+  runPhase = 'post';
   // ---- Raw frames kept on request before any post-processing ----
   if (rawDir) {
     fs.mkdirSync(rawDir, { recursive: true });
@@ -536,7 +659,7 @@ try {
   if (py.status === 0) {
     console.log(`${files ? `Saved ${cells.length} shots in: ${outDir}\n` : ''}Saved ${cells.length}-panel ${cmp ? 'compare' : 'contact'} sheet: ${sheetOut}`);
     if (cmp) rows = JSON.parse(py.stdout);
-  } else if (cmp) die(`Compare needs Python PIL: ${py.stderr.trim()}`);
+  } else if (cmp) fail(`Compare needs Python PIL: ${py.stderr.trim()}`, 'post');
   else {
     fs.cpSync(path.dirname(cells[0].file), outDir, { recursive: true });
     console.log(`Saved ${cells.length} screenshots in: ${outDir} (PIL post-processing skipped${crop ? ' — frames are uncropped' : ''}: ${py.stderr.trim()})`);
@@ -556,10 +679,14 @@ try {
 
   fs.writeFileSync(runFile, JSON.stringify({
     argv: process.argv.slice(2),
+    cwd: process.cwd(), // where the command ran; `server` is who actually served the page
+    server: servers.get(base.url) ?? { url: base.url }, // the checkout and instance that served the shots
     git: { sha: git('rev-parse', 'HEAD'), dirty: !!git('status', '--porcelain') },
-    ...(vs ? { vs: { ref: vs, sha: vsSha } } : {}),
+    ...(vs ? { vs: vsPart } : {}),
     ...(shotList ? { shots: shotList } : {}),
     ...(rows ? { compare: rows } : {}),
+    ...(beforeErrors.length ? { beforeErrors } : {}),
+    ...(errors.length ? { consoleErrors: errors } : {}), // the verdict below fails the run; this keeps why
   }, null, 2));
 
   if (beforeErrors.length) console.error(`Console/WebGL errors while shooting ${vs} (${beforeErrors.length}, not counted):\n` + beforeErrors.map((e) => `  - ${e}`).join('\n'));
@@ -567,6 +694,11 @@ try {
     console.error(`Console/WebGL errors (${errors.length}):\n` + errors.map((e) => `  - ${e}`).join('\n'));
     process.exitCode = 1;
   }
+} catch (e) {
+  e.phase ??= runPhase;
+  await writeFail(e, base?.url);
+  console.error(`failed during ${e.phase}: ${e.message}`);
+  process.exitCode = 1;
 } finally {
   for (const p of [...procs]) await stop(p);
 }

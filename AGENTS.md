@@ -55,8 +55,8 @@ Choose verification by the behavior affected, not just the filename (`game.ts` c
 
 Never click through Lobby UI, monkey-patch `Date.now`, `import('/src/...')` from console (loads duplicate HMR modules), or hand-write CDP capture scripts. Use URL flags, `window.__aw` (`src/client/dev.ts`), or `shot-matrix.mjs`.
 
-- **URL flags** (`/?dev=1&...`): `dev=1` (DEV panel; drops stale non-dev lobbies), `autostart=1` / `bots=1..3` / `fresh=1` (fresh bot game straight to HUD), `hd=1|0`, `hour=0..24` (`0` midnight, `6.2` sunrise, `12` noon, `18` dusk), `speed=N`, `paused=1`, `tile=0..91`, `x=N`, `z=N`, `lift=N`, `zoom=fit|N`, `elev=deg`, `az=deg`, `rot=0|1` (instant camera jump), `clean=1` (hide chrome, keep DEV), `ui=0` (hide `#root`).
-- **Window size**: the UI has one layout, for a wide window (`width ≥ 348px + 110vh` and `height ≥ 760px`); any other window is covered by the `#narrow` mask (`Narrow` in `ui/hud.tsx`, `style.css`). Drive or shoot the HUD at a size that clears it (e.g. `--size=1600x900`: `--autostart` at the matrix default `960x540` only shows the mask); `clean=1` and `ui=0` hide the mask too.
+- **URL flags** (`/?dev=1&...`): `dev=1` (DEV panel; drops stale non-dev lobbies), `autostart=1` / `bots=1..3` / `fresh=1` (fresh bot game straight to HUD), `hd=1|0`, `hour=0..24` (`0` midnight, `6.2` sunrise, `12` noon, `18` dusk), `speed=N`, `paused=1`, `tile=0..91`, `x=N`, `z=N`, `lift=N`, `zoom=fit|N`, `elev=deg`, `az=deg`, `rot=0|1` (instant camera jump), `clean=1` (hide chrome, keep DEV), `ui=0` (hide `#root`), `scenario=<name>` (boot into a named HUD scene).
+- **Window size**: the UI has one layout, for a wide window (`width ≥ 348px + 110vh` and `height ≥ 760px`); any other window is covered by the `#narrow` mask (`Narrow` in `ui/hud.tsx`, `style.css`). Drive or shoot the HUD at a size that clears it — HUD shots (`--autostart`, `--scene`, a `scene`/`ui` list entry) default to `1600x900`, while the bare matrix default `960x540` only shows the mask; `clean=1` and `ui=0` hide the mask too.
 
 - **`window.__aw` runtime bridge**:
 ```js
@@ -69,14 +69,19 @@ await window.__aw.quickGame(3); window.__aw.pause(true); // dev room; pause(true
 await window.__aw.cmd({ c: 'goto', pi: 0, i: 1, land: true }, { wait: 30000 }); // runs on ROLL DICE ({ wait } waits for it to open)
 await window.__aw.idle(); window.__aw.ui(); // event-driven HUD/card waits & state (no fixed sleeps)
 await window.__aw.click('SKIP'); // data-id, text/prefix, or selector on top modal/screen; also until(pred, ms)
+window.__aw.diag(); // where the page stands: view, me/turn, waiting, action, top card, pauses, visibility, viewport, narrow, ws
+await window.__aw.scenario('buy'); // named HUD scene (window.__aw.scenarios lists all): fresh dev room played to a resting card/state, then frozen
 ```
+- A failed `until`/`idle`/`click`/`cmd` ends with one error carrying that `diag()` (e.g. `waiting Bot Azure, gamePaused:true`) — no follow-up console queries.
+- Named scenes (`src/client/scenarios.ts`): `buy` · `news` · `mortgage` · `casino` · `spectate`. `?scenario=<name>` boots into one, `__aw.scenario(name)` runs one anytime; each ends with the room's question clocks paused (`pause`, not `setLoop`), so the card stays.
 
-- **Batch visual sheets (`scripts/shot-matrix.mjs`)** — `--tile(s)`, `--iso`, and `--lots` accept tile indices, names, or kind slugs; read output PNGs directly to inspect visuals:
+- **Batch visual sheets (`scripts/shot-matrix.mjs`)** — `--tile(s)`, `--iso`, and `--lots` accept tile indices, names, or kind slugs; read output PNGs directly to inspect visuals. The server is checked against `/__aw-id` (the checkout it serves): a probed or `--url` server of another worktree — or an older build without the endpoint — is refused (restart it, or `--serve`); `--vs` baselines serve their own tree, so old commits without the endpoint still compare. HUD shots (`--autostart`, `--scene`, or a `scene`/`ui` list entry) default to `1600x900`. A failed run writes `fail.json` (+ `fail.png`) beside the output: phase, error, server identity, the page's `diag()`:
 ```bash
 node scripts/shot-matrix.mjs --tile=28 --iso=1 --nosign=1 --az=-35,0,35,145 --zooms=0.6,2.4 --hours=12 # isolated turntable + LOD
 node scripts/shot-matrix.mjs --tile="Las Vegas" --lx=-0.3 --ly=1.5 --lz=0.45 --zoom=3 --crop=420x340 --scale=2 # lot-space close-up (--lot=1 for origin; or --tx/--tz/--lift)
 node scripts/shot-matrix.mjs --tile=13 --lv=3 --m=1 --lots=14:1:2,15:-1:0:0:0 --time=0,1 --q=vol=1 # neighbour context, clock poses, extra URL query
 node scripts/shot-matrix.mjs --out=/tmp/aw-shots/hk --list=shots.json # named PNGs + sheet.png + run.json (--out=x.png for sheet only)
+node scripts/shot-matrix.mjs --scene=mortgage --out=/tmp/aw-shots/mort # one named HUD scene (or a "scene" key on a --list shot)
 node scripts/shot-matrix.mjs --looks=pixel --hours=0,12,18 --vs --expect=same # BEFORE | AFTER | DIFF vs HEAD (or --vs=ref / --cmp=dir); check table first, open CHANGED shots
 ```
 

@@ -4,12 +4,13 @@ import { command } from '../shared/state';
 import type { Cmd } from '../shared/types';
 import { leaveRoom, quickGame } from './controller';
 import { busy } from './director';
-import { send } from './net';
+import { link, send } from './net';
 import { LOT, PAD, POS } from './render/layout';
 import { U, hd } from './render/light';
 import { camera, controls, dirtyShadow, finishTweens, fitZoom, hdCam, jumpTo, lod, renderer, scene, setLighting, viewAngles } from './render/scene';
 import { clock, sky, wallHour } from './render/sky';
 import { FLOAT } from './render/world';
+import { SCENARIOS, runScenario, type SceneDrv } from './scenarios';
 import { cam, isolateTile, loop, playStrike, rebuildTile, selectTile, setLot } from './stage';
 import { G, actionBtn, cards, hd2d, paused, peeking, session, stageOnly, waitingFor } from './store';
 
@@ -43,7 +44,7 @@ const kept: { booted?: boolean } = import.meta.hot?.data ?? {};
 export function preBoot() {
   if (kept.booted) return;
   const q = new URLSearchParams(location.search);
-  if (q.get('fresh') === '1' || q.get('autostart') === '1' || q.has('bots')) sessionStorage.removeItem('room');
+  if (q.get('fresh') === '1' || q.get('autostart') === '1' || q.has('bots') || q.has('scenario')) sessionStorage.removeItem('room');
   if (q.has('hd')) hd2d.set(q.get('hd') === '1');
   const h = num(q.get('hour'));
   if (h !== undefined) clock.stop = mod24(h);
@@ -127,12 +128,39 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const label = (e: Element | null) => (e as HTMLElement | null)?.innerText.replace(/\s+/g, ' ').trim() ?? '';
 const norm = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
 
+/** Where the page stands when a wait fails: enough to tell a dead ask from a frozen room (or the wrong window) in one error, with no further console queries. Every read is optional, so it still answers something on a bare title. */
+function diag() {
+  const S = G.S, me = G.me, who = waitingFor.get(), cur = S ? S.order[S.turn] : -1, st = link();
+  const narrow = document.getElementById('narrow'), card = topCard();
+  return {
+    view: session.get().view,
+    me: S && me >= 0 ? { pi: me, name: S.players[me]?.name, out: !!S.players[me]?.out } : null,
+    turn: S ? { round: S.round, step: S.step, pi: cur, name: S.players[cur]?.name } : null,
+    over: !!S?.over,
+    waiting: S && who >= 0 ? (S.players[who]?.name ?? who) : null,
+    action: actionBtn.get()?.label ?? null,
+    card: card ? { title: label(card.querySelector('.hd span')), buttons: [...card.querySelectorAll<HTMLElement>('.ft .btn')].map((b) => label(b)) } : null,
+    aside: peeking.get(),
+    busy: busy(),
+    gamePaused: paused.get(),
+    renderPaused: loop.paused,
+    hidden: document.hidden,
+    viewport: [innerWidth, innerHeight],
+    narrow: !!(narrow && narrow.getClientRects().length),
+    ws: ['connecting', 'open', 'closing', 'closed'][st] ?? 'none',
+  };
+}
+/** The one-line failure scene appended to a driver's error; it never throws, so it can never swallow the real reason. */
+const diagText = () => {
+  try { return `\n${JSON.stringify(diag())}`; } catch { return ''; }
+};
+
 /** Polls `pred` until it gives something truthy, and hands that back. Throws after `ms`, so a script never hangs on a state that does not come. */
 async function until<T>(pred: () => T, ms = 10_000): Promise<NonNullable<T>> {
   for (const end = performance.now() + ms; ; await sleep(50)) {
     const v = pred();
     if (v) return v as NonNullable<T>;
-    if (performance.now() > end) throw new Error(`__aw.until: not met in ${ms} ms: ${String(pred).replace(/\s+/g, ' ').slice(0, 120)}`);
+    if (performance.now() > end) throw new Error(`__aw.until: not met in ${ms} ms: ${String(pred).replace(/\s+/g, ' ').slice(0, 120)}${diagText()}`);
   }
 }
 
@@ -141,7 +169,7 @@ const resting = () => !busy() || !!actionBtn.get() || cards.get().length > 0;
 /** Resolves once the screen has rested for 200 ms (the server's answer to a press takes a moment to come back), or throws after `ms`. The default holds a round of three bots. */
 async function idle(ms = 60_000) {
   let since = 0;
-  await until(() => { const t = performance.now(); since = resting() ? since || t : 0; return since && t - since >= 200; }, ms).catch(() => { throw new Error(`__aw.idle: still playing after ${ms} ms: ${JSON.stringify(ui())}`); });
+  await until(() => { const t = performance.now(); since = resting() ? since || t : 0; return since && t - since >= 200; }, ms).catch(() => { throw new Error(`__aw.idle: still playing after ${ms} ms: ${JSON.stringify(ui())}${diagText()}`); });
 }
 
 const topCard = () => [...document.querySelectorAll<HTMLElement>('.modal')].filter((m) => !m.closest('[hidden]')).pop(); // the card a key reaches (see keys.ts): not one set aside
@@ -157,7 +185,7 @@ function find(what: string) {
 /** Presses what `find` gives (waiting up to `ms` for it to be there); when nothing comes, the error says what can be pressed. */
 async function click(what: string, ms = 5000) {
   const name = (e: HTMLElement) => `${label(e).slice(0, 30) || e.title || e.id}${e.dataset.id ? ` [${e.dataset.id}]` : ''}`;
-  const el = await until(() => find(what), ms).catch(() => { throw new Error(`__aw.click: nothing to press for "${what}"; pressable now: ${pressable(topCard() ?? document).map(name).join(' | ') || 'nothing'}`); });
+  const el = await until(() => find(what), ms).catch(() => { throw new Error(`__aw.click: nothing to press for "${what}"; pressable now: ${pressable(topCard() ?? document).map(name).join(' | ') || 'nothing'}${diagText()}`); });
   el.click();
   await nextFrame();
 }
@@ -186,21 +214,37 @@ const runCmd = (c: Cmd) => {
 function cmd(c: Cmd): boolean;
 function cmd(c: Cmd, o: { wait: number }): Promise<boolean>;
 function cmd(c: Cmd, o?: { wait: number }) {
-  return o ? until(() => actionBtn.get()?.reply, o.wait).then(() => runCmd(c), () => { throw new Error(`__aw.cmd: no roll question to answer within ${o.wait} ms`); }) : runCmd(c);
+  return o ? until(() => actionBtn.get()?.reply, o.wait).then(() => runCmd(c), () => { throw new Error(`__aw.cmd: no roll question to answer within ${o.wait} ms${diagText()}`); }) : runCmd(c);
 }
 
 export function initDev() {
   const q = new URLSearchParams(location.search);
   const urlView = parseUrlView();
-  const startBots = !kept.booted && (q.get('autostart') === '1' || q.has('bots')) ? (num(q.get('bots')) ?? 3) : null;
+  const sc = q.get('scenario'); // ?scenario=<name>: a fresh dev room played to a named resting state (see scenarios.ts)
+  const booted = kept.booted; // a hot update re-runs initDev on the same page: the room in it is kept, not replayed
+  const startBots = !booted && !sc && (q.get('autostart') === '1' || q.has('bots')) ? (num(q.get('bots')) ?? 3) : null;
   kept.booted = true;
 
+  // A scene still in flight belongs to this run of the page: once a hot update replaces it, its driver goes stale
+  // rather than steering whatever room the new run kept or opened.
+  let live = true;
+  const stale = new Error('scenario: superseded by a hot update');
+  const drv: SceneDrv = {
+    until: (p, ms) => (live ? until(p, ms) : Promise.reject(stale)),
+    cmd: (c, o) => (live ? cmd(c, o) : Promise.reject(stale)),
+    send: (m) => { if (live) send(m); },
+    quickGame: (n) => (live ? quickGame(n) : Promise.reject(stale)),
+    ui: () => (live ? ui() : null),
+  };
   const ready = (async () => {
     await setLighting(hd2d.get());
-    if (startBots !== null) await quickGame(startBots);
+    if (startBots !== null) await drv.quickGame(startBots);
+    if (sc && !booted) console.log(`scenario ${sc}:`, await runScenario(sc, drv));
     if (urlView) await setView(urlView);
     else { loop.draw(); await nextFrame(); }
-  })();
+  })().catch((e) => {
+    if (live) throw e; // superseded by a hot update: die quietly — the new page owns the room now
+  });
 
   const api = {
     ready,
@@ -239,9 +283,12 @@ export function initDev() {
     idle,
     ui,
     click,
+    diag,
+    scenario: (name: string) => runScenario(name, drv), // a fresh dev room played to a named resting state, then paused: `scenarios` says what each rests on
+    scenarios: Object.fromEntries(Object.entries(SCENARIOS).map(([k, s]) => [k, s.hint])),
     snapDataUrl: () => (loop.draw(), renderer.domElement.toDataURL('image/png')),
     refs: { G, TILES, POS, LOT, PAD, clock, sky, U, camera, hdCam, controls, renderer, scene, loop },
   };
   (window as unknown as { __aw?: typeof api }).__aw = api;
-  return () => { delete (window as unknown as { __aw?: typeof api }).__aw; };
+  return () => { live = false; delete (window as unknown as { __aw?: typeof api }).__aw; };
 }
