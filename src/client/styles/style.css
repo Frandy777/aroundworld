@@ -105,7 +105,8 @@ button, [data-tile], .pcard, .item { cursor: var(--cur-hand); }
 .pcard .sub span { display: flex; align-items: center; gap: 4px; }
 .badge { font: var(--fs) / 20px var(--font); padding: 0 6px; background: var(--red); color: #fff; margin-left: 4px; text-shadow: none; box-shadow: 0 0 0 2px var(--ink), inset 0 2px rgba(255, 255, 255, 0.3), inset 0 -2px rgba(0, 0, 0, 0.3); }
 .badge.blue { background: #6a3fb5; }
-.pcard.on .nm > span:first-child::before { content: ''; display: inline-block; width: 16px; height: 18px; margin-right: 4px; vertical-align: -2px; background: var(--spr-tri) center / contain no-repeat; image-rendering: pixelated; animation: blink 0.8s steps(2) infinite; }
+/* Whose turn it is: the pointer hangs off the card's left edge, centred on it (9px is half its height). It needs ~26px free at the card's left: the stack and two-across layouts below hide it, where the gold frame carries the mark */
+.pcard.on::before { content: ''; position: absolute; left: -26px; top: 50%; margin-top: -9px; width: 16px; height: 18px; background: var(--spr-tri) center / contain no-repeat; image-rendering: pixelated; animation: blink 0.8s steps(2) infinite; }
 /* The clock of the player the game waits for (see Clock): a gauge set into the foot of their card, over its frame (the 2px of padding and the 8px of border), so the cards keep their height.
    It runs down in the 20 steps of a card's fuse (see useAuto), over the time that was left as it went up: --w is how full it starts, --t how long it has to run */
 .clock { position: absolute; left: 12px; right: 12px; bottom: -8px; height: 10px; padding: 2px; background: var(--ink); pointer-events: none; }
@@ -198,7 +199,7 @@ button, [data-tile], .pcard, .item { cursor: var(--cur-hand); }
   @media (max-width: 519px) { #camctl .btn { padding-inline: 3px; margin: 1px; } }
   #toasts { top: calc(var(--st) + 70px); left: var(--sl); right: var(--sr); } /* under the camera buttons */
   #dev { left: calc(var(--sl) + 10px); top: calc(var(--st) + 10px); max-width: calc(100vw - 2 * var(--m) - 10px); } /* inside the stage's frame (6px) and 4px from it, as the camera buttons are at the other corner */
-  @media (min-aspect-ratio: 1/1) and (height < 560px) { #players { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); } .pcard { grid-template-columns: 1fr; } .face { display: none; } } /* two cards across, without their faces, to leave the panel its room */
+  @media (min-aspect-ratio: 1/1) and (height < 560px) { #players { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); } .pcard { grid-template-columns: 1fr; } .face, .pcard.on::before { display: none; } } /* two cards across, without their faces, to leave the panel its room */
 }
 
 /* Stack: a window taller than wide. From the top: the bar, the players (all across, or two by two in a narrow window), the stage, the panel */
@@ -206,12 +207,13 @@ button, [data-tile], .pcard, .item { cursor: var(--cur-hand); }
   :root { --ph: 70px; --pnl: clamp(168px, 24dvh, 260px); --sr: var(--m); --st: calc(var(--m) + var(--hh) + var(--ph) + 16px); --sb: calc(var(--m) + var(--pnl) + 8px); }
   #col { display: contents; }
   #players { position: fixed; top: calc(var(--m) + var(--hh) + 8px); left: var(--m); right: var(--m); height: var(--ph); display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); z-index: 11; }
+  .pcard.on::before { display: none; }
   #side { position: fixed; left: var(--m); right: var(--m); bottom: var(--m); height: var(--pnl); z-index: 11; }
 }
 @media (max-aspect-ratio: 1/1) and (max-width: 739px) {
   :root:has(#players > :nth-child(3)) { --ph: 146px; }
   #players { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  @media (max-width: 399px) { .pcard { column-gap: 6px; } .pcard.on .nm > span:first-child::before { display: none; } } /* a name and YOU take all the room a card has: the gold frame says whose turn it is */
+  @media (max-width: 399px) { .pcard { column-gap: 6px; } }
 }
 
 /* Multiplayer: who is who on a card, and the lobby's rows */
