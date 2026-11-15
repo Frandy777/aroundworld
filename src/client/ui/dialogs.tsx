@@ -336,7 +336,7 @@ export function CasinoCard({ ctl, close }: { ctl: Ctl; close(): void }) {
   const tally: [string, number][] = [['Bets', -staked], ['Won', won], ['Net', won - staked]];
 
   return (
-    <Card title={lucky ? 'LUCKY CASINO' : 'HIGH STAKES CASINO'} sub={lucky ? 'Bet on a number' : 'Bet, roll, cash out'} cls="casino" foot={
+    <Card title={lucky ? 'LUCKY CASINO' : 'HIGH STAKES CASINO'} sub={lucky ? 'Bet on a number' : 'Bet, roll, cash out'} cls="casino" peek={false} foot={
       !rolling && (
         v.stage === 'bet' && mine ? <Btn id="roll" cls="primary" onClick={go}>{lucky ? `ROLL ${money(bet)}` : 'ROLL 1/2'}</Btn>
         : v.stage === 'again' && done && mine ? <><Btn id="roll" cls="primary" onClick={go}>ROLL {money(bet)}</Btn><Btn id="cash" cls="gold" onClick={cash}>CASH OUT</Btn></>
