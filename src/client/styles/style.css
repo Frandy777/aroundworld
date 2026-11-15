@@ -67,19 +67,22 @@ button, [data-tile], .pcard, .item { cursor: var(--cur-hand); }
 .hint { margin: 0; color: var(--dim); text-shadow: 0 2px 0 var(--ink); }
 .ver { color: var(--dim); opacity: 0.8; text-shadow: 0 2px 0 var(--ink); }
 
-/* HUD, in one layout, for a wide window (any other is covered by the mask, see the end of this section). The 3D canvas is the window: the whole board fits beside a 320px column, so the panels float over it, all at the right and as wide as the column: the top bar over the players over the panel, and the camera buttons at the bottom (one row).
+/* HUD, in one layout, for a wide window (any other is covered by the mask, see the end of this section). The 3D canvas is the window: the whole board fits beside a 320px column, so the panels float over it, at the right and as wide as the column: the players over the panel, and the camera buttons at the bottom (one row); the top bar floats apart, at the top, in the middle of what the column leaves.
    The camera centres the board in what the column leaves of the canvas: --cr is how far it covers it from the right (its width and a gap), see scene.ts. The action bar is not made room for: it floats over the canvas, in the bay at the bottom of the board (see #actions). */
 @property --cr { syntax: '<length>'; inherits: true; initial-value: 0px; }
-:root { --m: 14px; --hh: 74px; --col: clamp(260px, 32vw, 320px); --cb: 110px; }
-#topbar { position: fixed; top: 12px; left: calc(100% - 14px - var(--col)); right: 14px; height: var(--hh); display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 2px 10px; z-index: 12; }
+:root { --m: 14px; --col: clamp(260px, 32vw, 320px); --cb: 100px; }
+/* The top bar is centred in what the column leaves of the window (--cr), like #actions: by layout, never by translate. It goes at the top, in the sea that the loop leaves open there as it does at the bottom, so the column keeps the whole height;
+   it is as wide as what it holds (the round, PAUSED, the buttons), which a column's width did not always fit, and as tall as its buttons: squares as small as a sprite (32px) and its frame allow (44px), --g from the frame and from each other */
+#topbar { --g: 4px; position: fixed; top: 12px; left: 0; right: var(--cr); margin: 0 auto; width: max-content; display: flex; align-items: center; gap: 20px; padding: var(--g) var(--g) var(--g) 10px; z-index: 12; }
+#topbar .btn { margin: 0; padding: 0; }
 #round { white-space: nowrap; } #round b { color: var(--gold); font: 34px / 36px var(--font-hd); vertical-align: -2px; }
 @keyframes blink { 50% { opacity: 0.6; } }
-.tools { display: flex; }
+.tools { display: flex; gap: var(--g); }
 
-/* The column: the players over the panel. It floats at the right, under the top bar (the column's width, its first row), and reaches down to above
-   the camera buttons, with the panel filling what the players leave: the window less 12 + the bar + 10 at the top, and 28 + the buttons' 50 + 10 at the bottom (110px + the bar: --cb).
+/* The column: the players over the panel. It floats at the right, from the top of the window down to above
+   the camera buttons, with the panel filling what the players leave: the window less 12 at the top, and 28 + the buttons' 50 + 10 at the bottom (100px: --cb).
    No wider than 320px, or in a short window it covers the top-right tiles of the whole-board view (the board is centred there, and ~0.96 x the window height wide) */
-#col { position: fixed; top: calc(12px + var(--hh) + 10px); right: 14px; width: var(--col); height: calc(100vh - var(--cb) - var(--hh)); display: flex; flex-direction: column; gap: 10px; z-index: 11; }
+#col { position: fixed; top: 12px; right: 14px; width: var(--col); height: calc(100vh - var(--cb)); display: flex; flex-direction: column; gap: 10px; z-index: 11; }
 #players { display: flex; flex-direction: column; gap: 10px; }
 .pcard { display: grid; grid-template-columns: 44px 1fr; gap: 0 10px; align-content: start; padding: 4px 4px 2px; transition: translate 0.1s steps(2); }
 .pcard:hover { translate: 4px 0; }
