@@ -6,7 +6,7 @@
 - `src/worker/` — Cloudflare Worker entry (`index.ts`), hibernating SQLite Durable Object (`room.ts`), authoritative turn/event engine (`game.ts`), news deck (`news.ts`).
 - `src/client/` — Browser app:
   - `store.ts` (`useCell`, `G.S`), `net.ts` / `controller.ts` (WS session, room lifecycle, dev `quickGame()`), `director.ts` (plays server events sequentially in lockstep with UI/animations).
-  - `stage.ts` & `render/` — 3D stage, camera/post, lighting, sky, voxel builder, tile/token/effect models. Read the header comments of any `render/*.ts` file you touch before assuming internals.
+  - `stage.ts` & `render/` — 3D stage, camera/post, lighting, sky, voxel builder, tile/token/effect models.
   - `render/models/{special,invest,public}/<key>.ts` — One `ModelDef` default-export per file, auto-collected by `models/index.ts` via `import.meta.glob` (no registry edits). Supports `props`, `scale`, `levels`, `owner` (`switchOf` in `light.ts`), and `lamps` (`render/lamps.ts`); see `builder.ts` and `special/hong-kong.ts`. Ordinary cities dispatch by level via `models/city.ts` + `models/city/*` over `kit.ts`.
   - `ui/` — Pixel-art HUD, cards/dialogs, `?dev=1` panel (`debug.tsx`). `.tsx` files must export components only so Vite Fast Refresh works.
   - `dev.ts` — Dev-only URL flags and `window.__aw` bridge (tree-shaken in production).
