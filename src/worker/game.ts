@@ -6,7 +6,7 @@ import { NEWS } from './news';
 
 const N = TILE_COUNT;
 const JAIL = kindAt('jail');
-const TAXES = TILES.flatMap((t, i) => (t.kind === 'tax' ? [i] : [])); // two bureaus: the first counts holdings, the second taxes wealth
+const TAXES = TILES.flatMap((t, i) => (t.kind === 'tax' ? [i] : []));
 const JERU = tileAt('Jerusalem');
 const VEGAS = tileAt('Las Vegas');
 const ASK_MS = 60_000; // how long a player has to decide before the default answer is taken
@@ -97,13 +97,13 @@ function check(p: Prompt, v: unknown): Answer | undefined {
 export class Game {
   readonly S: GameState;
   mods: Mods[];
-  again = false; // Buy One, Get One: the player goes once more
+  again = false;
   passed = new Set<number>(); // players walked past this turn
   private rig: number[] = []; // what the dev panel wants the next random draws to be (see `rnd`)
   private nextId: number;
   private pending: Pending | null = null;
-  private gone: Set<number>; // players who left: their asks answer themselves, and they drop out on their next turn
-  private conceded = new Set<number>(); // players who declared bankruptcy: out at once, but still in the room watching (see `concede`)
+  private gone: Set<number>; // players who left the room
+  private conceded = new Set<number>(); // players who declared bankruptcy (see `concede`)
   private tape: Entry[] = []; // what the turn in progress has taken from outside so far
   private replay: Entry[] | null = null; // the tape while it plays back after a restart; null once the game is live
   private wasDue = 0; // the clock the open question had before the restart
@@ -236,7 +236,7 @@ export class Game {
     this.gone.add(pi);
     if (this.pending?.to === pi) this.settle(this.pending, fallback(this.pending.p));
   }
-  /** A player still in the room declares bankruptcy: out on the spot, left to watch on (leaving the room forfeits instead: `forfeit`). `conceded` goes with the
+  /** A player still in the room declares bankruptcy (`forfeit` covers leaving). `conceded` goes with the
    * save so a restart mid-turn puts them out again: the tape holds only what a turn took from outside, and this was no input the game asked for. */
   concede(pi: number) {
     const p = this.S.players[pi];
@@ -257,7 +257,6 @@ export class Game {
   // ---- Who is who ----
   alive() { return this.S.order.filter((i) => !this.S.players[i].out); }
   over() { return this.alive().length <= 1; }
-  /** Jailed players collect nothing. */
   collects(pi: number) { return !this.S.players[pi].jail; }
   /** Working (not mortgaged) tiles of a kind that a player owns. */
   count(pi: number, kind: string) { return Object.keys(this.S.own).filter((k) => this.S.own[+k].p === pi && !this.S.own[+k].m && TILES[+k].kind === kind).length; }
@@ -293,7 +292,7 @@ export class Game {
     this.toast(m`${T(i)}: ${this.nm(o.p)} earns ${money(vals[o.lv])}`, 'good');
     this.give(o.p, vals[o.lv], m`${T(i, true)}: ${why}`, bank);
   }
-  /** Take `amt` from a player for the bank or for `to`. A shortfall first withdraws any fixed deposit (no interest), hands over what cash is left, then mortgages at half the lot value for the rest. False when they went bankrupt instead. */
+  /** Take `amt` from a player for the bank or for `to`. False when they went bankrupt instead. */
   async pay(pi: number, amt: number, why: Msg | string, to: number | null = null): Promise<boolean> {
     const S = this.S, p = S.players[pi];
     if (amt <= 0) return true;
@@ -315,25 +314,23 @@ export class Game {
         this.goBankrupt(pi);
         return false;
       }
-      const forced = raised - Math.min(...items.map((x) => x.amt ?? 0)) < rest; // short even without the cheapest: every property goes, nothing to choose
+      const forced = raised - Math.min(...items.map((x) => x.amt ?? 0)) < rest;
       if (forced) this.toast(`${p.name} must mortgage every property to pay ${money(rest)}`, 'bad');
       const sel = forced ? items.map((x) => x.i) : (await this.ask(pi, { k: 'pick', of: 'tile', title: 'MORTGAGE TO PAY', sub: [`${p.name} owes ${money(rest)}`], tone: 0x3b7bd9,
         hint: 'You can\'t afford this. Mortgage properties to cover it: each pays half its lot value.', items, rule: { k: 'raise', cash: 0, need: rest }, label: 'MORTGAGE & PAY' })) as number[];
-      if (p.out) return false; // gave up while picking: the estate already went to the bank, there is nothing to mortgage
+      if (p.out) return false;
       this.mortgage(pi, sel, 0.5);
       amt = rest;
     }
-    if (to === null || S.players[to].out) this.cash(pi, -amt, why); // a creditor who went out meanwhile leaves the payment to the bank
+    if (to === null || S.players[to].out) this.cash(pi, -amt, why);
     else this.xfer(pi, to, amt, why);
     return true;
   }
-  /** Mortgages pay `rate` of each property's lot value: half on a forced settlement, the full value at the bank. */
   private mortgage(pi: number, sel: number[], rate: number) {
     let sum = 0;
     for (const i of sel) { sum += Math.floor(lotValue(TILES[i], this.S.own[i]) * rate); this.own(i, { ...this.S.own[i], m: true }); }
     this.cash(pi, sum, m`mortgaged ${tiles(sel)}`);
   }
-  /** The bank's fixed-deposit offer: one at a time, a principal in whole thousands out of cash. */
   private async deposit(pi: number) {
     const S = this.S;
     if (S.players[pi].dep) return;
@@ -345,7 +342,6 @@ export class Game {
     this.cash(pi, -d.amt, m`placed a ${String(d.n)}-round fixed deposit`);
     this.toast(m`${P(pi)} deposited ${money(d.amt)} for ${String(d.n)} rounds`, 'good');
   }
-  /** Out of the game: the properties go back to the bank, and so does any deposit. */
   private goBankrupt(pi: number) {
     for (const k of Object.keys(this.S.own).map(Number)) if (this.S.own[k].p === pi) this.own(k, null);
     if (this.S.players[pi].dep) this.emit({ t: 'dep', pi, d: null });
@@ -401,7 +397,6 @@ export class Game {
     this.host.save();
   }
 
-  // Everyone rolls two dice, the lowest total goes first, ties roll again among themselves.
   private rollOrder() {
     const passes: OrderPass[] = [], order: number[] = [];
     const settle = (group: number[]) => {
@@ -429,7 +424,7 @@ export class Game {
       for (const k of ['jail', 'party', 'stay'] as const) if (p[k]) this.emit({ t: 'flag', pi, k, v: false });
       return;
     }
-    // 1. Redeem at the full lot value (only when the cheapest mortgaged property is affordable: otherwise there is nothing to choose)
+    // 1. Redeem
     this.emit({ t: 'step', s: 'redeem' });
     const mort = Object.keys(S.own).map(Number).filter((i) => S.own[i].p === pi && S.own[i].m);
     if (mort.length && p.cash >= Math.min(...mort.map((i) => lotValue(TILES[i], S.own[i])))) {
@@ -467,7 +462,6 @@ export class Game {
     return false;
   }
 
-  // A normal move passes every tile on the way. Weather halves it, fuel adds 3, a World Tour turns it around (and passes nothing).
   private async walk(pi: number, total: number) {
     const S = this.S, p = S.players[pi], md = this.mods[pi], back = md.back;
     const steps = Math.ceil((total + (md.fuel ? 3 : 0)) / (md.half ? 2 : 1));
@@ -495,7 +489,6 @@ export class Game {
     await this.toll(pi, i);
   }
 
-  // The fee a chokepoint or Hong Kong charges a player who passes — or stops.
   private async toll(pi: number, i: number) {
     const S = this.S, t = TILES[i], o = S.own[i], p = S.players[pi];
     if (t.kind === 'choke') {
@@ -524,7 +517,7 @@ export class Game {
       if (o.m) return this.toast(m`${T(i)} is mortgaged`);
       if (t.kind === 'military') return this.strike(pi, i);
       if (i === JERU) { await this.jerusalem(pi, o); if (this.over()) return; }
-      const price = o.lv === 0 && this.count(pi, 'build') ? 0 : t.up; // a construction company builds the first level for free
+      const price = o.lv === 0 && this.count(pi, 'build') ? 0 : t.up;
       const lv = o.lv + 1, what = m`upgraded ${T(i, true)} to Lv ${String(lv)}`;
       if (o.lv >= maxLevel(t) || !(await this.offer(pi, i, 'upgrade', price)) || !(await this.pay(pi, price, what))) return;
       if (!price) this.log(m`${P(pi)} ${what}`); // a free one has no payment to say it — and adds nothing to the lot value
@@ -545,7 +538,6 @@ export class Game {
     await this.pay(pi, fee, m`rent at ${T(i, true)}`, o.p);
   }
 
-  // The owner of a working Military Base may pay $500 to bring any built city (anybody's) down one level.
   private async strike(pi: number, i: number) {
     const S = this.S, p = S.players[pi], items = Object.keys(S.own).map(Number).filter((k) => S.own[k].lv > 0).map((k) => ({ i: k, own: S.own[k] }));
     if (p.cash < 500 || !items.length) return;
@@ -557,7 +549,6 @@ export class Game {
     this.lower(sel[0]);
   }
 
-  // The owner stopping at Jerusalem rolls the dice and charges every other player the total × $100/$200/$300 by level.
   private async jerusalem(pi: number, o: Owned) {
     const a = this.d6(), b = this.d6(), fee = (a + b) * [100, 200, 300][o.lv];
     this.emit({ t: 'dice', a, b });
@@ -569,7 +560,6 @@ export class Game {
     }
   }
 
-  // A visitor stopping at Las Vegas rolls the dice and pays the owner the total × $300/$500/$700 by level.
   private async vegas(pi: number, o: Owned) {
     const a = this.d6(), b = this.d6(), fee = (a + b) * [300, 500, 700][o.lv];
     this.emit({ t: 'dice', a, b });
@@ -578,7 +568,7 @@ export class Game {
     await this.pay(pi, fee, m`${T(VEGAS, true)}: rolled ${String(a + b)}`, o.p);
   }
 
-  // BUY / UPGRADE card. Without the cash there is nothing to decide: say so and show the tile in the side panel.
+  // BUY / UPGRADE card; `sel` shows the tile in the side panel.
   private async offer(pi: number, i: number, mode: 'buy' | 'upgrade', price: number) {
     const p = this.S.players[pi];
     if (p.cash >= price) return (await this.ask(pi, { k: 'deed', tile: i, mode, price })) === true;
@@ -592,7 +582,7 @@ export class Game {
     if (t.type === 'city') {
       const base = cityRent(t)[o.lv];
       const mono = hasMonopoly(S, t);
-      const sg = this.spOf(o.p, 'Singapore'), py = this.spOf(pi, 'Pyongyang'); // the owner's bonus adds to the monopoly's; the payer's discount takes off the sum
+      const sg = this.spOf(o.p, 'Singapore'), py = this.spOf(pi, 'Pyongyang');
       const up = (mono ? 0.5 : 0) + (sg ? [0.1, 0.15, 0.2][sg.lv] : 0), down = py ? [0.1, 0.15, 0.2][py.lv] : 0;
       return Math.round(base * (1 + up) * (1 - down));
     }
@@ -649,7 +639,7 @@ export class Game {
         if (await this.pay(pi, 100, t.name)) this.emit({ t: 'flag', pi, k: 'party', v: true });
         break;
       case 'bank': {
-        const items = this.mortgageable(pi, 1); // the bank pays the full lot value
+        const items = this.mortgageable(pi, 1);
         if (!items.length) { // nothing to mortgage: the deposit is the only offer, if any
           if (p.dep || p.cash < DEP_STEP) this.toast(`${t.name}: nothing to do`);
           else await this.deposit(pi);
@@ -662,7 +652,7 @@ export class Game {
         break;
       }
       case 'news': await this.news(pi); break;
-      case 'area51': { // an event move to any other tile: nothing on the way is passed, and the effect of the tile it lands on is resolved
+      case 'area51': {
         const to = this.pick(TILES.filter((x) => x.i !== t.i)).i;
         this.toast(m`${t.name}: teleported to ${T(to)}`);
         this.move(pi, to, 'jump');
@@ -672,7 +662,6 @@ export class Game {
     }
   }
 
-  // The Media owner is paid for every story and may throw their own away once.
   private async news(pi: number) {
     this.bonus('BBC', [200], m`${P(pi)} triggered News`);
     let story = this.pick(NEWS)(this, pi);
@@ -683,9 +672,6 @@ export class Game {
     await story.run(why); // what the story takes or gives says it was for this
   }
 
-  // Lucky: a number 1-6 is picked and a bet of at least $100 staked on it, then two dice roll — one on the number pays bet×2−$10,
-  // both pay bet×5−$100. Up to 2 plays, each staking a bet of its own; two jackpots in a row are jail. High stakes: up to 2 rolls,
-  // each staking a bet of its own and settling before the next wager is offered; the same pair twice above 7 is jail. The one card is told in views.
   private async casino(pi: number, t: Tile) {
     const p = this.S.players[pi], v = t.variant ?? 'lucky', cid = this.nextId++;
     const view = { cid, v, bet: 0, max: 0, rolls: [] as CasinoRoll[], won: 0, jail: false };
@@ -720,7 +706,7 @@ export class Game {
         const a = this.d6(), b = this.d6(), sum = a + b, gain = Math.round(((sum - 2) / 5) * (bet - 100)), prev = rolls.at(-1), why = m`${t.name}: rolled ${String(sum)}`;
         rolls.push([a, b, gain, bet]);
         won += gain;
-        jail = !!prev && [prev[0], prev[1]].sort().join() === [a, b].sort().join() && sum > 7; // the same pair twice, above 7
+        jail = !!prev && [prev[0], prev[1]].sort().join() === [a, b].sort().join() && sum > 7;
         max = Math.floor((p.cash + gain) / 100) * 100; // what the next wager may be, once this round pays out
         const now = { ...view, bet, max, rolls: [...rolls], won, jail };
         if (jail || n === 2 || max < 200) { this.emit({ t: 'casino', view: { ...now, stage: 'end' } }); this.give(pi, gain, why); break; } // not the smallest stake for another round: the table closes

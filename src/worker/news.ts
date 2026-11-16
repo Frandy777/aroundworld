@@ -4,12 +4,11 @@ import { stats } from '../shared/state';
 import type { Msg, NewsCard } from '../shared/types';
 import type { Game } from './game';
 
-// A news event is drawn first (its dice, sign and targets are settled and shown on the card), then run. `why` is what the log gives as the reason of any money it moves.
+// `why` is what the log gives as the reason of any money a story moves.
 export interface Story { card: NewsCard; run(why: Msg): Promise<void> }
 type Def = (g: Game, pi: number) => Story;
 
 const N = TILE_COUNT;
-// A tile outside any city belongs to the region of the city before it.
 const REGION_OF: (RegionKey | null)[] = TILES.map((_, i) => { for (let k = 0; k < N; k++) { const r = TILES[(i - k + N) % N].region; if (r) return r; } return null; });
 const places = TILES.filter((t) => t.type === 'city' || t.type === 'special').map((t) => t.i);
 const investments = TILES.filter((t) => t.type === 'invest').map((t) => t.i);
@@ -218,7 +217,7 @@ const runningMan: Def = (g, pi) => ({
   run: async () => { const o = g.nearest(pi, 1); if (o >= 0) g.move(pi, (g.S.players[o].tile + 1) % TILE_COUNT, 'jump'); },
 });
 
-// ---- Weather: players in some regions move half steps next turn ----
+// ---- Weather ----
 const weather = (title: string, regions: RegionKey[]): Def => (g) => ({
   card: { cat: 'Weather', title, text: `Players in ${regions.map((r) => REGIONS[r][0]).join(' / ')} move half steps next turn.` },
   run: async () => {

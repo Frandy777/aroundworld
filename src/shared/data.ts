@@ -17,9 +17,6 @@ export const PLAYER_DEFS = [
 export const MAX_PLAYERS = PLAYER_DEFS.length;
 export const START_CASH = 20000;
 
-// Fixed deposits at the Bank: a principal in whole thousands locked away for a term of 5-15 rounds, one per player.
-// The rate grows with the term: rate = n × 0.02% + 0.2%; interest = principal × rate × n, rounded up to a whole dollar
-// (integer math: rate is (2n + 20) / 10000). No auto-renew; an early withdrawal — only a forced settlement may cause one — pays no interest.
 export const DEP_STEP = 1000, DEP_MIN = 5, DEP_MAX = 15;
 export const depRate = (n: number) => (2 * n + 20) / 10000;
 export const depInterest = (amt: number, n: number) => Math.ceil((amt * n * (2 * n + 20)) / 10000);

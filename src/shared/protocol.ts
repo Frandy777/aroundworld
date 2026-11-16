@@ -18,7 +18,7 @@ export type C2S =
   | { t: 'start' }
   | { t: 'bot'; seat: number } // dev room, host: put a bot on an empty seat, or send away the one on it
   | { t: 'answer'; id: number; v: unknown }
-  | { t: 'bankrupt' } // declare bankruptcy: out of the game, still in the room to watch
+  | { t: 'bankrupt' }
   | { t: 'pause'; on: boolean } // dev room, host: freeze every question's clock (the game still takes real answers)
   | { t: 'again' } // after the game: back to the lobby
   | { t: 'ping' };
@@ -30,5 +30,5 @@ export type S2C =
   | { t: 'fail'; why: Fail };
 
 // WebSocket close codes
-export const LEAVE = 4001; // the client chose to go (forfeits a running game)
+export const LEAVE = 4001; // the client chose to go
 export const REPLACED = 4002; // the same player connected again elsewhere

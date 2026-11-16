@@ -20,9 +20,7 @@ export function apply(s: GameState, e: Ev) {
   }
 }
 
-// What a property is worth on the books: its price plus what its upgrades actually cost (a free one adds none).
 export const lotValue = (t: Tile, o?: Owned | null) => t.price + (o ? (o.paid ?? o.lv * t.up) : 0);
-// Regular and special cities may be mortgaged; investments may not.
 export const canMortgage = (t: Tile) => t.type === 'city' || t.type === 'special';
 
 export function stats(S: GameState, i: number) {
@@ -38,7 +36,6 @@ export function stats(S: GameState, i: number) {
   return { city, inv, mort, val, lv, dep, net: S.players[i].cash + dep + val };
 }
 
-// Who is still in, richest first, then the bankrupt, last out first.
 export function ranking(S: GameState): RankRow[] {
   const alive = S.players.map((_, p) => ({ p, net: stats(S, p).net })).filter((r) => !S.players[r.p].out).sort((a, b) => b.net - a.net);
   return [...alive, ...[...S.bankrupt].reverse().map((p) => ({ p, net: 0 }))];
@@ -50,7 +47,6 @@ export function canPick(rule: PickRule, count: number, sum: number): boolean {
   return rule.k === 'one' ? count === 1 : rule.k === 'any' ? count > 0 : rule.k === 'redeem' ? count > 0 && sum <= rule.cash : rule.cash + sum >= rule.need;
 }
 
-// As `Game.rent` counts it: every city tile of the region in one player's hands and none mortgaged. False for an unowned tile.
 export function hasMonopoly(S: GameState, tile: Tile): boolean {
   const o = S.own[tile.i];
   if (!o) return false;

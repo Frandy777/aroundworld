@@ -10,11 +10,11 @@ export type Msg = Seg[];
 export type Mode = 'limited' | 'endless';
 export interface Settings { mode: Mode; rounds: number }
 export type Step = 'redeem' | 'roll' | 'move' | 'resolve';
-export type Flag = 'jail' | 'party' | 'stay'; // each makes the player skip their next turn
+export type Flag = 'jail' | 'party' | 'stay';
 
 export interface Player { name: string; color: number; cash: number; dep: Deposit | null; tile: number; jail: boolean; party: boolean; stay: boolean; out: number } // out: the round of bankruptcy, 0 while playing
 export interface Deposit { amt: number; n: number; made: number } // a fixed deposit at the bank: its principal, its term in rounds, the round it was placed (it matures at made + n)
-export interface Owned { p: number; lv: number; m: boolean; paid?: number } // owner, building level, mortgaged, and what its upgrades actually cost (a free one adds none; absent: lv × up is assumed)
+export interface Owned { p: number; lv: number; m: boolean; paid?: number } // owner, building level, mortgaged, and what its upgrades actually cost (absent: lv × up is assumed)
 export interface LogLine { id: number; r: number; m: Msg } // id: counts up from 1, so a line keeps its React key as newer ones are added above it
 export interface GameState {
   settings: Settings;
@@ -63,7 +63,7 @@ export type Prompt =
   | { k: 'deed'; tile: number; mode: 'buy' | 'upgrade'; price: number }
   | { k: 'pick'; of: 'tile' | 'player'; title: string; sub: Msg; tone: number; hint: string; items: PickItem[]; rule: PickRule; label: string; skip?: string }
   | { k: 'confirm'; title: string; sub: Msg; tone: number; body: Block[]; yes: string; no: string }
-  | { k: 'news'; card: NewsCard } // the Media owner may keep the story or draw again
+  | { k: 'news'; card: NewsCard }
   | { k: 'dep'; max: number } // a fixed deposit on offer at the bank: `max` is the most it may hold (cash rounded down to whole thousands)
   | { k: 'casino'; view: CasinoView };
 // What the roll question of a dev room takes besides the roll (see `Game.debug`).
