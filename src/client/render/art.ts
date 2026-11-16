@@ -1,5 +1,3 @@
-// Pixel-art kit: one shared palette + string-art sprites -> SVG / canvas / CSS data URIs.
-// Every colour comes in a 4-5 step ramp (light -> dark, shadows lean cold) like a 16-bit palette.
 export type Pal = Record<string, string>;
 export const PAL: Pal = {
   o: '#0b0e24', O: '#161c4a',
@@ -12,8 +10,7 @@ export const PAL: Pal = {
   p: '#e0b0ff', P: '#9a62e0', v: '#5e3aa8',
 };
 
-// rows of palette chars ('.' = clear) -> SVG markup (run-length merged, crisp edges)
-export const svgParts = (rows: string[], pal: Pal = PAL) => { // a sprite as one path per colour: [fill, d][]
+export const svgParts = (rows: string[], pal: Pal = PAL) => {
   const d: Record<string, string> = {};
   rows.forEach((r, y) => {
     for (let x = 0, n: number; x < r.length; x += n) {
@@ -28,11 +25,8 @@ export const svg = (rows: string[], cls = '', pal: Pal = PAL, z = 1) => {
   return `<svg xmlns="http://www.w3.org/2000/svg" class="${cls}" viewBox="0 0 ${w} ${h}" width="${w * z}" height="${h * z}" shape-rendering="crispEdges">${paths.map(([f, p]) => `<path fill="${f}" d="${p}"/>`).join('')}</svg>`;
 };
 const uri = (s: string) => `url("data:image/svg+xml,${encodeURIComponent(s)}")`;
-// the same sprites onto a 2D canvas (tile labels, dice, token sprites)
 export const paint = (g: CanvasRenderingContext2D, rows: string[], x0: number, y0: number, pal: Pal = PAL) =>
   rows.forEach((r, y) => [...r].forEach((c, x) => { if (c !== '.') { g.fillStyle = pal[c]; g.fillRect(x0 + x, y0 + y, 1, 1); } }));
-// Under Node there is no DOM (the model checks in scripts/check.mjs build and bake every model there): a drawing context that records nothing stands in.
-// Every call returns the context itself so chains like createLinearGradient().addColorStop() still run; measureText answers zero width.
 const ctx2d = () => {
   const store: Record<PropertyKey, unknown> = {};
   const px = new Proxy(store, {
@@ -41,7 +35,6 @@ const ctx2d = () => {
   });
   return px as unknown as CanvasRenderingContext2D;
 };
-// a w x h canvas, drawn by draw(ctx, w, h) (3D textures)
 export const canvas = (w: number, h: number, draw: (g: CanvasRenderingContext2D, w: number, h: number) => void) => {
   const c = (typeof document !== 'undefined' ? Object.assign(document.createElement('canvas'), { width: w, height: h })
     : { width: w, height: h, getContext: ctx2d }) as HTMLCanvasElement;
@@ -49,31 +42,26 @@ export const canvas = (w: number, h: number, draw: (g: CanvasRenderingContext2D,
   return c;
 };
 
-// ---- The mask of a texture: what a drawing says of its material, texel by texel (HD-2D reads it as `ormMap`, see light.ts) ----
-// A fill that has something to say says it with `m` = [gloss, height], both 0..1: gloss is how much of the texel is glass (the sharp bright gloss), height how far it stands out, 1 being the flat of the surface, so a frame,
-// a mortar line or a joint is sunk and HD-2D bevels it a pixel wide where the height steps. The mask is a canvas beside the colour's, on the same grid and through the same levels (see `lodMap`).
-// A fill with no `m` is flat and matte, and so is every texel of a drawing that never says anything: its mask is never made.
 export type Mask = [gloss: number, height: number];
 export type Fill = (c: string, x: number, y: number, w: number, h: number, m?: Mask | false) => void;
 const FLAT: Mask = [0, 1], rgb = ([a, b]: Mask) => `rgb(${Math.round(a * 255)},${Math.round(b * 255)},0)`;
-export const PANE: Mask = [1, 0.35]; // glass, set back in its frame
-export const SEAM: Mask = [0, 0.35]; // a frame, a mortar line, a course joint: matte, sunk
-export const GROOVE: Mask = [0, 0.7]; // a shallow joint between paving slabs or tiles
+export const PANE: Mask = [1, 0.35];
+export const SEAM: Mask = [0, 0.35];
+export const GROOVE: Mask = [0, 0.7];
 const masks = new WeakMap<HTMLCanvasElement, HTMLCanvasElement>();
-export const maskOf = (c: HTMLCanvasElement) => masks.get(c); // the mask of a drawing, if it made one
-export const flatMask = (c: HTMLCanvasElement) => canvas(c.width, c.height, (g, w, h) => { g.fillStyle = rgb(FLAT); g.fillRect(0, 0, w, h); }); // the mask of one that did not
-export const filler = (g: CanvasRenderingContext2D): Fill => { // the fill of a drawing: its rectangle in the colour and in the mask (made at the first `m`; a fill after it with no `m` makes its texels flat again)
+export const maskOf = (c: HTMLCanvasElement) => masks.get(c);
+export const flatMask = (c: HTMLCanvasElement) => canvas(c.width, c.height, (g, w, h) => { g.fillStyle = rgb(FLAT); g.fillRect(0, 0, w, h); });
+export const filler = (g: CanvasRenderingContext2D): Fill => {
   let k: CanvasRenderingContext2D | undefined;
   return (c, x, y, w, h, m) => {
     g.fillStyle = c; g.fillRect(x, y, w, h);
-    if (typeof document === 'undefined' || !(m || k)) return; // under Node (see ctx2d) there is no GPU to read a mask
+    if (typeof document === 'undefined' || !(m || k)) return;
     if (!k) { const mask = flatMask(g.canvas); masks.set(g.canvas, mask); k = mask.getContext('2d')!; }
     k.fillStyle = rgb(m || FLAT); k.fillRect(x, y, w, h);
   };
 };
 
-// ---- Hard-edged text for the 3D textures: a hand-drawn 3x5 set. A letter has only 5 texels to live on and no font stays legible there (5 and 6, 8 and 9 merge). ----
-const TINY: Record<string, string> = { // '#' = ink; rows from the top down to the baseline, then an optional '|' and the rows hanging below it
+const TINY: Record<string, string> = {
   A: '.#./#.#/###/#.#/#.#', B: '##./#.#/##./#.#/##.', C: '.##/#../#../#../.##', D: '##./#.#/#.#/#.#/##.', E: '###/#../##./#../###',
   F: '###/#../##./#../#..', G: '.##/#../#.#/#.#/.##', H: '#.#/#.#/###/#.#/#.#', I: '###/.#./.#./.#./###', J: '..#/..#/..#/#.#/.#.',
   K: '#.#/#.#/##./#.#/#.#', L: '#../#../#../#../###', M: '#...#/##.##/#.#.#/#...#/#...#', N: '#..#/##.#/#.##/#..#/#..#', O: '.#./#.#/#.#/#.#/.#.',
@@ -83,14 +71,13 @@ const TINY: Record<string, string> = { // '#' = ink; rows from the top down to t
   0: '###/#.#/#.#/#.#/###', 1: '.#./##./.#./.#./###', 2: '##./..#/.#./#../###', 3: '##./..#/.##/..#/##.', 4: '#.#/#.#/###/..#/..#',
   5: '###/#../##./..#/##.', 6: '.##/#../###/#.#/###', 7: '###/..#/.#./.#./.#.', 8: '###/#.#/###/#.#/###', 9: '###/#.#/###/..#/##.',
   $: '.#./.##/##./.#./.##/##.|.#.', ',': '#|#', '.': '#', "'": '#/#/././.', '-': '###/./.',
-  // pictograms, for the signs that would have too many letters: taller than a letter, since a sign stands upright and the view squashes it to about 0.6 of its height
   '♠': '...#.../..###../.#####./#######/#######/#######/...#.../..###..', '♥': '.##.##./#######/#######/#######/#######/.#####./..###../...#...',
   '♦': '...#.../..###../.#####./#######/#######/.#####./..###../...#...', '★': '...#.../..###../#######/.#####./..###../.##.##./.#...#.',
   '⊕': '..###../.#.#.#./#..#..#/#######/#..#..#/.#.#.#./..###..', '🔒': '..###../..#.#../..#.#../#######/###.###/###.###/#######',
 };
 interface Glyph { px: [number, number][]; wide: number; adv: number }
 const glyphs: Record<string, Glyph> = {};
-const tiny = (ch: string): Glyph => { // an accent (Á, É, Í) is one texel above the capital's right corner
+const tiny = (ch: string): Glyph => {
   const [base, mark] = ch.normalize('NFD'), [top = '', low = ''] = (TINY[base] ?? '').split('|'), px: [number, number][] = [];
   top.split('/').reverse().forEach((r, j) => [...r].forEach((c, x) => c === '#' && px.push([x, -1 - j])));
   low.split('/').forEach((r, j) => [...r].forEach((c, x) => c === '#' && px.push([x, j])));
@@ -98,22 +85,19 @@ const tiny = (ch: string): Glyph => { // an accent (Á, É, Í) is one texel abo
   if (mark) px.push([2, -6]);
   return { px, wide, adv: wide ? wide + 1 : 2 };
 };
-const glyph = (ch: string) => (glyphs[ch] ??= tiny(ch)); // -> { px: texels [x, y] (y counts down from the baseline), wide: ink width, adv: advance }
+const glyph = (ch: string) => (glyphs[ch] ??= tiny(ch));
 export const inkWidth = (str: string) => [...str].reduce((x, ch, k, all) => x + glyph(ch)[k < all.length - 1 ? 'adv' : 'wide'], 0);
-export const inkHeight = (str: string) => Math.max(...[...str].flatMap((ch) => glyph(ch).px.map(([, j]) => -j))); // the rows above the baseline
-export function ink(g: CanvasRenderingContext2D, str: string, x: number, y: number, s = 1) { // (x, y) is the left end of the baseline, painted in g's fill colour; s: texels to an ink pixel
+export const inkHeight = (str: string) => Math.max(...[...str].flatMap((ch) => glyph(ch).px.map(([, j]) => -j)));
+export function ink(g: CanvasRenderingContext2D, str: string, x: number, y: number, s = 1) {
   for (const ch of str) { const o = glyph(ch); for (const [i, j] of o.px) g.fillRect(x + i * s, y + j * s, s, s); x += o.adv * s; }
 }
-// A card's code for carving: the font pixels [x, y] (y down from the top row) of its letters, centred on a grid 11 columns wide and 5 rows high, which is what a card has room for. The letters are
-// the 3x5 set, except that M, N and W (wider in TINY, for the signs) take 3 columns like the rest, so that three letters and their gaps are 11 columns.
 const THIN: Record<string, string> = { M: '#.#/###/###/#.#/#.#', N: '###/#.#/#.#/#.#/#.#', W: '#.#/#.#/###/###/#.#' };
 export function codePixels(code: string) {
-  const px: [number, number][] = [], x0 = 6 - 2 * code.length; // two letters are 7 columns: 2 spare on each side
+  const px: [number, number][] = [], x0 = 6 - 2 * code.length;
   [...code].forEach((ch, k) => (THIN[ch] ?? TINY[ch]).split('/').forEach((r, y) => [...r].forEach((c, x) => c === '#' && px.push([x0 + 4 * k + x, y]))));
   return px;
 }
 
-// ---- 9-slice frames: thickness T, round corners; tones = [top, right, bottom, left], each outer -> inner ----
 const frame = (T: number, [top, right, bottom, left]: [string, string, string, string]) => {
   const N = 2 * T + 2, R = T + 0.1;
   return [...Array(N)].map((_, y) => [...Array(N)].map((_, x) => {
@@ -127,7 +111,6 @@ const frame = (T: number, [top, right, bottom, left]: [string, string, string, s
   }).join(''));
 };
 
-// ---- 16x16 icons ----
 export const ICONS: Record<string, string[]> = {
   coin: [
     '.....oooooo.....', '...oowyyyyYoo...', '..oyyyYYYYYYgo..', '.oyyYGyYYYGYggo.',
@@ -225,13 +208,13 @@ export const ICONS: Record<string, string[]> = {
     '..ooooo..ooooo..', '..oRRRo..oNNNo..', '..oRRRo..oNNNo..', '..oRRRo..oNNNo..',
     '..ooooo..ooooo..', '................', '................', '................',
   ],
-  full: [ // four arrows pointing into the corners: go fullscreen
+  full: [
     'ooo..........ooo', 'oa..........ao', 'o.o........o.o', '...o........o...',
     '....o......o....', '.....o....o.....', '................', '................',
     '................', '................', '.....o....o.....', '....o......o....',
     '...o........o...', 'o.o........o.o', 'oa..........ao', 'ooo..........ooo',
   ],
-  shrink: [ // the same arrows pointing back at the centre: leave fullscreen
+  shrink: [
     'o..............o', '.o............o.', '..o..........o..', '...o.o....o.o...',
     '....ao....oa....', '...ooo....ooo...', '................', '................',
     '................', '................', '...ooo....ooo...', '....ao....oa....',
@@ -242,7 +225,6 @@ const CHECK = [
   '.........oo.', '........owwo', '.......owwo.', '.oo...owwo..', 'owwo.owwo...', '.owwowwo....', '..owwwo.....', '...owo......', '....o.......',
 ];
 
-// ---- cursors (shown at 2x), menu pointer, sparkle ----
 const CURSORS: Record<string, string[]> = {
   arrow: [
     'o...........', 'oo..........', 'owo.........', 'owwo........', 'owwwo.......', 'owwwwo......', 'owwwwwo.....', 'owwwwwwo....',
@@ -256,7 +238,6 @@ const CURSORS: Record<string, string[]> = {
 const TRI = ['oo......', 'oyoo....', 'oyyYoo..', 'oyyYYYoo', 'oyYYYggo', 'oYYYggoo', 'oYggoo..', 'oGoo....', 'oo......'];
 const SPARK = ['...y...', '...y...', '..yyy..', 'yyywyyy', '..yyy..', '...y...', '...y...'];
 
-// ---- n x n dice (16 for the HUD, a world-density face for the 3D dice): rounded body lit from the top-left, square pips on a 3x3 grid ----
 const PIPS: Record<number, number[]> = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
 export const dieRows = (v: number, n = 16) => {
   const rows: string[][] = [...Array(n)].map((_, y) => [...Array(n)].map((_, x) => {
@@ -265,32 +246,29 @@ export const dieRows = (v: number, n = 16) => {
     const m = Math.min(x, y) - 1, k = Math.min(n - 2 - x, n - 2 - y);
     return k === 0 ? 'b' : m === 0 ? 'w' : k === 1 ? 'a' : 'x';
   }));
-  const p = Math.max(1, 2 * Math.round(n / 16)), a = Math.round(n * 0.19), at = [a, (n - p) / 2, n - a - p]; // pip size and the three pip positions (n - p must be even)
+  const p = Math.max(1, 2 * Math.round(n / 16)), a = Math.round(n * 0.19), at = [a, (n - p) / 2, n - a - p];
   (PIPS[v] || []).forEach((i) => {
     for (let dy = 0; dy < p; dy++) for (let dx = 0; dx < p; dx++) rows[at[(i / 3) | 0] + dy][at[i % 3] + dx] = v === 1 ? (dx + dy ? 'q' : 'R') : (dx + dy ? 'o' : 'e');
   });
   return rows.map((r) => r.join(''));
 };
 
-// ---- player portraits: shared bust + one hat per player (matches the 3D token hats) ----
-// A B C D = the player's colour ramp (light -> deep), h i j = the hair ramp
 const BUST = [
   '.ohhhhSSSShhhho.', '.ohSwoSSSSwoSho.', '.ohSooSSSSooSho.', '.ohrSSSSSSSSrho.', '.ohSSSSqqSSSSho.', '..ohSSSSSSSSho..', '.oBBBBBttBBBBBo.', 'oABBBBBAAABBBBCo', 'oCCCCCCCCCCCCCCo',
 ];
 const HATS = [
-  ['................', '....oooooooo....', '...oAAAAAAAAo...', '..oAABBBBBBBBo..', '.oAABBBBBBBBBCo.', '.oABBBBBBBBBBCo.', 'ooCCCCCCCCCCCCoo'], // cap
-  ['.....oooooo.....', '....owwwwwao....', '....owwaabbo....', '...oAAAAAAAAo...', '..oAABBBBBBBBo..', '.oAABBBBBBBBBCo.', '.oCBCBCBCBCBCBo.'], // beanie
-  ['....oo....oo....', '...oNNo..oNNo...', '...oNNNooNNmo...', '....oNNmmNmo....', '..ooommmmmmooo..', '.ohjjhhhhhhhhho.', '.ohhhhhhhhhhhho.'], // sprout
-  ['.......oo.......', '..oo..oYYo..oo..', '..oYo.oYYo.oYo..', '..oYYooYYooYYo..', '..oyYYYYYYYYgo..', '.oggggRRggggggo.', '.oGGGGGGGGGGGGo.'], // crown
+  ['................', '....oooooooo....', '...oAAAAAAAAo...', '..oAABBBBBBBBo..', '.oAABBBBBBBBBCo.', '.oABBBBBBBBBBCo.', 'ooCCCCCCCCCCCCoo'],
+  ['.....oooooo.....', '....owwwwwao....', '....owwaabbo....', '...oAAAAAAAAo...', '..oAABBBBBBBBo..', '.oAABBBBBBBBBCo.', '.oCBCBCBCBCBCBo.'],
+  ['....oo....oo....', '...oNNo..oNNo...', '...oNNNooNNmo...', '....oNNmmNmo....', '..ooommmmmmooo..', '.ohjjhhhhhhhhho.', '.ohhhhhhhhhhhho.'],
+  ['.......oo.......', '..oo..oYYo..oo..', '..oYo.oYYo.oYo..', '..oYYooYYooYYo..', '..oyYYYYYYYYgo..', '.oggggRRggggggo.', '.oGGGGGGGGGGGGo.'],
 ];
 export const hex = (n: number) => '#' + n.toString(16).padStart(6, '0');
 export const lum = (c: number) => (((c >> 16) & 255) * 0.299 + ((c >> 8) & 255) * 0.587 + (c & 255) * 0.114) / 255;
 export const shade = (c: number, k: number, t = 0) => hex([16, 8, 0].reduce((a, s) => a | (Math.min(255, Math.round(((c >> s) & 255) * k + t)) << s), 0));
 export const faceRows = (idx: number) => [...HATS[idx], ...BUST];
-const HAIR = [0x3a2e48, 0xe8c066, 0x7a4a2a, 0xb4502a]; // black, blond, brown, auburn
+const HAIR = [0x3a2e48, 0xe8c066, 0x7a4a2a, 0xb4502a];
 export const facePal = (c: number, idx = 0): Pal => ({ ...PAL, A: shade(c, 0.5, 128), B: hex(c), C: shade(c, 0.72), D: shade(c, 0.45, 8), h: shade(HAIR[idx], 1), i: shade(HAIR[idx], 0.6), j: shade(HAIR[idx], 1.3, 24) });
 
-// ---- the 3D chibi token's face and hoodie front (actors.js): one drawing per zoom level [far, mid, near], each on its level's texel grid; h i j = the hair ramp ----
 export const FACE = [
   ['hhhhhh', 'hSSSSh', 'SoSSoS', 'SrSSrS'],
   ['hhhhhhhhhhh', 'hhhhhhhhhhh', 'hhhSSSSShhh', 'hsssssssssh', 'hswossswosh', 'hsoosssoosh', 'hrsssqsssrh', 'hrSSSSSSSrh'],
@@ -310,17 +288,15 @@ export const TORSO = [
   ],
 ];
 
-// ---- 9-slice frame presets as CSS url()s: windows (T=4), buttons (T=3) up/down, sunken inputs ----
 const F = (T: number, tl: string, br: string) => uri(svg(frame(T, [tl, br, br, tl])));
 const rev = (s: string) => [...s].reverse().join('');
-const BTN = (k: string, hi: string, lo: string) => ({ [k]: F(3, 'o' + hi, 'o' + lo), [k + 'Dn']: F(3, 'o' + rev(lo), 'o' + rev(hi)) }); // raised / pressed
+const BTN = (k: string, hi: string, lo: string) => ({ [k]: F(3, 'o' + hi, 'o' + lo), [k + 'Dn']: F(3, 'o' + rev(lo), 'o' + rev(hi)) });
 const FRAMES = {
   win: F(4, 'obce', 'ocdO'), gold: F(4, 'oyYG', 'ogGH'), red: F(4, 'orRQ', 'oRqQ'), green: F(4, 'onNM', 'oNmM'),
   paper: F(4, 'oxtk', 'otkK'), neon: F(4, 'opPv', 'oPvO'), cyan: F(4, 'olLu', 'oLuU'), inset: F(3, 'oOe', 'ocb'), well: F(3, 'oOe', 'oed'),
   ...BTN('btn', 'bc', 'de'), ...BTN('btnGreen', 'nN', 'mM'), ...BTN('btnRed', 'rR', 'qQ'), ...BTN('btnGold', 'yY', 'GH'),
 };
 
-// Publish frames, sprites and cursors as CSS custom properties (--fr-*, --spr-*, --cur-*) for the stylesheets.
 export const skin = (root: HTMLElement = document.documentElement) => {
   const set = (k: string, v: string) => root.style.setProperty(k, v);
   for (const [k, v] of Object.entries(FRAMES)) set('--fr-' + k.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase()), v);
@@ -329,7 +305,6 @@ export const skin = (root: HTMLElement = document.documentElement) => {
   set('--cur-hand', `${uri(svg(CURSORS.hand, '', PAL, 2))} 10 0, pointer`);
 };
 
-// ---- Pixel logo: rasterise text at 1x, then shade it by hand: banded fill, bevel, outline, extrusion ----
 export const logo = (text: string, bands: string[], shadow: string[], font: string) => {
   const probe = document.createElement('canvas').getContext('2d')!;
   probe.font = font;

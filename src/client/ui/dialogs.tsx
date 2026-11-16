@@ -12,9 +12,6 @@ import { TileBody } from './tile';
 const d6 = () => 1 + Math.floor(Math.random() * 6);
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms / pace.speed));
 
-// ---- Card frame ----
-// A card covers the whole window, so the board and the panels can't be reached while it is up. One that has no button of its own to be taken down by (`dismiss`) can be set aside
-// instead (`peek`): VIEW BOARD, or Escape, puts every card away with its state kept, and SHOW CARD in the action bar (the HUD, see hud.tsx) brings them back. `peek={false}`: a card with no HUD behind it.
 export function Card({ title, sub = '', tone = 0x333b66, ink = '#fff', cls = '', dismiss, peek = !dismiss, foot, auto, children }: {
   title: ReactNode; sub?: ReactNode; tone?: number; ink?: string; cls?: string; dismiss?: string; peek?: boolean; foot?: ReactNode; auto?: ReturnType<typeof useAuto>; children?: ReactNode;
 }) {
@@ -32,31 +29,27 @@ export function Card({ title, sub = '', tone = 0x333b66, ink = '#fff', cls = '',
 export const Btn = ({ id, cls = '', disabled, onClick, children }: { id: string; cls?: string; disabled?: boolean; onClick(): void; children: ReactNode }) => (
   <button className={`btn ${cls}`} data-id={id} disabled={disabled} onClick={onClick}>{children}</button>
 );
-/** A yes / no option: a box that is ticked while `on` holds true, and flips with a click. */
 export function Check({ label, on }: { label: string; on: Cell<boolean> }) {
   const v = useCell(on);
   return <div className={`item ${v ? 'sel' : ''}`} onClick={() => on.set(!v)}><span className="check" /><span className="grow">{label}</span></div>;
 }
-const TICKS = 20; // the steps a card's wait is counted down in: its bar loses one at a time, like a 16-bit gauge
-/** Run `fn` once, `ms` after the card is up (less while the screen is catching up, see `pace`): a card with nothing to decide closes itself.
- *  The wait is counted down in TICKS steps, and `left` (percent) is what is still to go, for the card to show as a bar. The count stands still while the pointer
- *  is on the card, or while the card is set aside (see Card), so a slow reader is not hurried, and goes on when it leaves. Without `ms` there is no count, and the card gets nothing back. */
+const TICKS = 20;
 function useAuto(ms: number, fn: () => void) {
   const f = useRef(fn);
   f.current = fn;
   const [ticks, setTicks] = useState(TICKS);
-  const held = useRef(false); // the count stands still while the pointer is on the card (a ref: the timer below is not restarted for it)
+  const held = useRef(false);
   useEffect(() => {
     if (!ms) return;
-    let last = performance.now(), gone = 0; // `gone`: the share of the wait already over, by the clock — however seldom the timer runs
+    let last = performance.now(), gone = 0;
     const t = setInterval(() => {
       const now = performance.now(), dt = now - last;
       last = now;
-      if (held.current || peeking.get() || paused.get() || document.hidden) return; // ... or while the cards are set aside, the dev room is frozen, or the tab is away
+      if (held.current || peeking.get() || paused.get() || document.hidden) return;
       gone += (dt * pace.speed) / ms;
       setTicks(Math.max(0, Math.ceil((1 - gone) * TICKS)));
     }, 50);
-    const wake = () => { last = performance.now(); }; // hidden time does not count: the clock starts fresh when the page is seen again
+    const wake = () => { last = performance.now(); };
     document.addEventListener('visibilitychange', wake);
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', wake); };
   }, [ms]);
@@ -64,7 +57,6 @@ function useAuto(ms: number, fn: () => void) {
   return ms ? { left: (ticks * 100) / TICKS, hold: () => (held.current = true), free: () => (held.current = false) } : undefined;
 }
 
-// ---- Rules ----
 const RULES: Record<string, ReactNode> = {
   GOAL: <>
     <h4>THE GOAL</h4><p>Buy cities and investments, collect rent, and push everyone else into bankruptcy. Everyone starts on START with {money(START_CASH)}.</p>
@@ -100,13 +92,11 @@ export function RulesCard({ close }: { close(v: string): void }) {
   );
 }
 
-// A card with nothing to decide (tax, exchange, rent, ...): its button is the default action (Space); it closes itself after a moment, counted down by its bar.
 export function NoticeCard({ n, close }: { n: Notice; close(): void }) {
   const auto = useAuto(READ, close);
   return <Card title={n.title} sub={<Rich m={n.sub} />} tone={n.tone} auto={auto} foot={<Btn id="ok" cls={`primary ${n.danger ? 'danger' : ''}`} onClick={close}>{n.label}</Btn>}><Blocks blocks={n.body} /></Card>;
 }
 
-// ---- News ----
 export function NewsCard({ c, close, redraw }: { c: News; close(): void; redraw?: (again: boolean) => void }) {
   const auto = useAuto(redraw ? 0 : READ, close);
   const foot = redraw
@@ -123,7 +113,6 @@ export function NewsCard({ c, close, redraw }: { c: News; close(): void; redraw?
   );
 }
 
-// ---- Questions to one player: each card answers through `reply` and closes itself; the director takes it down if the answer came from elsewhere (a timeout) ----
 type Of<K extends Prompt['k']> = Extract<Prompt, { k: K }>;
 
 export function DeedCard({ id, p }: { id: number; p: Of<'deed'> }) {
@@ -145,7 +134,7 @@ export function PickCard({ id, p }: { id: number; p: Of<'pick'> }) {
   const ok = canPick(r, sel.length, sum);
   const toggle = (i: number) => setSel(sel.includes(i) ? sel.filter((x) => x !== i) : r.k === 'one' ? [i] : [...sel, i]);
   const priced = p.items.some((x) => x.amt !== undefined);
-  const short = r.k === 'raise' ? r.need - r.cash - sum : 0; // a forced mortgage: what the debt still lacks (negative: the surplus stays)
+  const short = r.k === 'raise' ? r.need - r.cash - sum : 0;
   const tally = r.k === 'raise' ? (
     <div className="rows">
       <div className="row"><span>Selected raises</span><b className={sum ? 'good' : ''}>+{money(sum)}</b></div>
@@ -191,7 +180,6 @@ export function ConfirmCard({ id, p }: { id: number; p: Of<'confirm'> }) {
   );
 }
 
-// The bank's fixed deposit: a principal in whole thousands and a term of rounds, shown with the interest it earns.
 export function DepCard({ id, p }: { id: number; p: Of<'dep'> }) {
   const [amt, setAmt] = useState(Math.min(5 * DEP_STEP, p.max));
   const [n, setN] = useState(10);
@@ -222,7 +210,6 @@ export function DepCard({ id, p }: { id: number; p: Of<'dep'> }) {
   );
 }
 
-// ---- Turn order: lowest total first, ties re-roll. Replays the rolls the server made ----
 export function OrderCard({ players, passes, order, close }: { players: Player[]; passes: OrderPass[]; order: number[]; close(): void }) {
   const [rolls, setRolls] = useState<[number, number][]>(players.map(() => [0, 0]));
   const [tie, setTie] = useState<number[]>([]);
@@ -232,7 +219,7 @@ export function OrderCard({ players, passes, order, close }: { players: Player[]
     let dead = false;
     const put = (i: number, r: [number, number]) => setRolls((all) => all.map((x, k) => (k === i ? r : x)));
     (async () => {
-      await sleep(500); // the card pops in, then the dice go by themselves
+      await sleep(500);
       for (const [k, pass] of passes.entries()) {
         if (k) { setTie(pass.group); await sleep(1000); }
         for (const [n, i] of pass.group.entries()) {
@@ -261,7 +248,6 @@ export function OrderCard({ players, passes, order, close }: { players: Player[]
   );
 }
 
-// ---- Results ----
 export function ResultsCard({ rank, close }: { rank: RankRow[]; close(v: 'menu' | 'again'): void }) {
   const S = state(), rows = rank.map((r) => ({ ...S.players[r.p], net: r.net }));
   const pod = [1, 0, 2].filter((k) => rows[k]).map((k) => ({ r: rows[k], k }));
@@ -287,30 +273,29 @@ export function ResultsCard({ rank, close }: { rank: RankRow[]; close(v: 'menu' 
   );
 }
 
-// ---- Casino: one card for a whole visit, told in views (see CasinoView). Lucky picks a number and bets on it; high stakes bets on the total. Both: up to 2 plays, each staking a bet of its own, or cash out after the first ----
 export interface Ctl { view: Cell<CasinoView>; ask: Cell<{ id: number; mine: boolean } | null> }
 
 export function CasinoCard({ ctl, close }: { ctl: Ctl; close(): void }) {
   const v = useCell(ctl.view), ask = useCell(ctl.ask), lucky = v.v === 'lucky';
   const [bet, setBet] = useState(v.bet);
-  useEffect(() => setBet(v.bet), [v.bet]); // the server re-suggests a wager at every betting stage
-  const [num, setNum] = useState(d6); // the lucky number a wager rides on; another may be picked before every roll
-  const [shown, setShown] = useState(0); // rolls on the table
-  const [rolling, setRolling] = useState(false); // the dice are in the air
+  useEffect(() => setBet(v.bet), [v.bet]);
+  const [num, setNum] = useState(d6);
+  const [shown, setShown] = useState(0);
+  const [rolling, setRolling] = useState(false);
   const [dice, setDice] = useState<[number, number]>([0, 0]);
-  const [sent, setSent] = useState(false); // my answer is on its way
-  const next = v.rolls[shown]; // the roll the server has told and the table has not
+  const [sent, setSent] = useState(false);
+  const next = v.rolls[shown];
   const nextRef = useRef(next);
   nextRef.current = next;
   const mine = !!ask?.mine && !sent;
 
   useEffect(() => setSent(false), [ask?.id]);
-  useEffect(() => { // a roll nobody threw shows when it is told
+  useEffect(() => {
     if (rolling || !next) return;
     const t = setTimeout(() => setRolling(true), 0);
     return () => clearTimeout(t);
   }, [rolling, next]);
-  useEffect(() => { // in the air: shuffle, and land as the server said once at least 8 frames have gone
+  useEffect(() => {
     if (!rolling) return;
     let n = 0;
     const t = setInterval(() => {
@@ -321,12 +306,12 @@ export function CasinoCard({ ctl, close }: { ctl: Ctl; close(): void }) {
     return () => clearInterval(t);
   }, [rolling]);
 
-  const done = !rolling && shown === v.rolls.length; // everything told is on the table
+  const done = !rolling && shown === v.rolls.length;
   const last = shown ? v.rolls[shown - 1] : null, won = v.rolls.slice(0, shown).reduce((s, r) => s + r[2], 0), stake = v.stage === 'bet' || v.stage === 'again' ? bet : v.bet;
-  const hits = last ? (last[0] === last[4] ? 1 : 0) + (last[1] === last[4] ? 1 : 0) : 0; // dice on the picked number
-  const betting = (v.stage === 'bet' && !shown) || (v.stage === 'again' && done); // a stake is being picked
+  const hits = last ? (last[0] === last[4] ? 1 : 0) + (last[1] === last[4] ? 1 : 0) : 0;
+  const betting = (v.stage === 'bet' && !shown) || (v.stage === 'again' && done);
   const finished = done && v.stage === 'end', me = state().order[state().turn] === G.me;
-  useAuto(finished ? READ : 0, close); // a final result stays up a moment, then settles by itself
+  useAuto(finished ? READ : 0, close);
   useEffect(() => { if (done && v.stage === 'cash') close(); }, [done, v.stage]);
 
   const go = () => { setSent(true); setRolling(true); reply(ask!.id, { act: 'roll', bet: betting ? bet : v.bet, num }); };

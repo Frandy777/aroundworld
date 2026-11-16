@@ -9,7 +9,6 @@ import { Die, Face, Flag, FullBtn, Icon, Named, Pips, Rich, hex, money, tileHead
 import { openMenu, openRules } from './open';
 import { TileBody } from './tile';
 
-// ---- Top bar ----
 function Topbar() {
   const S = useGame(), room = useCell(session).room, last = maxRounds(S), p = useCell(paused), me = G.me >= 0 ? S.players[G.me] : null;
   return (
@@ -24,10 +23,9 @@ function Topbar() {
   );
 }
 
-// ---- Player cards: the cash on a card rolls to its real value (all but 1e-5 of the gap in a second) and the card blinks green / red meanwhile ----
 function useRoll(cash: number) {
   const [shown, setShown] = useState(cash);
-  const at = useRef(cash); // where the number is now, kept apart from the real one so a change in the middle of a roll carries on from there
+  const at = useRef(cash);
   useEffect(() => {
     let raf = 0, last = performance.now();
     const tick = (now: number) => {
@@ -43,8 +41,6 @@ function useRoll(cash: number) {
   return shown;
 }
 
-// The time the game still gives a player to answer, as a gauge on their card that everybody sees (see `countdown`). A new clock (a new question, or the server setting it again) is a new gauge: it
-// starts from what was left of the time as it went up, and runs down by itself in CSS.
 function Clock({ i }: { i: number }) {
   const c = useCell(countdown), p = useCell(paused);
   if (c?.pi !== i) return null;
@@ -85,7 +81,6 @@ function Players() {
   return <aside id="players">{S.order.map((i) => <PCard key={i} i={i} on={i === act} viewing={tab === 'assets' && view === i} />)}</aside>;
 }
 
-// ---- Side panel ----
 function TilePane() {
   const sel = useCell(selectedTile);
   if (sel < 0) return <div className="empty">Click any tile to inspect it.<br />Hover for a quick look.</div>;
@@ -137,7 +132,6 @@ function Side() {
   );
 }
 
-// ---- Action bar: the last roll, the one button there is to press (with the cards set aside, the way back to them), or who the game is waiting for ----
 function Actions() {
   const chip = useCell(lastRoll), btn = useCell(actionBtn), aside = useCell(peeking), waiting = useCell(waitingFor), who = waiting >= 0 ? state().players[waiting] : null;
   return (
@@ -150,13 +144,12 @@ function Actions() {
   );
 }
 
-// ---- Camera & the look of the light ----
 const CAMS = [['in', 'plus', 'Zoom in'], ['out', 'minus', 'Zoom out'], ['follow', 'focus', 'Focus on current player'], ['map', 'globe', 'Whole board']] as const;
-const LOOKS = [['pixel', 'pixel', 'Pixel look', false], ['hd2d', 'star', 'HD-2D look', true]] as const; // the light's two looks (see hd2d), in the rotl/reset buttons' place
+const LOOKS = [['pixel', 'pixel', 'Pixel look', false], ['hd2d', 'star', 'HD-2D look', true]] as const;
 
 export function Hud() {
   const live = useCell(hudLive), hd = useCell(hd2d);
-  if (!live) return null; // only whether it is up: each part below subscribes to what it shows
+  if (!live) return null;
   return (
     <div id="hud">
       <Topbar />
@@ -173,12 +166,11 @@ export function Hud() {
   );
 }
 
-// ---- Over everything: the tile under the pointer, toasts, floating numbers, cards ----
 export function Tip() {
   const t = useCell(tip);
   if (!t || !G.S) return null;
   const S = G.S, tile = TILES[t.i], o = S.own[t.i], p = o && S.players[o.p];
-  const left = Math.round(Math.min(t.x + 18, innerWidth - 282)), top = Math.round(Math.min(t.y + 18, innerHeight - 140)); // room for the widest name with its flag (Saint Petersburg)
+  const left = Math.round(Math.min(t.x + 18, innerWidth - 282)), top = Math.round(Math.min(t.y + 18, innerHeight - 140));
   return (
     <div id="tip" className="box" style={{ left, top }}>
       <b><Named name={tile.name} /></b>{tile.type !== 'public' && money(tile.price)}
@@ -187,7 +179,6 @@ export function Tip() {
   );
 }
 
-// Cards set aside (`peeking`) are hidden, not taken down: they keep what they hold (a pick, a bet, the dice in the air) until they are brought back.
 export function Overlays() {
   const ts = useCell(toasts), fs = useCell(floats), cs = useCell(cards), aside = useCell(peeking);
   return (
@@ -199,7 +190,6 @@ export function Overlays() {
   );
 }
 
-// The HUD is made for one window shape (see #narrow in style.css): the page covers any other with this, and shows it by itself, so there is nothing to track here. Fullscreen is only offered while it is not on: once it is, only a wider screen helps.
 export function Narrow() {
   const fs = useCell(fullscreen);
   return (

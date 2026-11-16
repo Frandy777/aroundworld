@@ -4,9 +4,6 @@ import { AIR, AIR_GLSL, LAYER_FX } from './scene';
 
 const PLUME = new THREE.PlaneGeometry(0.8, 1).translate(0, -0.5, 0);
 
-// A GPU-animated plume, attached at the nozzle and pointing down local -Y.
-// Only its width faces the camera: the length stays aligned with the missile.
-// It is on the translucent layer (scene.ts), so in HD-2D it is drawn over the composite: seen through the air up to its own distance, and writing depth where it is seen.
 export function exhaust(parent: THREE.Group, nozzle: number) {
   const material = new THREE.ShaderMaterial({
     uniforms: { time: { value: 0 }, power: { value: 0 }, plumeLength: { value: 1 }, uHd: U.uHd, uLamp: U.uLamp, ...AIR },
@@ -22,7 +19,7 @@ export function exhaust(parent: THREE.Group, nozzle: number) {
         side = length(side) > .001 ? normalize(side) : vec2(1., 0.);
         vec4 p = modelViewMatrix * vec4(0., position.y * plumeLength, 0., 1.);
         p.xy += side * position.x * length(modelViewMatrix[0].xyz);
-        vWp = cameraPosition + transpose(mat3(viewMatrix)) * p.xyz; // the world point it stands for, for the fog of its distance
+        vWp = cameraPosition + transpose(mat3(viewMatrix)) * p.xyz;
         gl_Position = projectionMatrix * p;
       }
     `,
@@ -48,9 +45,9 @@ export function exhaust(parent: THREE.Group, nozzle: number) {
         float diamonds = pow(.5 + .5 * cos(t * 48. - time * 9.), 5.) * core;
         vec3 color = mix(vec3(.18, .5, 1.), vec3(1., .72, .28), smoothstep(.08, .6, t));
         color = mix(color, vec3(1., .98, .87), clamp(core + diamonds * .5, 0., 1.));
-        gl_FragColor = vec4(color * (1.15 + (0.45 + 1.05 * uLamp) * uHd), envelope * (.65 + flow * .35) * power); // a restrained flash by day, HDR fire after dusk
+        gl_FragColor = vec4(color * (1.15 + (0.45 + 1.05 * uLamp) * uHd), envelope * (.65 + flow * .35) * power);
         if (uHd > .5) {
-          if (gl_FragColor.a <= .05) discard; // where it is seen it writes depth (the focus is measured on it), and where it is a faint edge it does not
+          if (gl_FragColor.a <= .05) discard;
           gl_FragColor = airOver(gl_FragColor, vWp, 1.);
         }
         #include <tonemapping_fragment>
@@ -60,7 +57,7 @@ export function exhaust(parent: THREE.Group, nozzle: number) {
   });
   material.onBeforeRender = () => { material.depthWrite = hd.on; };
   const mesh = new THREE.Mesh(PLUME, material); mesh.position.y = -nozzle;
-  mesh.frustumCulled = false; // shader stretches the plane beyond its CPU bounds
+  mesh.frustumCulled = false;
   mesh.layers.set(LAYER_FX);
   parent.add(mesh);
   return {

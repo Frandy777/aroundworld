@@ -12,11 +12,6 @@ import { loop, playStrike } from '../stage';
 import { G, actionBtn, hd2d, paused, selectedTile, session, stageOnly, useCell, type View } from '../store';
 import { openAlert, openAsk, openNews, openNotice } from './open';
 
-// ---- The dev panel: available whenever opened with ?dev=1 (title, lobby or game), and in any dev room ----
-// Three tabs, by what they touch. SCENE is the view alone (look, camera, sky clock, animation pace, a strike on a tile): it works everywhere, including over the SEED demo board.
-// GAME is the room: a target (tile, player) and the commands that use it, which answer the roll question (`Game.debug`), so they light up in a dev room while ROLL DICE is waiting. CARDS previews a card from its JSON.
-// All three stay mounted (hidden when not shown), so a half-typed value or an edited card is still there on coming back; the tile picked is shared by SCENE and GAME.
-
 const SAMPLES: Record<string, Notice | NewsCard | Prompt> = {
   notice: {
     title: 'PAY RENT', sub: [{ t: 1 }], tone: 0xb13e53, label: 'PAY $160', danger: true,
@@ -33,7 +28,7 @@ const SAMPLES: Record<string, Notice | NewsCard | Prompt> = {
 };
 const sample = (k: string) => JSON.stringify(SAMPLES[k], null, 1);
 
-let fake = 0; // a previewed question has an id that no real one has
+let fake = 0;
 function preview(text: string) {
   try {
     const x = JSON.parse(text);
@@ -43,13 +38,11 @@ function preview(text: string) {
   } catch (err) { void openAlert('PREVIEW', String(err)); }
 }
 
-// A Field is a heading ruled out to its readout (`note`) over the controls it names. A Seg is one row of choices or view buttons: [label, lit, press, disabled].
 type Opt = [label: ReactNode, on: boolean, click: () => void, off?: boolean];
 const Seg = ({ opts, cls = '' }: { opts: Opt[]; cls?: string }) => (
   <div className={`seg ${cls}`}>{opts.map(([label, on, click, off], i) => <button key={i} className={on ? 'on' : ''} disabled={off} onClick={click}>{label}</button>)}</div>
 );
 const Field = ({ label, note, children }: { label: string; note?: ReactNode; children: ReactNode }) => <div className="field"><label>{label}{note !== undefined && <b>{note}</b>}</label>{children}</div>;
-// The tile every tab acts on, with what a tab can do to it beside the list
 const TilePick = ({ tile, set, children }: { tile: number; set: (i: number) => void; children?: ReactNode }) => (
   <div className="pl-row">
     <select value={tile} onChange={(e) => set(+e.target.value)}>{TILES.map((t) => <option key={t.i} value={t.i}>{t.i} {t.name}{t.variant ? ` (${t.variant})` : ''}</option>)}</select>
@@ -70,7 +63,7 @@ function Scene({ show, tile, setTile, view, bump }: Pane & { view: View; bump: (
   const seek = (h: number) => setClock(clock.stop === null ? mod24(h - wall) : clock.shift, clock.stop === null ? null : mod24(h));
   const toggleStop = () => setClock(clock.stop === null ? clock.shift : mod24(clock.stop - wall), clock.stop === null ? hour : null);
   const setPace = (paused: boolean, scale = loop.scale) => { loop.paused = paused; loop.scale = scale; loop.draw(); bump(); };
-  const cam = (f: () => void) => () => { controls.autoRotate = false; f(); bump(); }; // a jump of the camera stops the title's orbit
+  const cam = (f: () => void) => () => { controls.autoRotate = false; f(); bump(); };
   const fireStrike = () => { const from = (tile + Math.floor(TILES.length / 2)) % TILES.length; void playStrike(from, tile); };
   const orbit: Opt[] = view === 'game' ? [] : [['ORBIT', controls.autoRotate, () => { controls.autoRotate = !controls.autoRotate; bump(); }]];
   return (
@@ -106,7 +99,6 @@ function Scene({ show, tile, setTile, view, bump }: Pane & { view: View; bump: (
   );
 }
 
-// One line each, so the panel does not change height as the game goes from one state to the next
 const STATUS = {
   none: ['NO GAME', 'Start one with QUICK 4P.'],
   plain: ['NOT DEV', 'This room is not a dev room.'],

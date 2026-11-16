@@ -11,7 +11,6 @@ const fin = new THREE.Shape();
 fin.moveTo(0.12, -1.89); fin.lineTo(0.35, -2.38); fin.lineTo(0.35, -2.49); fin.lineTo(0.12, -2.4); fin.closePath();
 const FIN = new THREE.ExtrudeGeometry(fin, { depth: 0.035, bevelEnabled: false }).translate(0, 0, -0.0175);
 
-// The origin is the nose and local +Y is forward, so a flight path can aim the whole model with one quaternion.
 export function missile(g: THREE.Group) {
   const WHITE = 0xe8edf0, STEEL = 0x9caeb9, DARK = 0x354650;
   part(g, NOSE, 0.62, mat(STEEL), 0, -0.62, 0);

@@ -10,14 +10,13 @@ import { Face, FullBtn, Icon, hex, money } from './bits';
 import { Btn, Card } from './dialogs';
 import { openRules } from './open';
 
-// ---- The title: a pixel logo over the live board, and the way into a room ----
 const P = PAL;
 const RAMPS: [string[], string[]][] = [[[P.w, P.a, P.b, P.c], [P.e, P.O, P.O, P.o]], [[P.y, P.Y, P.g, P.G], [P.H, P.H, P.o, P.o]]];
 
 function Banner({ text, i }: { text: string; i: number }) {
   const ref = useRef<HTMLSpanElement>(null);
   useEffect(() => {
-    const c = logo(text, ...RAMPS[i], '41px "Jersey 25"'); // 41px: one font step = one canvas pixel, shown at 2px (--z)
+    const c = logo(text, ...RAMPS[i], '41px "Jersey 25"');
     c.style.setProperty('--w', String(c.width));
     c.style.setProperty('--h', String(c.height));
     ref.current!.replaceChildren(c);
@@ -25,7 +24,6 @@ function Banner({ text, i }: { text: string; i: number }) {
   return <span ref={ref} />;
 }
 
-/** The room number an invite link names (`?room=123456`). It leaves the address as it is read, so it is offered once: not again after a game, and a reload (which goes back to its room by itself, see boot) does not flash it. */
 function takeInvite() {
   const url = new URL(location.href), code = url.searchParams.get('room');
   if (code === null) return '';
@@ -34,9 +32,8 @@ function takeInvite() {
   return CODE_RE.test(code) ? code : '';
 }
 
-const NAME_KEY = 'name'; // localStorage: the name you last went in with is already in the field
+const NAME_KEY = 'name';
 
-/** Create a room, or join one by its number (`invite`: the one an invite link named). */
 function RoomCard({ join, invite, back }: { join: boolean; invite: string; back(): void }) {
   const [name, setName] = useState(() => localStorage.getItem(NAME_KEY) ?? ''), [code, setCode] = useState(invite), [why, setWhy] = useState(''), [busy, setBusy] = useState(false);
   const ok = !busy && (!join || CODE_RE.test(code));
@@ -70,7 +67,7 @@ function RoomCard({ join, invite, back }: { join: boolean; invite: string; back(
 
 export function Title() {
   const { view } = useCell(session);
-  const [invite, setInvite] = useState(takeInvite), [dlg, setDlg] = useState<'create' | 'join' | null>(invite ? 'join' : null); // an invite link opens JOIN ROOM with its number in, once
+  const [invite, setInvite] = useState(takeInvite), [dlg, setDlg] = useState<'create' | 'join' | null>(invite ? 'join' : null);
   const back = () => { setDlg(null); setInvite(''); };
   useEffect(() => { if (view !== 'title') back(); }, [view]);
   return (
@@ -92,10 +89,8 @@ export function Title() {
   );
 }
 
-// ---- The lobby: who is here, and (for the host) the rules of the game ----
-const NAME_DELAY_MS = 300; // quiet after the last key before a name goes out
+const NAME_DELAY_MS = 300;
 
-/** The name of your own seat. Each name sent is broadcast to the whole room: it goes out once typing pauses, or at once when the field is left (so that START right after typing cannot beat it). */
 function NameInput({ name }: { name: string }) {
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const put = (v: string) => { clearTimeout(timer.current); timer.current = undefined; localStorage.setItem(NAME_KEY, v); send({ t: 'name', name: v }); };
@@ -106,7 +101,7 @@ function NameInput({ name }: { name: string }) {
   );
 }
 
-function Seat({ i, s, me, bots }: { i: number; s?: SeatInfo; me: boolean; bots: boolean }) { // bots: the host may seat them
+function Seat({ i, s, me, bots }: { i: number; s?: SeatInfo; me: boolean; bots: boolean }) {
   const def = PLAYER_DEFS[i], toggle = (label: string) => <button className="btn sm" onClick={() => send({ t: 'bot', seat: i })}>{label}</button>;
   if (!s) return <div className="pl-row"><Face color={def.color} /><span className="nm dim">Waiting for a player...</span>{bots && toggle('+ BOT')}</div>;
   return (
@@ -123,7 +118,6 @@ function Seat({ i, s, me, bots }: { i: number; s?: SeatInfo; me: boolean; bots: 
   );
 }
 
-/** Puts `text` on the clipboard; the label says COPIED! for a moment (a toast would sit under the card, see .modal). */
 function CopyBtn({ id, text, children }: { id: string; text: string; children: string }) {
   const [done, setDone] = useState(false), timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const copy = async () => {

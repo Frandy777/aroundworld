@@ -3,21 +3,16 @@ import { reply } from '../asks';
 import { autoFocus, cell, fullscreen, hd2d, openCard, type Open } from '../store';
 import { Btn, Card, CasinoCard, Check, ConfirmCard, DeedCard, DepCard, NewsCard, NoticeCard, OrderCard, PickCard, ResultsCard, RulesCard, type Ctl } from './dialogs';
 
-// Putting a card up is not a component, so it lives apart from the cards (dialogs.tsx): a module that exports anything but components can't be hot-refreshed in place.
-
 export const openRules = () => openCard<string>((close) => <RulesCard close={close} />).done;
 
-// Something to tell, or a refusal.
 export const openAlert = (title: string, text: string) => openCard((close) => (
   <Card title={title} tone={0xb13e53} dismiss="ok" foot={<Btn id="ok" cls="primary" onClick={() => close()}>OK</Btn>}><div className="note">{text}</div></Card>
 )).done;
 
 export const openNotice = (n: Notice) => openCard((close) => <NoticeCard n={n} close={() => close()} />);
 
-/** A story to read: for everybody once the Media owner has kept or replaced it. */
 export const openNews = (c: News) => openCard((close) => <NewsCard c={c} close={() => close()} />);
 
-/** The card for a question to this player, or null for a question that has no card of its own (roll, casino). `onAnswer` hears what the card itself answered. */
 export function openAsk(id: number, p: Prompt, onAnswer?: (v: Answer) => void): Open<void> | null {
   switch (p.k) {
     case 'deed': return openCard(() => <DeedCard id={id} p={p} />);
@@ -33,7 +28,6 @@ export const openOrder = (players: Player[], passes: OrderPass[], order: number[
 
 export const openResults = (rank: RankRow[]) => openCard<'menu' | 'again'>((close) => <ResultsCard rank={rank} close={close} />).done;
 
-/** A choice that cannot be taken back confirms first: the safe option stays the default a key press lands on. */
 const openConfirm = (title: string, text: string, yes: string) => openCard<boolean>((close) => (
   <Card title={title} tone={0xb13e53} dismiss="no" foot={<>
     <Btn id="no" cls="primary" onClick={() => close(false)}>CANCEL</Btn>
@@ -54,7 +48,6 @@ export const openMenu = (room: string, quit: () => void, bankrupt?: () => void) 
   </Card>
 ));
 
-/** The card of a casino visit: one card for the whole visit, which stays up while `view` and `ask` (the question put to this player, if any) change under it. */
 export function openCasino(view: CasinoView, ask: { id: number; mine: boolean } | null) {
   const ctl: Ctl = { view: cell(view), ask: cell(ask) };
   return { ...ctl, card: openCard((close) => <CasinoCard ctl={ctl} close={() => close()} />) };

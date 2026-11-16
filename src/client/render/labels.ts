@@ -2,19 +2,10 @@ import { PAL, GROOVE, filler, hex, lum, shade, type Fill } from './art';
 import type { Tile } from '../../shared/data';
 
 type Ctx = CanvasRenderingContext2D;
-type Scale = (n: number, min?: number) => number; // a near-level length on this level's grid
+type Scale = (n: number, min?: number) => number;
 
-// ---- Tile textures, drawn once per zoom level (see scene.js): an info CARD, the GROUND it lies on and the owner's PAD ----
-// Each level is its own design on its own pixel grid, not the near art shrunk: text, stripe periods, joints and inlays are redrawn to fit.
-// card:   name band in the region colour, bevel and edge. Unlit, so it keeps its exact colours. No lettering in the textures: the card's code is
-//         carved on it in the 3D scene (see codeOf and board.ts).
-//           near  64x48  (ground's pixel size over the 2.9 x 2.175 card)
-//           mid   32x24
-//           far   16x12  a bare colour block
-// ground: the paving of the whole tile, 128 / 64 / 32 texels across. Lit, so the 3D building / props stand on it and cast their shadows over it.
-export const CARD_SIZE: [number, number][] = [[16, 12], [32, 24], [64, 48]]; // card size per level
+export const CARD_SIZE: [number, number][] = [[16, 12], [32, 24], [64, 48]];
 
-// A code for every tile (the IATA city code for cities, invented for the rest), carved on its card
 const CODE: Record<string, string> = {
   START: 'GO', Casino: 'CAS', Nightclub: 'CLB', HKEX: 'HKX', 'News Agency': 'NWS', Jail: 'JAL', 'Tax Bureau': 'TAX', Bank: 'BNK', LSE: 'LSE', 'Go To Jail': 'GTJ', NASDAQ: 'NAS',
   Wellington: 'WLG', Canberra: 'CBR', Sydney: 'SYD', Jakarta: 'JKT', Singapore: 'SIN', 'Strait of Malacca': 'MAL', 'Kuala Lumpur': 'KUL', Bangkok: 'BKK', Hanoi: 'HAN',
@@ -26,37 +17,33 @@ const CODE: Record<string, string> = {
   'Buenos Aires': 'BUE', Rio: 'RIO', Brasília: 'BSB', Pretoria: 'PRY', Tunis: 'TUN', Djibouti: 'JIB', Cairo: 'CAI', Jerusalem: 'JRS', 'Damascus Base': 'DAM', 'Abu Dhabi': 'AUH',
   'Saudi Aramco': 'ARA', Dubai: 'DXB', 'Strait of Hormuz': 'HRZ', Tehran: 'THR', Islamabad: 'ISB', 'New Delhi': 'DEL', Mumbai: 'BOM',
 };
-const ACCENT: Record<string, number> = { transport: 0x4da3ff, build: 0xf0a020, military: 0x6a8a4a, choke: 0xe0524e, oil: 0x4a4f6e, bbc: 0xd9423e, devil: 0x2fa84f }; // investment band colour per kind
+const ACCENT: Record<string, number> = { transport: 0x4da3ff, build: 0xf0a020, military: 0x6a8a4a, choke: 0xe0524e, oil: 0x4a4f6e, bbc: 0xd9423e, devil: 0x2fa84f };
 const GOLD = ['#fff6b0', '#ffd23f', '#b36a14'];
-const tone = (t: Tile): [number, boolean] => { const col = t.type === 'invest' ? ACCENT[t.kind] : t.color; return [col, t.type !== 'public' && lum(col) > 0.55]; }; // a card's band colour, and whether it takes dark ink (light bands) or white (dark ones)
-export const codeOf = (t: Tile): [string, number] => [CODE[t.name], tone(t)[1] ? 0x0b0e24 : 0xffffff]; // a card's code and the ink it is carved in: dark on a light band, white on a dark one
-// The ink edge: one texel round a texture, its colour per level. A coarse level's texel is 1 - 2 buffer pixels wide, and where a slab meets the sea the ink pass (see scene) draws a pixel of its own just outside it: with a solid
-// edge as well that was a band of black 2 - 3 pixels thick round every tile, and a hard black line round every plot and card. So the coarse levels draw it half see-through, a dark tone of the colour under it, and the near level keeps it solid.
-// HD-2D has no ink pass: its drawings (`hd`, the mips of one texture, see lodMap) keep it solid at every level, for the tile's outline to be clean at a distance.
+const tone = (t: Tile): [number, boolean] => { const col = t.type === 'invest' ? ACCENT[t.kind] : t.color; return [col, t.type !== 'public' && lum(col) > 0.55]; };
+export const codeOf = (t: Tile): [string, number] => [CODE[t.name], tone(t)[1] ? 0x0b0e24 : 0xffffff];
 const RING = [PAL.o + '80', PAL.o + '80', PAL.o];
-const edge = (fill: Fill, w: number, h: number, L: number, hd: boolean, ring = hd ? PAL.o : RING[L]) => { // bevel (the finer levels) + ink edge
+const edge = (fill: Fill, w: number, h: number, L: number, hd: boolean, ring = hd ? PAL.o : RING[L]) => {
   if (L) {
     fill('rgba(255,255,255,.45)', 1, 1, w - 2, 1); fill('rgba(255,255,255,.45)', 1, 1, 1, h - 2);
     fill('rgba(0,0,0,.25)', 1, h - 2, w - 2, 1); fill('rgba(0,0,0,.25)', w - 2, 1, 1, h - 2);
   }
-  for (const [x, y, bw, bh] of [[0, 0, w, 1], [0, h - 1, w, 1], [0, 1, 1, h - 2], [w - 1, 1, 1, h - 2]]) fill(ring, x, y, bw, bh); // the sides stop short of the corners: a see-through edge laid twice there would be darker
+  for (const [x, y, bw, bh] of [[0, 0, w, 1], [0, h - 1, w, 1], [0, 1, 1, h - 2], [w - 1, 1, 1, h - 2]]) fill(ring, x, y, bw, bh);
 };
 
-// Signature floor of each public tile, painted over its ground: f(colour, x, y, w, h, s) fills texels. s(n, min) is a near-level length n on this level's grid.
 const FLOOR: Record<string, (f: Fill, c: number, x: number, y: number, w: number, h: number, s: Scale) => void> = {
-  start: (f, _c, x, y, w, h, s) => { // finish-line checker along the bottom edge, centred on it
+  start: (f, _c, x, y, w, h, s) => {
     const q = s(4), n = Math.floor(w / q), o = (w - n * q) >> 1;
     for (let i = 0; i < n; i++) for (let j = 0; j < 2; j++) f((i + j) & 1 ? PAL.o : '#fff', x + o + i * q, y + h - (2 - j) * q, q, q);
   },
-  jail: (f, c, x, y, w, h, s) => { const p = s(6, 3); for (let i = Math.round(p / 2); i < w; i += p) { f(shade(c, 0.5), x + i, y, s(2), h); f(shade(c, 1.25), x + i - 1, y, 1, h); } },    // cell bars
-  gojail: (f, _c, x, y, w, h, s) => { const r = s(6, 2), p = s(8, 2); for (let j = 0; j < r; j++) for (let i = -j; i < w; i += p) f('#fff', x + i, y + h - r + j, s(4), 1); },       // hazard stripes
-  exchange: (f, c, x, y, w, h, s) => { const p = s(8, 3); for (let i = 0; i < w; i += p) f(shade(c, 1.3), x + i, y, 1, h); for (let j = 0; j < h; j += p) f(shade(c, 1.3), x, y + j, w, 1); }, // chart grid
-  tax: (f, c, x, y, w, h, s) => { for (let j = s(3); j < h; j += s(5, 3)) f(shade(c, 1.3), x, y + j, w, 1); f(shade(c, 0.6), x + s(6), y, 1, h); },                                  // ledger paper
-  casino: (f, c, x, y, w, h, s) => { const q = s(8, 2); for (let i = 0; i < w / q; i++) for (let j = 0; j < h / q; j++) f((i + j) & 1 ? shade(c, 0.7) : shade(c, 1.15), x + i * q, y + j * q, q, q); }, // felt checker
-  club: (f, c, x, y, w, h, s) => { const q = s(8, 2); for (let i = 0; i < w / q; i++) for (let j = 0; j < h / q; j++) f((i + j) & 1 ? shade(c, 0.65) : shade(c, 1.3), x + i * q, y + j * q, q, q); },  // dance floor
-  bank: (f, c, x, y, w, h, s) => { const p = s(14, 4); f(hex(c), x, y, w, h, GROOVE); for (let i = 0; i < w; i += p) for (let j = 0; j < h; j += p) { f(shade(c, 1.35), x + i, y + j, p - 1, p - 1); f(shade(c, 1.55), x + i, y + j, p - 1, 1); } }, // marble tiles, the gap between them a shallow joint (the ground's colour under them, laid again for its mask)
-  news: (f, c, x, y, w, h, s) => { for (let j = s(2), k = 0; j < h; j += s(4, 2), k++) f(shade(c, 0.6), x + s(4), y + j, w - 2 * s(4) - (k & 1) * s(7), s(2)); },                    // columns of print
-  area51: (f, c, x, y, w, h, s) => { // landing rings round the middle of the tile
+  jail: (f, c, x, y, w, h, s) => { const p = s(6, 3); for (let i = Math.round(p / 2); i < w; i += p) { f(shade(c, 0.5), x + i, y, s(2), h); f(shade(c, 1.25), x + i - 1, y, 1, h); } },
+  gojail: (f, _c, x, y, w, h, s) => { const r = s(6, 2), p = s(8, 2); for (let j = 0; j < r; j++) for (let i = -j; i < w; i += p) f('#fff', x + i, y + h - r + j, s(4), 1); },
+  exchange: (f, c, x, y, w, h, s) => { const p = s(8, 3); for (let i = 0; i < w; i += p) f(shade(c, 1.3), x + i, y, 1, h); for (let j = 0; j < h; j += p) f(shade(c, 1.3), x, y + j, w, 1); },
+  tax: (f, c, x, y, w, h, s) => { for (let j = s(3); j < h; j += s(5, 3)) f(shade(c, 1.3), x, y + j, w, 1); f(shade(c, 0.6), x + s(6), y, 1, h); },
+  casino: (f, c, x, y, w, h, s) => { const q = s(8, 2); for (let i = 0; i < w / q; i++) for (let j = 0; j < h / q; j++) f((i + j) & 1 ? shade(c, 0.7) : shade(c, 1.15), x + i * q, y + j * q, q, q); },
+  club: (f, c, x, y, w, h, s) => { const q = s(8, 2); for (let i = 0; i < w / q; i++) for (let j = 0; j < h / q; j++) f((i + j) & 1 ? shade(c, 0.65) : shade(c, 1.3), x + i * q, y + j * q, q, q); },
+  bank: (f, c, x, y, w, h, s) => { const p = s(14, 4); f(hex(c), x, y, w, h, GROOVE); for (let i = 0; i < w; i += p) for (let j = 0; j < h; j += p) { f(shade(c, 1.35), x + i, y + j, p - 1, p - 1); f(shade(c, 1.55), x + i, y + j, p - 1, 1); } },
+  news: (f, c, x, y, w, h, s) => { for (let j = s(2), k = 0; j < h; j += s(4, 2), k++) f(shade(c, 0.6), x + s(4), y + j, w - 2 * s(4) - (k & 1) * s(7), s(2)); },
+  area51: (f, c, x, y, w, h, s) => {
     const lit = shade(c, 1.4);
     for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
       const r = Math.hypot(i + 0.5 - w / 2, j + 0.5 - h / 2);
@@ -70,7 +57,6 @@ export function drawCard(g: Ctx, t: Tile, L: number, hd = false) {
   const pub = t.type === 'public', sp = t.type === 'special', col = tone(t)[0];
   const [hi, base, lo] = [shade(col, 1.3, 14), hex(col), shade(col, 0.62)];
 
-  // name band over the whole card (near: 3-tone banding + dither, like a 16-bit title bar)
   fill(pub ? shade(col, 0.72) : base, 0, 0, W, H);
   if (L === 2) {
     fill(pub ? shade(col, 0.9) : hi, 0, 0, W, 2); fill(pub ? shade(col, 0.5) : lo, 0, H - 2, W, 2);
@@ -79,7 +65,7 @@ export function drawCard(g: Ctx, t: Tile, L: number, hd = false) {
     fill(pub ? shade(col, 0.9) : hi, 0, 1, W, 1); fill(pub ? shade(col, 0.5) : lo, 0, H - 2, W, 1);
   }
 
-  if (sp && L) { // gold frame, 2 texels thick near and 1 on the small grids; far has no room inside and gilds the outline instead
+  if (sp && L) {
     const th = L === 2 ? 2 : 1;
     for (const [x, y, w, h] of [[1, 1, W - 2, th], [1, H - 1 - th, W - 2, th], [1, 1, th, H - 2], [W - 1 - th, 1, th, H - 2]]) fill(GOLD[1], x, y, w, h);
     fill(GOLD[0], 1, 1, W - 2, 1); fill(GOLD[2], 1, H - 2, W - 2, 1);
@@ -87,7 +73,6 @@ export function drawCard(g: Ctx, t: Tile, L: number, hd = false) {
   edge(fill, W, H, L, hd, sp && !L ? GOLD[1] : undefined);
 }
 
-// Pad: the carpet under a building, in the owner's colour (grey when vacant or mortgaged). Bevel, lit top-left band and (near) the card's dither, so it reads as a solid colour block at any zoom.
 export function drawPad(g: Ctx, color: number, w: number, h: number, L: number, hd = false) {
   const fill = filler(g), lit = shade(color, 1.35, 30), m = Math.max(1, Math.round(3 / 2 ** (2 - L)));
   fill(shade(color, 0.7), 0, 0, w, h);
@@ -97,9 +82,6 @@ export function drawPad(g: Ctx, color: number, w: number, h: number, L: number, 
   edge(fill, w, h, L, hd);
 }
 
-// Ground: city tiles are paved with 4 x 4 square slabs in a soft tint of the region colour, joined by hairlines. Flat and quiet on purpose: nothing like
-// the side walls' courses, so it reads as floor, and nothing for the eye to read, so the cards and buildings stand out.
-// A hatched yard for investments, the signature floor for public tiles. Special cities get a gold inlay just inside the tile edge.
 export function drawGround(g: Ctx, type: string, kind: string, color: number, L: number, hd = false) {
   const G = 32 << L, fill = filler(g), s = (n: number, min = 1) => Math.max(min, Math.round((n * G) / 128));
   if (type === 'public') { const m = s(4); fill(hex(color), 0, 0, G, G); FLOOR[kind]?.(fill, color, m, m, G - 2 * m, G - 2 * m, s); }
@@ -107,7 +89,7 @@ export function drawGround(g: Ctx, type: string, kind: string, color: number, L:
   else {
     const tint = (t: number) => shade(color, 0.38, t), S = G / 4, joint = tint(112);
     fill(tint(130), 0, 0, G, G);
-    for (let i = S; i < G; i += S) { fill(joint, i, 1, 1, G - 2, GROOVE); fill(joint, 1, i, G - 2, 1, GROOVE); } // real joints between slabs: the only relief in the paving
+    for (let i = S; i < G; i += S) { fill(joint, i, 1, 1, G - 2, GROOVE); fill(joint, 1, i, G - 2, 1, GROOVE); }
     if (type === 'special') {
       const m = s(7), th = s(3);
       for (const [x, y, w, h] of [[m, m, G - 2 * m, th], [m, G - m - th, G - 2 * m, th], [m, m, th, G - 2 * m], [G - m - th, m, th, G - 2 * m]]) fill(GOLD[1], x, y, w, h);

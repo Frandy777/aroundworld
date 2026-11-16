@@ -1,8 +1,4 @@
-/* 16-bit skin on one pixel grid: an art pixel is 2px everywhere (frames, 16px sprites drawn at 32px, text strokes), and in the 3D render target at every zoom (see scene.js). Text is Jersey 10 at
-   56/3px (one font step = 1px, stems 2px), Jersey 15 at 27px (stems 3px) and Jersey 20 at 34px (stems 4px), the sizes at which a pixel font stays hard-edged.
-   Frames/sprites/cursors come from art.js as --fr-*, --spr-*, --cur-* custom properties. */
 :root {
-  /* palette (mirrors art.js) */
   --ink: #0b0e24; --navy: #161c4a; --indigo: #2a3678; --blue: #4152a8; --peri: #6c7fd0; --sky: #a9b8f0; --mist: #dce4ff; --paper: #f6f0dc;
   --gold-hi: #fff6b0; --gold: #ffd23f; --gold-lo: #f0a020; --amber: #b36a14; --brown: #6e3a12;
   --red-hi: #ff9aa4; --red: #f0485f; --red-lo: #b02a4e; --wine: #6e1c44;
@@ -10,14 +6,14 @@
   --cyan-hi: #a6e0ff; --cyan: #4da3ff; --cyan-lo: #2b68d4;
   --txt: var(--paper); --dim: var(--sky);
   --font: 'Jersey 10', monospace; --font-md: 'Jersey 15', 'Jersey 10', monospace; --font-hd: 'Jersey 20', 'Jersey 10', monospace; --fs: calc(56px / 3); --fs-md: 27px;
-  --dither: repeating-conic-gradient(rgba(255, 255, 255, 0.05) 0 25%, transparent 0 50%); /* 2px checker, size set with background-size: 4px */
+  --dither: repeating-conic-gradient(rgba(255, 255, 255, 0.05) 0 25%, transparent 0 50%);
   --drop: drop-shadow(0 4px 0 rgba(6, 8, 28, 0.55));
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: #14213d; font: var(--fs) / 20px var(--font); font-synthesis: none; -webkit-font-smoothing: none; color: var(--txt); user-select: none; cursor: var(--cur-arrow); }
-b { font-weight: normal; color: #fff; } /* one pixel weight only: emphasis = brighter colour, never faux-bold */
+b { font-weight: normal; color: #fff; }
 [hidden] { display: none !important; }
-#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; } /* the window, whatever floats over it (see HUD) */
+#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; }
 #gl.hot { cursor: var(--cur-hand); }
 button, input { font-family: inherit; }
 button, [data-tile], .pcard, .item { cursor: var(--cur-hand); }
@@ -27,12 +23,10 @@ button, [data-tile], .pcard, .item { cursor: var(--cur-hand); }
 .ic { width: 32px; height: 32px; vertical-align: -8px; image-rendering: pixelated; }
 .good { color: var(--green); } .bad { color: #ff7a8a; } .dim { color: var(--dim); } .gold { color: var(--gold); }
 
-/* Window: 9-slice stair-corner frame (--f), banded-by-dither navy fill, notched hard drop shadow */
 .box {
   --f: var(--fr-win); position: relative; color: var(--txt); border: 8px solid transparent; border-image: var(--f) 4 / 8px;
   background-image: var(--dither), linear-gradient(#303d95, #1f2768); background-size: 4px 4px, auto; background-clip: padding-box; filter: var(--drop); image-rendering: pixelated;
 }
-/* Button: glossy two-tone fill + bevel frame; :active swaps to the pressed frame */
 .btn {
   --f: var(--fr-btn); --fd: var(--fr-btn-dn); --hi: #8798e8; --b1: #5062c0; --b2: #3a4a9c; --sh: #141a4a; --tx: #fff;
   font: var(--fs) / 20px var(--font); color: var(--tx); text-shadow: 0 2px 0 var(--sh); margin: 2px; padding: 6px 12px 4px;
@@ -48,8 +42,6 @@ button, [data-tile], .pcard, .item { cursor: var(--cur-hand); }
 .btn[disabled] { opacity: 0.5; pointer-events: none; filter: grayscale(0.7); }
 .btn kbd { font: var(--fs) / 20px var(--font); background: rgba(0, 0, 0, 0.35); padding: 0 6px; margin-left: 10px; vertical-align: 4px; text-shadow: none; box-shadow: inset 0 -2px rgba(0, 0, 0, 0.3); }
 
-/* Title screen: dithered vignette over the live board, pixel logo (canvas from art.js), sparkles. The logo is at the top and the menu at the bottom, so the globe
-   (the camera orbits it, see main.js) has the middle to itself */
 .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 18px; padding: 4vh 0 96px; text-align: center; z-index: 10; background: linear-gradient(rgba(8, 10, 34, 0.72), rgba(8, 10, 34, 0.1) 32%, rgba(8, 10, 34, 0) 56%, rgba(8, 10, 34, 0.7)); }
 .screen::before { content: ''; position: absolute; inset: 0; pointer-events: none; background: repeating-conic-gradient(rgba(6, 8, 28, 0.5) 0 25%, transparent 0 50%) 0 0 / 4px 4px; mask-image: radial-gradient(ellipse 75% 75% at 50% 50%, transparent 55%, #000 100%); }
 .screen > * { position: relative; }
@@ -67,30 +59,21 @@ button, [data-tile], .pcard, .item { cursor: var(--cur-hand); }
 .hint { margin: 0; color: var(--dim); text-shadow: 0 2px 0 var(--ink); }
 .ver { color: var(--dim); opacity: 0.8; text-shadow: 0 2px 0 var(--ink); }
 
-/* HUD, in one layout, for a wide window (any other is covered by the mask, see the end of this section). The 3D canvas is the window: the whole board fits beside a 320px column, so the panels float over it, at the right and as wide as the column: the players over the panel, and the camera buttons at the bottom (one row); the top bar floats apart, at the top, in the middle of what the column leaves.
-   The camera centres the board in what the column leaves of the canvas: --cr is how far it covers it from the right (its width and a gap), see scene.ts. The action bar is not made room for: it floats over the canvas, in the bay at the bottom of the board (see #actions). */
 @property --cr { syntax: '<length>'; inherits: true; initial-value: 0px; }
 :root { --m: 14px; --col: clamp(260px, 32vw, 320px); --cb: 100px; }
-/* The top bar is centred in what the column leaves of the window (--cr), like #actions: by layout, never by translate. It goes at the top, in the sea that the loop leaves open there as it does at the bottom, so the column keeps the whole height;
-   it is as wide as what it holds (the round, PAUSED, the buttons), which a column's width did not always fit, and as tall as its buttons: squares as small as a sprite (32px) and its frame allow (44px), --g from the frame and from each other */
 #topbar { --g: 4px; position: fixed; top: 12px; left: 0; right: var(--cr); margin: 0 auto; width: max-content; display: flex; align-items: center; gap: 20px; padding: var(--g) var(--g) var(--g) 10px; z-index: 12; }
 #topbar .btn { margin: 0; padding: 0; }
 #round { white-space: nowrap; } #round b { color: var(--gold); font: 34px / 36px var(--font-hd); vertical-align: -2px; }
 @keyframes blink { 50% { opacity: 0.6; } }
 .tools { display: flex; gap: var(--g); }
 
-/* The column: the players over the panel. It floats at the right, from the top of the window down to above
-   the camera buttons, with the panel filling what the players leave: the window less 12 at the top, and 28 + the buttons' 50 + 10 at the bottom (100px: --cb).
-   No wider than 320px, or in a short window it covers the top-right tiles of the whole-board view (the board is centred there, and ~0.96 x the window height wide) */
 #col { position: fixed; top: 12px; right: 14px; width: var(--col); height: calc(100vh - var(--cb)); display: flex; flex-direction: column; gap: 10px; z-index: 11; }
 #players { display: flex; flex-direction: column; gap: 10px; }
 .pcard { display: grid; grid-template-columns: 44px 1fr; gap: 0 10px; align-content: start; padding: 4px 4px 2px; transition: translate 0.1s steps(2); }
 .pcard:hover { translate: 4px 0; }
 .pcard.on { --f: var(--fr-gold); background-image: var(--dither), linear-gradient(#3e4cb0, #28338a); }
 .pcard.out { opacity: 0.45; filter: grayscale(1) var(--drop); }
-/* Viewing: the card whose assets the side panel shows gets a cyan ring inside its frame. Gold stays with whose turn it is, so one card can have both */
 .pcard.viewing { box-shadow: inset 0 0 0 2px var(--cyan), inset 0 0 0 4px color-mix(in srgb, var(--cyan) 35%, transparent); }
-/* Cash moving (see rollCash): the card blinks green / red and the number takes the colour. It starts lit (the half-cycle head start), so a payment is seen at once */
 .pcard.gain { --fx: var(--fr-green); --c1: #2f9a5a; --c2: #1f6f43; --hi: var(--green-hi); --lo: var(--pine); }
 .pcard.loss { --fx: var(--fr-red); --c1: #b8384f; --c2: #7c1f3b; --hi: var(--red-hi); --lo: var(--wine); }
 .pcard.gain, .pcard.loss { animation: flash 0.4s steps(1) -0.2s infinite; }
@@ -104,15 +87,11 @@ button, [data-tile], .pcard, .item { cursor: var(--cur-hand); }
 .pcard .sub span { display: flex; align-items: center; gap: 4px; }
 .badge { font: var(--fs) / 20px var(--font); padding: 0 6px; background: var(--red); color: #fff; margin-left: 4px; text-shadow: none; box-shadow: 0 0 0 2px var(--ink), inset 0 2px rgba(255, 255, 255, 0.3), inset 0 -2px rgba(0, 0, 0, 0.3); }
 .badge.blue { background: #6a3fb5; }
-/* Whose turn it is: the pointer hangs off the card's left edge, centred on it (9px is half its height) */
 .pcard.on::before { content: ''; position: absolute; left: -26px; top: 50%; margin-top: -9px; width: 16px; height: 18px; background: var(--spr-tri) center / contain no-repeat; image-rendering: pixelated; animation: blink 0.8s steps(2) infinite; }
-/* The clock of the player the game waits for (see Clock): a gauge set into the foot of their card, over its frame (the 2px of padding and the 8px of border), so the cards keep their height.
-   It runs down in the 20 steps of a card's fuse (see useAuto), over the time that was left as it went up: --w is how full it starts, --t how long it has to run */
 .clock { position: absolute; left: 12px; right: 12px; bottom: -8px; height: 10px; padding: 2px; background: var(--ink); pointer-events: none; }
 .clock > i { display: block; width: var(--w); height: 100%; background: linear-gradient(var(--gold-hi) 0 2px, var(--gold) 2px 4px, var(--gold-lo) 4px); animation: drain var(--t) steps(20) forwards; }
 @keyframes drain { to { width: 0; } }
 
-/* Side panel: what the players leave of the column (min-height: it gives way to them, and its panes scroll) */
 #side { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .tabs { display: flex; gap: 2px; background: var(--ink); }
 .tabs button { flex: 1; font: var(--fs) / 20px var(--font); padding: 6px 0 4px; border: 0; color: var(--dim); background: linear-gradient(#2e3b8c 50%, #222c70 50%); box-shadow: inset 0 2px #4152a8, inset 0 -2px var(--ink); }
@@ -122,10 +101,6 @@ button, [data-tile], .pcard, .item { cursor: var(--cur-hand); }
 .logline { padding: 4px 0; border-bottom: 2px dotted rgba(255, 255, 255, 0.14); color: var(--mist); }
 .logline i { color: var(--dim); font-style: normal; margin-right: 6px; }
 
-/* Centred by layout (auto margins), never by translate(-50%): a half-pixel transform would resample the frames and the text.
-   It goes in the bay that the loop leaves open at the bottom of the board (6 x 4 cells), where in the default view it covers no tile: the dice result over the button, low in the bay, the bar's bottom edge level with the map's bottom edge — the south edge of the loop,
-   8 cells (48 world units) south of the board's centre, which is at half the window's height (the view at 52° shortens depth to 0.788). The board, 104 world units across with its margin, is fitted to the stage (what the column leaves: --cr) by its width or its height,
-   whichever it meets first (see fitZoom in scene.ts): the edge is 48/104 of the projected height below the centre. --bay is still the bay's centre (6 cells south), which the dev panel, in the top-left corner, ends over */
 :root { --bay: calc(50vh + 36 / 104 * min(0.788 * (100vw - var(--cr)), 100vh)); }
 #actions { position: fixed; bottom: calc(50vh - 48 / 104 * min(0.788 * (100vw - var(--cr)), 100vh)); left: 0; right: var(--cr); margin: 0 auto; width: max-content; display: flex; flex-direction: column; align-items: center; gap: 8px; z-index: 12; }
 #actions .btn { animation: pulse 1.2s steps(2) infinite; }
@@ -133,33 +108,31 @@ button, [data-tile], .pcard, .item { cursor: var(--cur-hand); }
 .dice-chip { display: flex; align-items: center; gap: 8px; padding: 4px 12px 2px; font: 34px / 36px var(--font-hd); color: var(--gold); text-shadow: 2px 2px 0 var(--brown); }
 .dice-chip .die { width: 32px; height: 32px; }
 
-#camctl { position: fixed; right: 14px; bottom: 28px; width: var(--col); display: flex; justify-content: space-between; z-index: 11; } /* one row as wide as the column: six 50px buttons, 4px apart */
+#camctl { position: fixed; right: 14px; bottom: 28px; width: var(--col); display: flex; justify-content: space-between; z-index: 11; }
 #camctl .btn { margin: 0; padding-inline: 3px; }
-/* Dev panel (a dev room): above the cards, so that it can be used with one open. It takes the top-left corner (the dock's buttons have no margin, to be flush with it), and ends above ROLL DICE, over the bay (see #actions): the rest scrolls.
-   Its tabs are the side panel's, and each tab is a .bd of its own, so each scrolls apart. A label is a heading ruled out to its readout (the <b>); a flat segment sets a view or a choice, a bevelled button runs a command in the room */
 #dev { position: fixed; left: 14px; top: 12px; width: 340px; z-index: 50; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 #dev .dock { display: flex; gap: 6px; }
 #dev .dock .btn, #dev .field > .btn, #dev .pl-row .btn { margin: 0; }
 #dev .box { width: 100%; display: flex; flex-direction: column; max-height: calc(var(--bay) - 148px); }
 :root:not(:has(#hud)) #dev .box { max-height: calc(100vh - 64px); }
 #dev .bd { min-height: 0; gap: 8px; }
-#dev .bd > * { flex: none; } /* a short window scrolls the body, it never squeezes a row */
+#dev .bd > * { flex: none; }
 #dev .field > label { display: flex; align-items: center; gap: 8px; }
 #dev .field > label::after { content: ''; flex: 1; height: 2px; background: var(--navy); }
 #dev .field > label b { order: 1; }
 #dev .seg button { min-width: 0; padding-inline: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#dev .seg.fit button { flex: auto; } /* each as wide as its name: a fourth of the row would cut "Bot Amber" short */
+#dev .seg.fit button { flex: auto; }
 #dev .pl-row { gap: 6px; }
 #dev .pl-row.fill .btn { flex: 1; }
 #dev .pair { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
 #dev .pair .btn { white-space: nowrap; }
-#dev .note { padding-inline: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* the status line stays one line, with or without the scrollbar */
+#dev .note { padding-inline: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #dev .note .badge { margin: 0 6px 0 0; }
 #dev select { width: 100%; cursor: var(--cur-hand); }
 #dev textarea { width: 100%; resize: vertical; }
 #dev input[type=range] { width: 100%; margin: 4px 0; accent-color: var(--gold); cursor: var(--cur-hand); }
 
-#btn-full.corner { position: fixed; top: 12px; right: 14px; z-index: 45; } /* off the screen itself: it stays over the cards (z 40) to reach wherever fullscreen is wanted */
+#btn-full.corner { position: fixed; top: 12px; right: 14px; z-index: 45; }
 #tip { position: fixed; pointer-events: none; z-index: 20; padding: 2px 8px; min-width: 150px; }
 #tip b { display: flex; align-items: center; gap: 8px; color: var(--gold); font: 34px / 36px var(--font-hd); }
 #toasts { position: fixed; top: 100px; left: 0; right: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; pointer-events: none; z-index: 30; }
@@ -170,10 +143,9 @@ button, [data-tile], .pcard, .item { cursor: var(--cur-hand); }
 .float { position: fixed; z-index: 25; width: 320px; margin-left: -160px; text-align: center; font: 34px / 36px var(--font-hd); pointer-events: none; color: var(--paper);
   text-shadow: 2px 0 var(--ink), -2px 0 var(--ink), 0 2px var(--ink), 0 -2px var(--ink), 2px 2px var(--ink), -2px -2px var(--ink), 2px -2px var(--ink), -2px 2px var(--ink), 0 4px var(--ink); animation: float 1.5s steps(15) forwards; }
 .float.good { color: var(--green-hi); } .float.bad { color: var(--red-hi); }
-.float.hud { margin-left: -320px; text-align: right; --dy: -28px; } /* beside a card's cash: its right end sits at x, and it rises less */
+.float.hud { margin-left: -320px; text-align: right; --dy: -28px; }
 @keyframes float { to { transform: translateY(var(--dy, -64px)); opacity: 0; } }
 
-/* Compact cards: the face, the name over the cash, in a window under 1240px high: the full cards of four players are 550px of the column, which leaves the panel too little */
 @media (height < 1240px) {
   #players { gap: 6px; }
   .pcard .nm { font: var(--fs) / 20px var(--font); }
@@ -181,18 +153,14 @@ button, [data-tile], .pcard, .item { cursor: var(--cur-hand); }
   .pcard .sub { display: none; }
 }
 
-/* The mask: a window with no room for the HUD above is covered by it, and asked for a wider one or fullscreen. The room: 760px high at least, and a stage (what the column and its margins, 348px, leave) 1.1 x the window's height across or more,
-   which is about 3:2 or wider, and holds the laptops' 16:10 in fullscreen. The board fills a stage 1.27 x the height across (104 world units, 0.788 as deep); in a narrower one it is fitted by its width (see fitZoom in scene.ts), at ~87% of its size here
-   (~78% in HD-2D, whose lens widens its foot). The window that has the room takes the mask off, and gives --cr: behind the mask the camera fits the board to the whole canvas, as on the title */
-#narrow { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 14px; background: var(--dither) 0 0 / 4px 4px, var(--ink); } /* over everything: the cards (z 40), the fullscreen button (45) and the dev panel (50) */
+#narrow { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 14px; background: var(--dither) 0 0 / 4px 4px, var(--ink); }
 @media (width >= calc(348px + 110vh)) and (height >= 760px) {
   :root { --cr: calc(var(--col) + 2 * var(--m)); }
   #narrow { display: none; }
 }
 
-/* Multiplayer: who is who on a card, and the lobby's rows */
 .badge.gold { background: var(--gold); color: #5a2e08; }
 .badge.dim { background: var(--indigo); color: var(--dim); }
-.pl-row .nm { flex: 1; min-width: 0; padding-left: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* a name that is not mine to edit, in line with my input */
-.invite { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; } /* the room number and the buttons that pass it on: in a narrow card the buttons drop under it */
+.pl-row .nm { flex: 1; min-width: 0; padding-left: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.invite { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
 .invite .note { flex: 1 1 auto; }
