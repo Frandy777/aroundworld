@@ -19,7 +19,7 @@ const WEL = tileAt('Wellington'), CAN = tileAt('Canberra'), SYD = tileAt('Sydney
 
 test('Hong Kong: passers-by pay a share of their cash by owner level', async () => {
   const { g, h } = await start(2);
-  const [A, B] = g.S.order;
+  const [A, B] = g.S.turnOrder;
   give(g, HK, B, 0);
   setCash(g, A, 19849);
   putAt(g, A, HK - 1);
@@ -40,7 +40,7 @@ test('Hong Kong: passers-by pay a share of their cash by owner level', async () 
 
 test('Hong Kong: stopping pays the levy too', async () => {
   const { g, h } = await start(2);
-  const [A, B] = g.S.order;
+  const [A, B] = g.S.turnOrder;
   give(g, HK, B, 1); // Lv 1: 10%
   await goto(g, h, A, HK);
   assert.equal(cash(g, A), START_CASH - 2000);
@@ -49,7 +49,7 @@ test('Hong Kong: stopping pays the levy too', async () => {
 
 test('Hong Kong: a mortgaged tile, or the owner passing, charges nothing', async () => {
   const { g, h } = await start(2);
-  const [A, B] = g.S.order;
+  const [A, B] = g.S.turnOrder;
   give(g, HK, B, 0, true); // mortgaged
   putAt(g, A, HK - 1);
   await roll(g, h, [1, 1]); // A passes the mortgaged tile
@@ -68,7 +68,7 @@ test('Hong Kong: a mortgaged tile, or the owner passing, charges nothing', async
 
 test('Zurich: earns when anyone gets bank money, nothing while jailed', async () => {
   const { g, h } = await start(2);
-  const [A, B] = g.S.order;
+  const [A, B] = g.S.turnOrder;
   give(g, ZUR, B, 2); // Lv 2: $300
   putAt(g, A, TILE_COUNT - 1);
   await roll(g, h, [1, 1]); // passes START: +$3,000
@@ -87,22 +87,22 @@ test('Zurich: earns when anyone gets bank money, nothing while jailed', async ()
 
 test('New York: owner earns whenever a city is upgraded', async () => {
   const { g, h } = await start(2);
-  const [A, B] = g.S.order;
+  const [A, B] = g.S.turnOrder;
   give(g, NY, B, 1); // Lv 1: $300
   give(g, CAN, A, 0); // Canberra, upgrade $450
   await goto(g, h, A, CAN);
   const a = asked(h, 'deed');
-  assert.equal(a.p.mode, 'upgrade');
-  assert.equal(a.p.price, 450);
+  assert.equal(a.prompt.mode, 'upgrade');
+  assert.equal(a.prompt.price, 450);
   await answer(g, h, true);
-  assert.equal(g.S.own[CAN].lv, 1);
+  assert.equal(g.S.ownedByTile[CAN].level, 1);
   assert.equal(cash(g, A), START_CASH - 450);
   assert.equal(cash(g, B), START_CASH + 300);
 });
 
 test('Las Vegas: a visitor pays the owner the dice total × level rate', async () => {
   const { g, h } = await start(2);
-  const [A, B] = g.S.order;
+  const [A, B] = g.S.turnOrder;
   give(g, LV, B, 1); // × $500
   await draw(g, h, [3, 4]); // the casino roll: 7
   await goto(g, h, A, LV);
@@ -112,7 +112,7 @@ test('Las Vegas: a visitor pays the owner the dice total × level rate', async (
 
 test('Rio: owner earns on any doubles, nothing while jailed', async () => {
   const { g, h } = await start(2);
-  const [A, B] = g.S.order;
+  const [A, B] = g.S.turnOrder;
   give(g, RIO, B, 1); // $500
   await roll(g, h, [2, 2]); // A rolls doubles
   assert.equal(cash(g, B), START_CASH + 500);
@@ -126,7 +126,7 @@ test('Rio: owner earns on any doubles, nothing while jailed', async () => {
 
 test('Jerusalem: every other player pays the dice total × level rate', async () => {
   const { g, h } = await start(3);
-  const [A, B, C] = g.S.order;
+  const [A, B, C] = g.S.turnOrder;
   give(g, JERU, B, 0); // × $100
   await idle(g, h); // A's turn: just visits jail
   await draw(g, h, [4, 5]); // B's Jerusalem roll: 9
@@ -139,7 +139,7 @@ test('Jerusalem: every other player pays the dice total × level rate', async ()
 
 test('Singapore: adds its level rate to city rent income, stacking with monopoly', async () => {
   const { g, h } = await start(2);
-  const [A, B] = g.S.order;
+  const [A, B] = g.S.turnOrder;
   give(g, SG, B, 2); // +20%
   give(g, SYD, B, 0); // Sydney Lv 0: base rent 260
   await goto(g, h, A, SYD);
@@ -155,7 +155,7 @@ test('Singapore: adds its level rate to city rent income, stacking with monopoly
 
 test('Pyongyang: its owner pays less rent on regular cities', async () => {
   const { g, h } = await start(2);
-  const [A, B] = g.S.order;
+  const [A, B] = g.S.turnOrder;
   give(g, PYO, A, 2); // −20%
   give(g, SYD, B, 0);
   await goto(g, h, A, SYD);
@@ -165,7 +165,7 @@ test('Pyongyang: its owner pays less rent on regular cities', async () => {
 
 test('specials carry no rent: landing on another player\'s does nothing', async () => {
   const { g, h } = await start(2);
-  const [A, B] = g.S.order;
+  const [A, B] = g.S.turnOrder;
   give(g, ZUR, B, 0);
   await goto(g, h, A, ZUR);
   assert.equal(cash(g, A), START_CASH);
@@ -174,19 +174,19 @@ test('specials carry no rent: landing on another player\'s does nothing', async 
 
 test('specials are bought and upgraded like cities, at their own prices', async () => {
   const { g, h } = await start(2);
-  const [A] = g.S.order;
+  const [A] = g.S.turnOrder;
   await goto(g, h, A, ZUR); // unowned: deed at $4,000
-  assert.equal(asked(h, 'deed').p.price, 4000);
+  assert.equal(asked(h, 'deed').prompt.price, 4000);
   await answer(g, h, true);
   assert.equal(cash(g, A), START_CASH - 4000);
-  assert.equal(g.S.own[ZUR].p, A);
+  assert.equal(g.S.ownedByTile[ZUR].owner, A);
 
   await idle(g, h);
   await goto(g, h, A, ZUR); // own tile: upgrade offered at `up` = $3,000
-  assert.equal(asked(h, 'deed').p.price, 3000);
+  assert.equal(asked(h, 'deed').prompt.price, 3000);
   await answer(g, h, true);
-  assert.equal(g.S.own[ZUR].lv, 1);
-  assert.equal(g.S.own[ZUR].paid, 3000);
-  assert.equal(stats(g.S, A).val, 4000 + 3000, 'lot value = price + paid upgrades');
+  assert.equal(g.S.ownedByTile[ZUR].level, 1);
+  assert.equal(g.S.ownedByTile[ZUR].upgradePaid, 3000);
+  assert.equal(stats(g.S, A).propertyValue, 4000 + 3000, 'lot value = price + paid upgrades');
   assert.equal(cash(g, A), START_CASH - 7000);
 });

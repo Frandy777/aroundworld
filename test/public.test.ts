@@ -27,7 +27,7 @@ const WEL = tileAt('Wellington'), CAN = tileAt('Canberra'), SYD = tileAt('Sydney
 
 test('START pays $3,000 on pass and on stop', async () => {
   const { g, h } = await start(2);
-  const [A] = g.S.order;
+  const [A] = g.S.turnOrder;
   putAt(g, A, TILE_COUNT - 1); // Mumbai — one step before START
   await roll(g, h, [1, 1]); // passes START, lands on Wellington
   assert.equal(cash(g, A), START_CASH + 3000);
@@ -40,7 +40,7 @@ test('START pays $3,000 on pass and on stop', async () => {
 
 test('Jail: stopping is just a visit; Go To Jail jails you and costs the next turn', async () => {
   const { g, h } = await start(2);
-  const [A, B] = g.S.order;
+  const [A, B] = g.S.turnOrder;
   await goto(g, h, A, JAIL);
   assert.equal(g.S.players[A].jail, false, 'just visiting');
   assert.equal(cash(g, A), START_CASH);
@@ -51,14 +51,14 @@ test('Jail: stopping is just a visit; Go To Jail jails you and costs the next tu
   assert.equal(g.S.players[A].tile, JAIL);
 
   await idle(g, h); // B's turn, then A's turn comes around and is skipped
-  assert(h.evs.some((e) => e.t === 'skip' && e.pi === A), 'the jailed turn is skipped');
+  assert(h.evs.some((e) => e.t === 'skip' && e.player === A), 'the jailed turn is skipped');
   assert.equal(g.S.players[A].jail, false, 'the flag clears after skipping');
-  assert.equal(h.pending.to, B, 'the turn passed back');
+  assert.equal(h.pending.player, B, 'the turn passed back');
 });
 
 test('Exchange pays investments × $500 — nothing without any', async () => {
   const { g, h } = await start(2);
-  const [A] = g.S.order;
+  const [A] = g.S.turnOrder;
   give(g, CR, A); give(g, BBC, A);
   await goto(g, h, A, EXCH);
   assert.equal(cash(g, A), START_CASH + 1000);
@@ -71,7 +71,7 @@ test('Exchange pays investments × $500 — nothing without any', async () => {
 
 test('Tax Bureau: the first charges holdings, the second taxes wealth', async () => {
   const { g, h } = await start(2);
-  const [A] = g.S.order;
+  const [A] = g.S.turnOrder;
   give(g, WEL, A, 0); give(g, CAN, A, 0); give(g, CR, A); // 2 cities + 1 investment
   await goto(g, h, A, TAX1);
   assert.equal(cash(g, A), START_CASH - (2 * 30 + 50));
@@ -85,75 +85,75 @@ test('Tax Bureau: the first charges holdings, the second taxes wealth', async ()
 
 test('Nightclub charges $100 and holds the player for a turn', async () => {
   const { g, h } = await start(2);
-  const [A, B] = g.S.order;
+  const [A, B] = g.S.turnOrder;
   await goto(g, h, A, CLUB);
   assert.equal(cash(g, A), START_CASH - 100);
   assert.equal(g.S.players[A].party, true);
 
   await idle(g, h);
-  assert(h.evs.some((e) => e.t === 'skip' && e.pi === A), 'the partying turn is skipped');
+  assert(h.evs.some((e) => e.t === 'skip' && e.player === A), 'the partying turn is skipped');
   assert.equal(g.S.players[A].party, false);
 });
 
 test('Bank: mortgages pay the full lot value', async () => {
   const { g, h } = await start(2);
-  const [A] = g.S.order;
+  const [A] = g.S.turnOrder;
   give(g, WEL, A, 1); // lot value 1,600 + 400
   await goto(g, h, A, BANK);
   const a = asked(h, 'pick');
-  assert.deepEqual(a.p.items, [{ i: WEL, lv: 1, amt: 2000 }]);
+  assert.deepEqual(a.prompt.items, [{ index: WEL, level: 1, amount: 2000 }]);
   await answer(g, h, [WEL]);
-  assert.equal(g.S.own[WEL].m, true);
-  assert.equal(g.S.own[WEL].p, A, 'still owned — only flagged');
+  assert.equal(g.S.ownedByTile[WEL].mortgaged, true);
+  assert.equal(g.S.ownedByTile[WEL].owner, A, 'still owned — only flagged');
   assert.equal(cash(g, A), START_CASH + 2000);
   await answer(g, h, null); // declines the deposit offer that follows
 });
 
 test('Bank: with nothing to mortgage it offers a fixed deposit', async () => {
   const { g, h } = await start(2);
-  const [A] = g.S.order;
+  const [A] = g.S.turnOrder;
   setCash(g, A, 20500);
   await goto(g, h, A, BANK);
   const a = asked(h, 'dep');
-  assert.equal(a.p.max, 20000, 'cash rounded down to whole thousands');
-  await answer(g, h, { amt: 5000, n: 10 });
-  assert.deepEqual(g.S.players[A].dep, { amt: 5000, n: 10, made: 1 });
+  assert.equal(a.prompt.maxPrincipal, 20000, 'cash rounded down to whole thousands');
+  await answer(g, h, { principal: 5000, termRounds: 10 });
+  assert.deepEqual(g.S.players[A].deposit, { principal: 5000, termRounds: 10, placedRound: 1 });
   assert.equal(cash(g, A), 15500);
 });
 
 test('a deposit pays out principal + interest at turn start once matured', async () => {
   const { g, h } = await start(2);
-  const [A] = g.S.order;
+  const [A] = g.S.turnOrder;
   setDep(g, A, 3000, 5, 1); // matures at round 6
-  await playUntil(g, h, () => g.S.players[A].dep === null, idler, 60);
+  await playUntil(g, h, () => g.S.players[A].deposit === null, idler, 60);
   assert.equal(cash(g, A), START_CASH + 3000 + 45);
 });
 
 test('a shortfall withdraws the deposit early: principal only, no interest', async () => {
   const { g, h } = await start(2);
-  const [A, B] = g.S.order;
+  const [A, B] = g.S.turnOrder;
   setCash(g, A, 500);
   setDep(g, A, 3000, 10, 1);
   give(g, SYD, B, 3); // Lv 3 rent: the full price, $2,600
   await goto(g, h, A, SYD); // can't pay → the deposit is broken, then rent is paid
-  assert.equal(g.S.players[A].dep, null);
+  assert.equal(g.S.players[A].deposit, null);
   assert.equal(cash(g, A), 500 + 3000 - 2600);
   assert.equal(cash(g, B), START_CASH + 2600);
 });
 
 test('News draws a card and applies its effect', async () => {
   const { g, h } = await start(2);
-  const [A] = g.S.order;
+  const [A] = g.S.turnOrder;
   await draw(g, h, [1, 1]); // first NEWS card, first amount
   await goto(g, h, A, NEWS_T);
   const ev = h.evs.findLast((e) => e.t === 'news');
-  assert.equal(ev.card.amt, 20);
+  assert.equal(ev.card.amount, 20);
   assert.equal(cash(g, A), START_CASH + 20);
 });
 
 test('Area 51 teleports to a random tile and resolves its effect', async () => {
   const { g, h } = await start(2);
-  const [A] = g.S.order;
+  const [A] = g.S.turnOrder;
   await draw(g, h, [1]); // first tile of the draw order: START
   await goto(g, h, A, AREA51);
   assert.equal(g.S.players[A].tile, START);
@@ -162,24 +162,24 @@ test('Area 51 teleports to a random tile and resolves its effect', async () => {
 
 test('Casino (lucky): a hit on the picked number pays out', async () => {
   const { g, h } = await start(2);
-  const [A] = g.S.order;
+  const [A] = g.S.turnOrder;
   await draw(g, h, [3, 5]); // one die on the picked number
   await goto(g, h, A, LUCKY);
   const a = asked(h, 'casino');
-  assert.equal(a.p.view.stage, 'bet');
-  await answer(g, h, { act: 'roll', bet: 100, num: 3 }); // pays bet×2−$10 = $190
-  assert.equal(asked(h, 'casino').p.view.stage, 'again');
+  assert.equal(a.prompt.view.stage, 'bet');
+  await answer(g, h, { act: 'roll', bet: 100, pickedNumber: 3 }); // pays bet×2−$10 = $190
+  assert.equal(asked(h, 'casino').prompt.view.stage, 'again');
   await answer(g, h, { act: 'cash' }); // declines the second wager
   assert.equal(cash(g, A), START_CASH - 100 + 190);
 });
 
 test('Casino (lucky): two jackpots send the player to jail', async () => {
   const { g, h } = await start(2);
-  const [A] = g.S.order;
+  const [A] = g.S.turnOrder;
   await draw(g, h, [4, 4, 4, 4]); // both dice on the picked number, twice
   await goto(g, h, A, LUCKY);
-  await answer(g, h, { act: 'roll', bet: 100, num: 4 }); // jackpot 1: bet×5−$100 = $400
-  await answer(g, h, { act: 'roll', bet: 100, num: 4 }); // jackpot 2
+  await answer(g, h, { act: 'roll', bet: 100, pickedNumber: 4 }); // jackpot 1: bet×5−$100 = $400
+  await answer(g, h, { act: 'roll', bet: 100, pickedNumber: 4 }); // jackpot 2
   assert.equal(cash(g, A), START_CASH - 200 + 800);
   assert.equal(g.S.players[A].jail, true);
   assert.equal(g.S.players[A].tile, JAIL);
@@ -187,11 +187,11 @@ test('Casino (lucky): two jackpots send the player to jail', async () => {
 
 test('Casino (stakes): gain follows (sum−2)/5 × (bet−100)', async () => {
   const { g, h } = await start(2);
-  const [A] = g.S.order;
+  const [A] = g.S.turnOrder;
   await draw(g, h, [4, 5]); // sum 9 → round(7/5 × 100) = $140
   await goto(g, h, A, STAKES);
   await answer(g, h, { act: 'roll', bet: 200 });
-  assert.equal(asked(h, 'casino').p.view.stage, 'again');
+  assert.equal(asked(h, 'casino').prompt.view.stage, 'again');
   await answer(g, h, { act: 'cash' });
   assert.equal(cash(g, A), START_CASH - 200 + 140);
 });

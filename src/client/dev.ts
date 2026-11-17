@@ -4,7 +4,7 @@ import { command } from '../shared/state';
 import type { Cmd } from '../shared/types';
 import { leaveRoom, quickGame } from './controller';
 import { busy } from './director';
-import { link, send } from './net';
+import { send, socketReadyState } from './net';
 import { LOT, PAD, POS } from './render/layout';
 import { U, hd } from './render/light';
 import { camera, controls, dirtyShadow, finishTweens, fitZoom, hdCam, jumpTo, lod, renderer, scene, setLighting, viewAngles } from './render/scene';
@@ -12,7 +12,7 @@ import { clock, sky, wallHour } from './render/sky';
 import { FLOAT } from './render/world';
 import { SCENARIOS, runScenario, type SceneDrv } from './scenarios';
 import { cam, isolateTile, loop, playStrike, rebuildTile, selectTile, setLot } from './stage';
-import { G, actionBtn, cards, hd2d, paused, peeking, session, stageOnly, waitingFor } from './store';
+import { G, actionBtn, cards, cardsSetAside, hd2d, paused, session, stageOnly, waitingFor } from './store';
 
 // ---- Dev bridge (development builds only, loaded from main.tsx) ----
 // URL flags set the stage on boot (?dev=1&hd=1&hour=0&tile=1&zoom=2&autostart=1&clean=1&ui=0);
@@ -38,11 +38,11 @@ export interface ViewOpts {
 const mod24 = (h: number) => ((h % 24) + 24) % 24;
 const num = (v: string | null) => (v !== null && v !== '' && Number.isFinite(+v) ? +v : undefined);
 const nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
-const kept: { booted?: boolean } = import.meta.hot?.data ?? {};
+const hmrData: { booted?: boolean } = import.meta.hot?.data ?? {};
 
 /** Runs once before `initStage()` and `boot()` so initial look, clock and room flags take effect before the first frame or socket. */
 export function preBoot() {
-  if (kept.booted) return;
+  if (hmrData.booted) return;
   const q = new URLSearchParams(location.search);
   if (q.get('fresh') === '1' || q.get('autostart') === '1' || q.has('bots') || q.has('scenario')) sessionStorage.removeItem('room');
   if (q.has('hd')) hd2d.set(q.get('hd') === '1');
@@ -130,17 +130,17 @@ const norm = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
 
 /** Where the page stands when a wait fails: enough to tell a dead ask from a frozen room (or the wrong window) in one error, with no further console queries. Every read is optional, so it still answers something on a bare title. */
 function diag() {
-  const S = G.S, me = G.me, who = waitingFor.get(), cur = S ? S.order[S.turn] : -1, st = link();
+  const S = G.S, me = G.myPlayer, who = waitingFor.get(), cur = S ? S.turnOrder[S.turnIndex] : -1, st = socketReadyState();
   const narrow = document.getElementById('narrow'), card = topCard();
   return {
     view: session.get().view,
-    me: S && me >= 0 ? { pi: me, name: S.players[me]?.name, out: !!S.players[me]?.out } : null,
+    me: S && me >= 0 ? { pi: me, name: S.players[me]?.name, out: !!S.players[me]?.bankruptRound } : null,
     turn: S ? { round: S.round, step: S.step, pi: cur, name: S.players[cur]?.name } : null,
     over: !!S?.over,
     waiting: S && who >= 0 ? (S.players[who]?.name ?? who) : null,
     action: actionBtn.get()?.label ?? null,
     card: card ? { title: label(card.querySelector('.hd span')), buttons: [...card.querySelectorAll<HTMLElement>('.ft .btn')].map((b) => label(b)) } : null,
-    aside: peeking.get(),
+    aside: cardsSetAside.get(),
     busy: busy(),
     gamePaused: paused.get(),
     renderPaused: loop.paused,
@@ -198,14 +198,14 @@ function ui() {
     busy: busy(), // the director is still playing something (`idle()` waits for this to end)
     action: btn?.label ?? null, // the action bar's button: ROLL DICE, END TURN
     waiting: who >= 0 && S ? S.players[who].name : null,
-    aside: peeking.get() && cards.get().length > 0, // cards are up but set aside: click 'SHOW CARD' to bring them back
+    aside: cardsSetAside.get() && cards.get().length > 0, // cards are up but set aside: click 'SHOW CARD' to bring them back
     modal: card ? { title: label(card.querySelector('.hd span')), sub: label(card.querySelector('.hd small')), buttons: [...card.querySelectorAll<HTMLButtonElement>('.ft .btn')].map((b) => ({ id: b.dataset.id, text: label(b), disabled: b.disabled })) } : null,
     toasts: [...document.querySelectorAll('#toasts .toast')].map((t) => label(t)),
   };
 }
 
 const runCmd = (c: Cmd) => {
-  const run = actionBtn.get()?.reply, S = G.S;
+  const run = actionBtn.get()?.submitAnswer, S = G.S;
   if (!run || !S || !command(S, c)) return false;
   run(c);
   return true;
@@ -214,22 +214,22 @@ const runCmd = (c: Cmd) => {
 function cmd(c: Cmd): boolean;
 function cmd(c: Cmd, o: { wait: number }): Promise<boolean>;
 function cmd(c: Cmd, o?: { wait: number }) {
-  return o ? until(() => actionBtn.get()?.reply, o.wait).then(() => runCmd(c), () => { throw new Error(`__aw.cmd: no roll question to answer within ${o.wait} ms${diagText()}`); }) : runCmd(c);
+  return o ? until(() => actionBtn.get()?.submitAnswer, o.wait).then(() => runCmd(c), () => { throw new Error(`__aw.cmd: no roll question to answer within ${o.wait} ms${diagText()}`); }) : runCmd(c);
 }
 
 export function initDev() {
   const q = new URLSearchParams(location.search);
   const urlView = parseUrlView();
-  const sc = q.get('scenario'); // ?scenario=<name>: a fresh dev room played to a named resting state (see scenarios.ts)
-  const booted = kept.booted; // a hot update re-runs initDev on the same page: the room in it is kept, not replayed
-  const startBots = !booted && !sc && (q.get('autostart') === '1' || q.has('bots')) ? (num(q.get('bots')) ?? 3) : null;
-  kept.booted = true;
+  const scenarioName = q.get('scenario');
+  const booted = hmrData.booted; // a hot update re-runs initDev on the same page: the room in it is kept, not replayed
+  const startBots = !booted && !scenarioName && (q.get('autostart') === '1' || q.has('bots')) ? (num(q.get('bots')) ?? 3) : null;
+  hmrData.booted = true;
 
   // A scene still in flight belongs to this run of the page: once a hot update replaces it, its driver goes stale
   // rather than steering whatever room the new run kept or opened.
   let live = true;
   const stale = new Error('scenario: superseded by a hot update');
-  const drv: SceneDrv = {
+  const driver: SceneDrv = {
     until: (p, ms) => (live ? until(p, ms) : Promise.reject(stale)),
     cmd: (c, o) => (live ? cmd(c, o) : Promise.reject(stale)),
     send: (m) => { if (live) send(m); },
@@ -238,8 +238,8 @@ export function initDev() {
   };
   const ready = (async () => {
     await setLighting(hd2d.get());
-    if (startBots !== null) await drv.quickGame(startBots);
-    if (sc && !booted) console.log(`scenario ${sc}:`, await runScenario(sc, drv));
+    if (startBots !== null) await driver.quickGame(startBots);
+    if (scenarioName && !booted) console.log(`scenario ${scenarioName}:`, await runScenario(scenarioName, driver));
     if (urlView) await setView(urlView);
     else { loop.draw(); await nextFrame(); }
   })().catch((e) => {
@@ -260,11 +260,11 @@ export function initDev() {
       loop.draw();
     },
     // A dev room's real pause: no question's clock runs on the server (the game still takes answers). Render-side freeze stays `setLoop`'s own.
-    pause: (on: boolean) => send({ t: 'pause', on }),
+    pause: (on: boolean) => send({ t: 'pause', paused: on }),
     step: async (dt: number) => { loop.step(dt); await nextFrame(); },
     scrub: async (t: number) => { loop.scrub(t); await nextFrame(); }, // the world clock to t outright: `tick`-driven models pose there exactly
-    // A lot's look, with no room and no turn: { p: player | -1 vacant, lv, m: mortgaged, sign: false hides the SALE board on a vacant lot }
-    setLot: async (i: number, o: { p?: number; lv?: number; m?: boolean; sign?: boolean } | null) => { setLot(i, o); loop.draw(); await nextFrame(); },
+    // A lot's look, with no room and no turn: { owner: -1 vacant, level, mortgaged, sign: false hides the SALE board on a vacant lot }
+    setLot: async (i: number, o: { owner?: number; level?: number; mortgaged?: boolean; sign?: boolean } | null) => { setLot(i, o); loop.draw(); await nextFrame(); },
     rebuild: async (i: number) => { rebuildTile(i); loop.draw(); await nextFrame(); }, // re-draw a tile's props from its model file, state untouched
     isolate: async (i: number | null) => { isolateTile(i); loop.draw(); await nextFrame(); }, // one tile alone over its plot outline (null: the whole board again)
     overview: () => setView({ x: 0, z: 0, lift: FLOAT, zoom: 1.1, elev: THREE.MathUtils.radToDeg(52 * Math.PI / 180), az: 0 }),
@@ -284,7 +284,7 @@ export function initDev() {
     ui,
     click,
     diag,
-    scenario: (name: string) => runScenario(name, drv), // a fresh dev room played to a named resting state, then paused: `scenarios` says what each rests on
+    scenario: (name: string) => runScenario(name, driver), // a fresh dev room played to a named resting state, then paused: `scenarios` says what each rests on
     scenarios: Object.fromEntries(Object.entries(SCENARIOS).map(([k, s]) => [k, s.hint])),
     snapDataUrl: () => (loop.draw(), renderer.domElement.toDataURL('image/png')),
     refs: { G, TILES, POS, LOT, PAD, clock, sky, U, camera, hdCam, controls, renderer, scene, loop },

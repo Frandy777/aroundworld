@@ -14,17 +14,17 @@ import { openAlert, openAsk, openNews, openNotice } from './open';
 
 const SAMPLES: Record<string, Notice | NewsCard | Prompt> = {
   notice: {
-    title: 'PAY RENT', sub: [{ t: 1 }], tone: 0xb13e53, label: 'PAY $160', danger: true,
-    body: [{ k: 'face', p: 1 }, { k: 'rows', rows: [{ l: ['Base rent'], v: ['$160'] }, { l: ['Total due'], v: ['$160'], sum: true, tone: 'bad' }] }],
+    title: 'PAY RENT', sub: [{ tile: 1 }], tone: 0xb13e53, label: 'PAY $160', danger: true,
+    body: [{ k: 'face', player: 1 }, { k: 'rows', rows: [{ label: ['Base rent'], value: ['$160'] }, { label: ['Total due'], value: ['$160'], sum: true, tone: 'bad' }] }],
   },
-  news: { cat: 'Money', title: 'Lost Wallet', text: 'You found an unclaimed wallet on the street.', amt: 100 },
+  news: { category: 'Money', title: 'Lost Wallet', text: 'You found an unclaimed wallet on the street.', amount: 100 },
   deed: { k: 'deed', tile: 1, mode: 'buy', price: 1600 },
   pick: {
     k: 'pick', of: 'tile', title: 'MORTGAGE TO PAY', sub: ['Ruby owes $1,200'], tone: 0x3b7bd9, hint: "You can't afford this. Mortgage properties to raise at least $1,100.",
-    items: [{ i: 1, lv: 2, amt: 800 }, { i: 2, lv: 0, amt: 900 }], rule: { k: 'raise', cash: 100, need: 1200 }, label: 'MORTGAGE & PAY',
+    items: [{ index: 1, level: 2, amount: 800 }, { index: 2, level: 0, amount: 900 }], rule: { k: 'raise', cash: 100, need: 1200 }, label: 'MORTGAGE & PAY',
   },
-  confirm: { k: 'confirm', title: "DEVIL'S ISLAND", sub: ['Ruby'], tone: 0x2d7d6f, body: [{ k: 'note', m: ['Pay $700 bail and only visit the Jail tile, with no stay?'] }], yes: 'PAY $700', no: 'GO TO JAIL' },
-  dep: { k: 'dep', max: 12000 },
+  confirm: { k: 'confirm', title: "DEVIL'S ISLAND", sub: ['Ruby'], tone: 0x2d7d6f, body: [{ k: 'note', message: ['Pay $700 bail and only visit the Jail tile, with no stay?'] }], yes: 'PAY $700', no: 'GO TO JAIL' },
+  dep: { k: 'dep', maxPrincipal: 12000 },
 };
 const sample = (k: string) => JSON.stringify(SAMPLES[k], null, 1);
 
@@ -33,7 +33,7 @@ function preview(text: string) {
   try {
     const x = JSON.parse(text);
     if ('k' in x) { const id = --fake, card = openAsk(id, x as Prompt); if (card) hold(id, () => card.close()); }
-    else if ('cat' in x) openNews(x as NewsCard);
+    else if ('category' in x) openNews(x as NewsCard);
     else openNotice(x as Notice);
   } catch (err) { void openAlert('PREVIEW', String(err)); }
 }
@@ -107,7 +107,7 @@ const STATUS = {
 } as const;
 
 function Game({ show, tile, setTile }: Pane) {
-  const { room } = useCell(session), run = useCell(actionBtn)?.reply, isPaused = useCell(paused), S = G.S;
+  const { room } = useCell(session), run = useCell(actionBtn)?.submitAnswer, isPaused = useCell(paused), S = G.S;
   const [who, setWho] = useState(0), [lv, setLv] = useState(0), [mort, setMort] = useState(false), [draws, setDraws] = useState('3,4'), [cash, setCash] = useState('1000');
   const aim = TILES[tile], cap = maxLevel(aim), level = Math.min(lv, cap), mortgaged = mort && canMortgage(aim);
   const btn = (label: string, c: Cmd, cls = '') => <button className={`btn sm ${cls}`} disabled={!S || !run || !command(S, c)} onClick={() => run?.(c)}>{label}</button>;
@@ -119,25 +119,25 @@ function Game({ show, tile, setTile }: Pane) {
         <>
           <Field label="TARGET">
             <TilePick tile={tile} set={setTile}><button className="btn sm" onClick={() => focusTile(tile)}>FOCUS</button></TilePick>
-            <Seg cls="fit" opts={S.players.map((p, i): Opt => [p.name, who === i, () => setWho(i), !!p.out])} />
+            <Seg cls="fit" opts={S.players.map((p, i): Opt => [p.name, who === i, () => setWho(i), !!p.bankruptRound])} />
           </Field>
           <Field label="TELEPORT">
-            <div className="pl-row fill">{btn('MOVE', { c: 'goto', pi: who, i: tile, land: false })}{btn('LAND', { c: 'goto', pi: who, i: tile, land: true }, 'primary')}</div>
+            <div className="pl-row fill">{btn('MOVE', { c: 'goto', player: who, tile, resolveLanding: false })}{btn('LAND', { c: 'goto', player: who, tile, resolveLanding: true }, 'primary')}</div>
           </Field>
           <Field label="DEED">
             <Seg opts={[...[0, 1, 2, 3].map((n): Opt => [`Lv ${n}`, level === n, () => setLv(n), n > cap]), ['MORT', mortgaged, () => setMort(!mort), !canMortgage(aim)]]} />
-            <div className="pl-row fill">{btn('GIVE', { c: 'own', i: tile, o: { p: who, lv: level, m: mortgaged } })}{btn('CLEAR', { c: 'own', i: tile, o: null })}</div>
+            <div className="pl-row fill">{btn('GIVE', { c: 'own', tile, owned: { owner: who, level, mortgaged } })}{btn('CLEAR', { c: 'own', tile, owned: null })}</div>
           </Field>
           <div className="pair">
             <Field label="CASH">
-              <div className="pl-row"><input inputMode="numeric" value={cash} onChange={(e) => setCash(e.target.value)} />{btn('SET', { c: 'cash', pi: who, v: Number(cash) })}</div>
+              <div className="pl-row"><input inputMode="numeric" value={cash} onChange={(e) => setCash(e.target.value)} />{btn('SET', { c: 'cash', player: who, cash: Number(cash) })}</div>
             </Field>
             <Field label="ROOM">
-              <button className={`btn sm ${isPaused ? 'on' : ''}`} onClick={() => send({ t: 'pause', on: !isPaused })}>PAUSE GAME</button>
+              <button className={`btn sm ${isPaused ? 'on' : ''}`} onClick={() => send({ t: 'pause', paused: !isPaused })}>PAUSE GAME</button>
             </Field>
           </div>
           <Field label="NEXT DRAWS (dice, news card #...)">
-            <div className="pl-row"><input value={draws} onChange={(e) => setDraws(e.target.value)} />{btn('SET', { c: 'draw', v: draws.split(/\D+/).filter(Boolean).map(Number) })}</div>
+            <div className="pl-row"><input value={draws} onChange={(e) => setDraws(e.target.value)} />{btn('SET', { c: 'draw', draws: draws.split(/\D+/).filter(Boolean).map(Number) })}</div>
           </Field>
         </>
       )}

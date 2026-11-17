@@ -35,16 +35,16 @@ function takeInvite() {
 const NAME_KEY = 'name';
 
 function RoomCard({ join, invite, back }: { join: boolean; invite: string; back(): void }) {
-  const [name, setName] = useState(() => localStorage.getItem(NAME_KEY) ?? ''), [code, setCode] = useState(invite), [why, setWhy] = useState(''), [busy, setBusy] = useState(false);
+  const [name, setName] = useState(() => localStorage.getItem(NAME_KEY) ?? ''), [code, setCode] = useState(invite), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const ok = !busy && (!join || CODE_RE.test(code));
   const go = async () => {
     if (!ok) return;
     setBusy(true);
-    setWhy('');
+    setError('');
     localStorage.setItem(NAME_KEY, name);
     const err = await enter(join ? code : '', name);
     setBusy(false);
-    if (err) setWhy(err);
+    if (err) setError(err);
   };
   const enterKey = (e: KeyboardEvent) => { if (e.key === 'Enter') void go(); };
   return (
@@ -60,15 +60,15 @@ function RoomCard({ join, invite, back }: { join: boolean; invite: string; back(
       <div className="field"><label>YOUR NAME</label>
         <div className="pl-row"><input autoFocus={!join} maxLength={NAME_MAX} placeholder="Leave empty for a default name" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={enterKey} /></div>
       </div>
-      {why && <div className="note bad">{why}</div>}
+      {error && <div className="note bad">{error}</div>}
     </Card>
   );
 }
 
 export function Title() {
   const { view } = useCell(session);
-  const [invite, setInvite] = useState(takeInvite), [dlg, setDlg] = useState<'create' | 'join' | null>(invite ? 'join' : null);
-  const back = () => { setDlg(null); setInvite(''); };
+  const [invite, setInvite] = useState(takeInvite), [dialog, setDialog] = useState<'create' | 'join' | null>(invite ? 'join' : null);
+  const back = () => { setDialog(null); setInvite(''); };
   useEffect(() => { if (view !== 'title') back(); }, [view]);
   return (
     <>
@@ -76,15 +76,15 @@ export function Title() {
         <h1 className="logo" aria-label="AroundWorld"><Banner text="AROUND" i={0} /><Banner text="WORLD" i={1} /></h1>
         <p className="tagline">Buy cities. Build empires. Bankrupt your friends.</p>
         <nav className="menu">
-          <button className="btn primary big" onClick={() => setDlg('create')}>CREATE ROOM</button>
-          <button className="btn big" onClick={() => setDlg('join')}>JOIN ROOM</button>
+          <button className="btn primary big" onClick={() => setDialog('create')}>CREATE ROOM</button>
+          <button className="btn big" onClick={() => setDialog('join')}>JOIN ROOM</button>
           <button className="btn big" onClick={() => void openRules()}>HOW TO PLAY</button>
         </nav>
         <p className="hint">Drag: pan &nbsp;|&nbsp; Right-drag: rotate &nbsp;|&nbsp; Wheel: zoom</p>
         <small className="ver">AROUNDWORLD v0.1</small>
       </section>
       <FullBtn corner />
-      {view === 'title' && dlg && <RoomCard join={dlg === 'join'} invite={invite} back={back} />}
+      {view === 'title' && dialog && <RoomCard join={dialog === 'join'} invite={invite} back={back} />}
     </>
   );
 }
@@ -134,9 +134,9 @@ const MODES: [Settings['mode'], string][] = [['limited', 'LIMITED ROUNDS'], ['en
 export function Lobby() {
   const room = useCell(session).room;
   if (!room) return null;
-  const { seats, settings: set } = room, host = !!seats.find((s) => s.seat === room.me)?.host;
-  const put = (s: Partial<Settings>) => send({ t: 'settings', s: { ...set, ...s } });
-  const step = (d: number) => put({ rounds: Math.max(ROUNDS_MIN, Math.min(ROUNDS_MAX, set.rounds + d)) });
+  const { seats, settings } = room, host = !!seats.find((s) => s.seat === room.mySeat)?.host;
+  const put = (s: Partial<Settings>) => send({ t: 'settings', settings: { ...settings, ...s } });
+  const step = (d: number) => put({ rounds: Math.max(ROUNDS_MIN, Math.min(ROUNDS_MAX, settings.rounds + d)) });
   return (
     <Card title="LOBBY" sub={`Room ${room.code}`} cls="wide" peek={false} foot={<>
       <Btn id="leave" onClick={leaveRoom}>LEAVE</Btn>
@@ -150,23 +150,23 @@ export function Lobby() {
         <CopyBtn id="link" text={`${location.origin}/?room=${room.code}`}>COPY LINK</CopyBtn>
       </div>
       <div className="field"><label>PLAYERS {seats.length} / {MAX_PLAYERS}</label>
-        {PLAYER_DEFS.map((_, i) => <Seat key={i} i={i} s={seats.find((s) => s.seat === i)} me={i === room.me} bots={host && room.dev} />)}
+        {PLAYER_DEFS.map((_, i) => <Seat key={i} i={i} s={seats.find((s) => s.seat === i)} me={i === room.mySeat} bots={host && room.dev} />)}
       </div>
       {host ? (
         <>
           <div className="field"><label>GAME MODE</label>
-            <div className="seg">{MODES.map(([m, l]) => <button key={m} className={set.mode === m ? 'on' : ''} onClick={() => put({ mode: m })}>{l}</button>)}</div>
+            <div className="seg">{MODES.map(([m, l]) => <button key={m} className={settings.mode === m ? 'on' : ''} onClick={() => put({ mode: m })}>{l}</button>)}</div>
           </div>
-          {set.mode === 'limited' && (
+          {settings.mode === 'limited' && (
             <div className="stepper">
-              <button className="btn sm" onClick={() => step(-5)}><Icon n="minus" /></button><b>{set.rounds} ROUNDS</b><button className="btn sm" onClick={() => step(5)}><Icon n="plus" /></button>
+              <button className="btn sm" onClick={() => step(-5)}><Icon n="minus" /></button><b>{settings.rounds} ROUNDS</b><button className="btn sm" onClick={() => step(5)}><Icon n="plus" /></button>
             </div>
           )}
         </>
       ) : (
         <>
-          <div className="row"><span>Game mode</span><b>{MODES.find(([m]) => m === set.mode)![1]}</b></div>
-          {set.mode === 'limited' && <div className="row"><span>Rounds</span><b>{set.rounds}</b></div>}
+          <div className="row"><span>Game mode</span><b>{MODES.find(([m]) => m === settings.mode)![1]}</b></div>
+          {settings.mode === 'limited' && <div className="row"><span>Rounds</span><b>{settings.rounds}</b></div>}
         </>
       )}
       <div className="row"><span>Starting cash</span><b className="gold">{money(START_CASH)}</b></div>

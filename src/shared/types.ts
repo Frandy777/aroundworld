@@ -1,9 +1,8 @@
 import type { CasinoVariant } from './data';
 
 // ---- Text ----
-// Log lines, toasts and card text are data, not HTML: player names are user input. The client turns a segment into
-// markup: {p} a player's name in their colour, {t} a tile's name with its flag (`b`: in bold).
-export type Seg = string | { p: number } | { t: number; b?: boolean } | { b: string };
+// Log lines, toasts and card text are data, not HTML: player names are user input.
+export type Seg = string | { player: number } | { tile: number; bold?: boolean } | { bold: string };
 export type Msg = Seg[];
 
 // ---- State: what the server decides and every client mirrors (see `apply` in state.ts) ----
@@ -12,47 +11,47 @@ export interface Settings { mode: Mode; rounds: number }
 export type Step = 'redeem' | 'roll' | 'move' | 'resolve';
 export type Flag = 'jail' | 'party' | 'stay';
 
-export interface Player { name: string; color: number; cash: number; dep: Deposit | null; tile: number; jail: boolean; party: boolean; stay: boolean; out: number } // out: the round of bankruptcy, 0 while playing
-export interface Deposit { amt: number; n: number; made: number } // a fixed deposit at the bank: its principal, its term in rounds, the round it was placed (it matures at made + n)
-export interface Owned { p: number; lv: number; m: boolean; paid?: number } // owner, building level, mortgaged, and what its upgrades actually cost (absent: lv × up is assumed)
-export interface LogLine { id: number; r: number; m: Msg } // id: counts up from 1, so a line keeps its React key as newer ones are added above it
+export interface Player { name: string; color: number; cash: number; deposit: Deposit | null; tile: number; jail: boolean; party: boolean; stay: boolean; bankruptRound: number }
+export interface Deposit { principal: number; termRounds: number; placedRound: number } // matures at placedRound + termRounds
+export interface Owned { owner: number; level: number; mortgaged: boolean; upgradePaid?: number } // upgradePaid absent: level × upgradeCost is assumed
+export interface LogLine { id: number; round: number; message: Msg } // id: counts up from 1, so a line keeps its React key as newer ones are added above it
 export interface GameState {
   settings: Settings;
   players: Player[];
-  own: Record<number, Owned>; // by tile index
-  order: number[]; // player indices in turn order
-  turn: number; // index into `order`
+  ownedByTile: Record<number, Owned>;
+  turnOrder: number[];
+  turnIndex: number;
   round: number;
   step: Step | null;
-  bankrupt: number[]; // in order of bankruptcy
+  bankruptOrder: number[];
   over: boolean;
   log: LogLine[]; // newest first
 }
 
 // ---- Cards ----
 export type Tone = '' | 'good' | 'bad';
-export interface Row { l: Msg; v: Msg; sum?: boolean; tone?: Tone }
+export interface Row { label: Msg; value: Msg; sum?: boolean; tone?: Tone }
 export type Block =
-  | { k: 'note'; m: Msg }
+  | { k: 'note'; message: Msg }
   | { k: 'rows'; rows: Row[] }
-  | { k: 'face'; p: number }; // a player's face, centred
-// A card with nothing to decide: closes itself after a moment (twice as long when `long`).
-export interface Notice { title: string; sub: Msg; tone: number; label: string; danger?: boolean; long?: boolean; body: Block[] }
-export interface NewsCard { cat: string; title: string; text: string; amt?: number }
+  | { k: 'face'; player: number };
+// A card with nothing to decide: closes itself after a moment.
+export interface Notice { title: string; sub: Msg; tone: number; label: string; danger?: boolean; body: Block[] }
+export interface NewsCard { category: string; title: string; text: string; amount?: number }
 export interface OrderPass { group: number[]; rolls: [number, number][] } // one round of rolls for `group`, aligned
-export interface RankRow { p: number; net: number }
+export interface RankRow { player: number; netWorth: number }
 
 // The casino card is one card across several steps; every step carries all of it.
-export type CasinoRoll = [a: number, b: number, gain: number, stake: number, num?: number]; // num: the number a lucky bet rode on
+export type CasinoRoll = [dieA: number, dieB: number, gain: number, stake: number, pickedNumber?: number];
 export interface CasinoView {
-  cid: number; v: CasinoVariant;
+  visitId: number; variant: CasinoVariant;
   stage: 'bet' | 'again' | 'end' | 'cash'; // 'again': a further wager on offer (it may be declined); 'end': the result stays up a moment; 'cash': the player cashed out, the card just closes
-  bet: number; max: number; // `max`: the largest bet on offer while betting
-  rolls: CasinoRoll[]; won: number; jail: boolean; // `jail`: set at the end
+  bet: number; maxBet: number;
+  rolls: CasinoRoll[]; won: number; jailed: boolean;
 }
 
 // ---- Prompts: a decision asked of one player ----
-export interface PickItem { i: number; lv?: number; amt?: number; note?: string; own?: Owned } // a tile (or a player) index. On the right: its building level (`lv`), then a sum, a word, or who owns the tile and at what level (`own`)
+export interface PickItem { index: number; level?: number; amount?: number; note?: string; owned?: Owned }
 export type PickRule =
   | { k: 'redeem'; cash: number } // pay for what you pick, from `cash`
   | { k: 'raise'; cash: number; need: number } // raise enough to cover `need`
@@ -64,39 +63,39 @@ export type Prompt =
   | { k: 'pick'; of: 'tile' | 'player'; title: string; sub: Msg; tone: number; hint: string; items: PickItem[]; rule: PickRule; label: string; skip?: string }
   | { k: 'confirm'; title: string; sub: Msg; tone: number; body: Block[]; yes: string; no: string }
   | { k: 'news'; card: NewsCard }
-  | { k: 'dep'; max: number } // a fixed deposit on offer at the bank: `max` is the most it may hold (cash rounded down to whole thousands)
+  | { k: 'dep'; maxPrincipal: number } // a fixed deposit on offer at the bank (cash rounded down to whole thousands)
   | { k: 'casino'; view: CasinoView };
 // What the roll question of a dev room takes besides the roll (see `Game.debug`).
 export type Cmd =
-  | { c: 'draw'; v: number[] } // the next random draws (dice, news card, coin flip) come out as these, in order; none: back to chance
-  | { c: 'cash'; pi: number; v: number } // set a player's cash
-  | { c: 'own'; i: number; o: Owned | null } // give a tile to a player (null: back to the bank)
-  | { c: 'goto'; pi: number; i: number; land: boolean }; // jump to a tile; `land`: and stop there, which is the turn (it takes the roll's place)
-export type Answer = boolean | number[] | null | { act: 'roll'; bet: number; num?: number } | { act: 'cash' } | { amt: number; n: number } | Cmd;
+  | { c: 'draw'; draws: number[] } // the next random draws (dice, news card, coin flip) come out as these, in order; none: back to chance
+  | { c: 'cash'; player: number; cash: number }
+  | { c: 'own'; tile: number; owned: Owned | null }
+  | { c: 'goto'; player: number; tile: number; resolveLanding: boolean }; // and stop there, which is the turn (it takes the roll's place)
+export type Answer = boolean | number[] | null | { act: 'roll'; bet: number; pickedNumber?: number } | { act: 'cash' } | { principal: number; termRounds: number } | Cmd;
 
 // ---- Events: the one stream the game is told in ----
 export type Ev =
   | { t: 'start'; state: GameState }
   | { t: 'order'; passes: OrderPass[]; order: number[] }
-  | { t: 'turn'; turn: number; round: number }
-  | { t: 'step'; s: Step | null }
-  | { t: 'dice'; a: number; b: number }
-  | { t: 'move'; pi: number; to: number; how: 'hop' | 'jump' }
+  | { t: 'turn'; turnIndex: number; round: number }
+  | { t: 'step'; step: Step | null }
+  | { t: 'dice'; dieA: number; dieB: number }
+  | { t: 'move'; player: number; to: number; how: 'hop' | 'jump' }
   | { t: 'strike'; from: number; to: number } // a military launch: the impact precedes the target's `own` downgrade
-  | { t: 'cash'; pi: number; d: number }
-  | { t: 'dep'; pi: number; d: Deposit | null } // a fixed deposit placed or gone (matured, withdrawn early, lost to bankruptcy): the money side is told by `cash`
-  | { t: 'own'; i: number; o: Owned | null }
-  | { t: 'flag'; pi: number; k: Flag; v: boolean }
-  | { t: 'out'; pi: number }
-  | { t: 'toast'; m: Msg; tone?: Tone }
-  | { t: 'log'; m: Msg }
-  | { t: 'sel'; pi: number; i: number } // show a tile in `pi`'s side panel
-  | { t: 'skip'; pi: number; m: Msg } // a skipped turn
-  | { t: 'notice'; n: Notice }
+  | { t: 'cash'; player: number; delta: number }
+  | { t: 'dep'; player: number; deposit: Deposit | null } // a fixed deposit placed or gone (matured, withdrawn early, lost to bankruptcy): the money side is told by `cash`
+  | { t: 'own'; tile: number; owned: Owned | null }
+  | { t: 'flag'; player: number; flag: Flag; active: boolean }
+  | { t: 'out'; player: number }
+  | { t: 'toast'; message: Msg; tone?: Tone }
+  | { t: 'log'; message: Msg }
+  | { t: 'sel'; player: number; tile: number } // show the tile in the player's side panel
+  | { t: 'skip'; player: number; message: Msg } // a skipped turn
+  | { t: 'notice'; notice: Notice }
   | { t: 'news'; card: NewsCard }
   | { t: 'casino'; view: CasinoView }
-  | { t: 'ask'; id: number; to: number; p: Prompt }
-  | { t: 'clock'; ms: number; of?: number } // the open prompt takes its default answer in `ms` if nobody answers first (set again when somebody connects or leaves; 0: no clock — the game waits, or the player is a bot). `of`: the total a resumed clock is proportioned against (absent: `ms` itself)
-  | { t: 'paused'; on: boolean } // a dev room froze (on) or unfroze its question clocks: no prompt times out while frozen, answers are still taken
+  | { t: 'ask'; id: number; player: number; prompt: Prompt }
+  | { t: 'clock'; remainingMs: number; totalMs?: number } // the open prompt takes its default answer in `remainingMs` if nobody answers first (set again when somebody connects or leaves; 0: no clock — the game waits, or the player is a bot)
+  | { t: 'paused'; paused: boolean } // a dev room froze or unfroze its question clocks: no prompt times out while frozen, answers are still taken
   | { t: 'close'; id: number } // the prompt `id` was answered (or timed out)
   | { t: 'over'; rank: RankRow[] };

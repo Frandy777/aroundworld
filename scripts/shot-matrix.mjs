@@ -70,7 +70,7 @@ Tiles take an index, a name or a kind (--tile=rio|"Las Vegas"|bank, slug-matched
 --iso, --lots' first field and the --list shot's tile/iso/lots too.
 
 Shot object (--list): {name, tile, tx, tz, x, z, lift, lot, lx, ly, lz, zoom, elev, az, hour, hd, ui, time, iso, scene,
-  setlot:{p,lv,m,sign}, lots:[[t,p,lv,m,sign]], strike:[from,to,sec], crop:[x,y,w,h]|{w,h,dx,dy}, scale}
+  setlot:{owner,level,mortgaged,sign}, lots:[[t,owner,level,mortgaged,sign]], strike:[from,to,sec], crop:[x,y,w,h]|{w,h,dx,dy}, scale}
   scene: a named HUD scene (see __aw.scenarios) run before the shot's view is posed`);
   process.exit(0);
 }
@@ -396,8 +396,8 @@ async function capture(base, dir, quiet = false) {
       return cells[cells.length - 1];
     };
     const setLots = (specs) => specs.reduce((p, s) => p.then(() => {
-      const [t, pp, lv, m, sign] = Array.isArray(s) ? s : [s.t, s.p, s.lv, s.m, s.sign];
-      const o = { p: pp, ...(lv !== undefined ? { lv } : {}), ...(m ? { m: true } : {}), ...(sign !== undefined ? { sign: !!sign } : {}) };
+      const [t, owner, level, mortgaged, sign] = Array.isArray(s) ? s : [s.t, s.owner ?? s.p, s.level ?? s.lv, s.mortgaged ?? s.m, s.sign];
+      const o = { owner, ...(level !== undefined ? { level } : {}), ...(mortgaged ? { mortgaged: true } : {}), ...(sign !== undefined ? { sign: !!sign } : {}) };
       return evalJs(`window.__aw.setLot(${t}, ${JSON.stringify(o)}).then(() => window.__aw.step(0.6))`);
     }), Promise.resolve());
     const viewExpr = (v) => `window.__aw.setView(${JSON.stringify(v)})`;
@@ -422,7 +422,7 @@ async function capture(base, dir, quiet = false) {
         if (s.scene) await evalJs(`window.__aw.scenario(${JSON.stringify(s.scene)})`); // a named scene: fresh dev room, driven to its resting state
         if (s.iso) await evalJs(`window.__aw.isolate(${s.iso === true ? (s.tile ?? tiles[0] ?? 0) : s.iso})`);
         await setLots(s.lots ?? []);
-        if (s.setlot !== undefined) await evalJs(`window.__aw.setLot(${s.tile ?? tiles[0] ?? 0}, ${JSON.stringify(s.setlot)}).then(() => window.__aw.step(0.6))`);
+        if (s.setlot !== undefined) await evalJs(`window.__aw.setLot(${s.tile ?? tiles[0] ?? 0}, ${JSON.stringify({ owner: s.setlot.owner ?? s.setlot.p, level: s.setlot.level ?? s.setlot.lv, mortgaged: s.setlot.mortgaged ?? s.setlot.m, sign: s.setlot.sign })}).then(() => window.__aw.step(0.6))`);
         await evalJs(`(async () => { const a = window.__aw, s = ${JSON.stringify(s)};
           ${freeze ? `await ${HOLD};` : ''}
           const v = { hd: s.hd ?? true, hour: s.hour ?? 12, rotate: !!s.rotate, ui: s.ui ?? (${autostart} || !!s.scene), zoom: s.zoom ?? (s.tile !== undefined ? 3 : 'fit') };
@@ -455,9 +455,9 @@ async function capture(base, dir, quiet = false) {
           if (tile !== undefined) {
             if (iso) await evalJs(`window.__aw.isolate(${iso === 'self' ? tile : iso})`);
             if (p !== undefined || lv !== undefined) {
-              const o = { p: p ?? 0, ...(lv !== undefined ? { lv } : {}), ...(mort ? { m: true } : {}), ...(nosign ? { sign: false } : {}) };
+              const o = { owner: p ?? 0, ...(lv !== undefined ? { level: lv } : {}), ...(mort ? { mortgaged: true } : {}), ...(nosign ? { sign: false } : {}) };
               await evalJs(`window.__aw.setLot(${tile}, ${JSON.stringify(o)}).then(() => window.__aw.step(0.6))`); // let the pop-in squash settle before the shots
-            } else if (nosign) await evalJs(`window.__aw.setLot(${tile}, { p: -1, sign: false })`);
+            } else if (nosign) await evalJs(`window.__aw.setLot(${tile}, { owner: -1, sign: false })`);
           }
           for (const hour of hours) {
             for (const az of azs) for (const time of times) {

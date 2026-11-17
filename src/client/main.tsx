@@ -14,9 +14,9 @@ import { bindKeys } from './ui/keys';
 // A hot update of any module the page is made of stops here: this module runs again on the new code, and as it starts it takes down what its last run started (the
 // stage, the keys, the talk with the server). Taking down and starting happen in the same run, never apart: an update may reach a module twice, or fail to load it.
 // What belongs to the page itself stays: the GL context (see scene) and the React root.
-const kept: { started?: Promise<void>; stops?: (() => void)[]; root?: Root } = import.meta.hot?.data ?? {};
-const stops = (kept.stops ??= []);
-const last = kept.started;
+const hmrData: { started?: Promise<void>; stops?: (() => void)[]; root?: Root } = import.meta.hot?.data ?? {};
+const stops = (hmrData.stops ??= []);
+const last = hmrData.started;
 
 async function main() {
   await last?.catch(() => {}); // a run still starting finishes first (a failed one has reported itself, and took down what it had made)
@@ -26,10 +26,10 @@ async function main() {
   dev?.preBoot();
   skin(); // frames, cursors and sprites become CSS variables before the first paint
   stops.push(initStage(), bindKeys());
-  (kept.root ??= createRoot(document.getElementById('root')!)).render(<App />);
+  (hmrData.root ??= createRoot(document.getElementById('root')!)).render(<App />);
   stops.push(boot());
   if (dev) stops.push(dev.initDev());
 }
-kept.started = main();
+hmrData.started = main();
 
 if (import.meta.hot) import.meta.hot.accept();

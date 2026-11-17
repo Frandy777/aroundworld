@@ -1,22 +1,22 @@
 import { Fragment, useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
-import { LEVEL_NAMES, REGIONS, TILES, depInterest, maxLevel } from '../../shared/data';
+import { LEVEL_NAMES, REGIONS, TILES, depositInterest, maxLevel } from '../../shared/data';
 import { maxRounds } from '../../shared/state';
 import { leaveRoom } from '../controller';
 import { send } from '../net';
 import { CAM, focusTok, lookAtTile } from '../stage';
-import { G, actionBtn, activeTab, cards, cashEls, countdown, floats, fullscreen, hd2d, hudLive, lastRoll, paused, peeking, selectedTile, session, state, statsOf, tip, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
+import { G, actionBtn, activeTab, cards, cardsSetAside, cashEls, countdown, floats, fullscreen, hd2d, hoveredTileTip, hudLive, lastRoll, paused, selectedTile, session, state, statsOf, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
 import { Die, Face, Flag, FullBtn, Icon, Named, Pips, Rich, hex, money, tileHead } from './bits';
 import { openMenu, openRules } from './open';
 import { TileBody } from './tile';
 
 function Topbar() {
-  const S = useGame(), room = useCell(session).room, last = maxRounds(S), p = useCell(paused), me = G.me >= 0 ? S.players[G.me] : null;
+  const S = useGame(), room = useCell(session).room, last = maxRounds(S), p = useCell(paused), me = G.myPlayer >= 0 ? S.players[G.myPlayer] : null;
   return (
     <header id="topbar" className="box">
       <div id="round">ROUND <b>{S.round}</b> {last === Infinity ? <>&middot; ENDLESS</> : `/ ${last}`}{p && <> <span className="badge blue">PAUSED</span></>}</div>
       <div className="tools">
         <button className="btn sm" id="btn-help" onClick={() => void openRules()}><Icon n="help" /></button>
-        <button className="btn sm" id="btn-menu" onClick={() => void openMenu(room!.code, leaveRoom, me && !me.out && !S.over ? () => send({ t: 'bankrupt' }) : undefined)}><Icon n="menu" /></button>
+        <button className="btn sm" id="btn-menu" onClick={() => void openMenu(room!.code, leaveRoom, me && !me.bankruptRound && !S.over ? () => send({ t: 'bankrupt' }) : undefined)}><Icon n="menu" /></button>
         <FullBtn />
       </div>
     </header>
@@ -43,33 +43,33 @@ function useRoll(cash: number) {
 
 function Clock({ i }: { i: number }) {
   const c = useCell(countdown), p = useCell(paused);
-  if (c?.pi !== i) return null;
-  return <div className="clock" key={c.end}><i style={{ '--w': `${(c.left * 100) / c.ms}%`, '--t': `${c.left}ms`, animationPlayState: p ? 'paused' : undefined } as CSSProperties} /></div>;
+  if (c?.player !== i) return null;
+  return <div className="clock" key={c.expiresAt}><i style={{ '--w': `${(c.remainingMs * 100) / c.totalMs}%`, '--t': `${c.remainingMs}ms`, animationPlayState: p ? 'paused' : undefined } as CSSProperties} /></div>;
 }
 
 function PCard({ i, on, viewing }: { i: number; on: boolean; viewing: boolean }) {
   const S = useGame(), p = S.players[i], s = statsOf(i), v = useRoll(p.cash), room = useCell(session).room;
-  const offline = room?.seats.find((x) => x.pi === i)?.online === false;
+  const offline = room?.seats.find((x) => x.playerIndex === i)?.online === false;
   return (
-    <div className={`pcard box ${on ? 'on' : ''} ${viewing ? 'viewing' : ''} ${p.out ? 'out' : ''} ${v < p.cash ? 'gain' : v > p.cash ? 'loss' : ''}`}
+    <div className={`pcard box ${on ? 'on' : ''} ${viewing ? 'viewing' : ''} ${p.bankruptRound ? 'out' : ''} ${v < p.cash ? 'gain' : v > p.cash ? 'loss' : ''}`}
       onClick={() => { viewedPlayer.set(i); activeTab.set('assets'); focusTok(i); }}>
       <Face color={p.color} />
       <div className="nm">
         <span style={{ color: hex(p.color) }}>{p.name}</span>
         <span>
-          {i === G.me && <span className="badge gold">YOU</span>}
+          {i === G.myPlayer && <span className="badge gold">YOU</span>}
           {offline && <span className="badge dim">OFFLINE</span>}
-          {!!p.out && <span className="badge">OUT</span>}
+          {!!p.bankruptRound && <span className="badge">OUT</span>}
           {p.jail && <span className="badge">JAIL</span>}
           {p.party && <span className="badge blue">PARTY</span>}
           {p.stay && <span className="badge blue">STAY</span>}
-          {p.dep && <span className="badge blue" title={`Fixed deposit ${money(p.dep.amt)} · ${p.dep.n} rounds`}>DEP</span>}
+          {p.deposit && <span className="badge blue" title={`Fixed deposit ${money(p.deposit.principal)} · ${p.deposit.termRounds} rounds`}>DEP</span>}
         </span>
       </div>
       <div className="cash" ref={(c) => { cashEls[i] = c; }}>{money(v)}</div>
       <div className="sub">
-        <span title="Cities"><Icon n="city" />{s.city}</span><span title="Investments"><Icon n="brief" />{s.inv}</span><span title="Mortgaged"><Icon n="lock" />{s.mort}</span>
-        <span title="Total assets" className="gold"><Icon n="coin" />{money(s.net)}</span>
+        <span title="Cities"><Icon n="city" />{s.cities}</span><span title="Investments"><Icon n="brief" />{s.investments}</span><span title="Mortgaged"><Icon n="lock" />{s.mortgaged}</span>
+        <span title="Total assets" className="gold"><Icon n="coin" />{money(s.netWorth)}</span>
       </div>
       <Clock i={i} />
     </div>
@@ -77,8 +77,8 @@ function PCard({ i, on, viewing }: { i: number; on: boolean; viewing: boolean })
 }
 
 function Players() {
-  const S = useGame(), act = S.order[S.turn], tab = useCell(activeTab), view = useCell(viewedPlayer);
-  return <aside id="players">{S.order.map((i) => <PCard key={i} i={i} on={i === act} viewing={tab === 'assets' && view === i} />)}</aside>;
+  const S = useGame(), act = S.turnOrder[S.turnIndex], tab = useCell(activeTab), view = useCell(viewedPlayer);
+  return <aside id="players">{S.turnOrder.map((i) => <PCard key={i} i={i} on={i === act} viewing={tab === 'assets' && view === i} />)}</aside>;
 }
 
 function TilePane() {
@@ -95,13 +95,13 @@ function TilePane() {
 
 function Assets() {
   const S = useGame(), pi = useCell(viewedPlayer), p = S.players[pi], st = statsOf(pi);
-  const mine = Object.entries(S.own).filter(([, o]) => o.p === pi).map(([k, o]) => [TILES[+k], o] as const);
+  const mine = Object.entries(S.ownedByTile).filter(([, o]) => o.owner === pi).map(([k, o]) => [TILES[+k], o] as const);
   const keys = [...new Set(mine.map(([t]) => t.region || 'inv'))];
   return (
     <>
-      <div className="row sum"><span>{p.name}'s total assets</span><b className="gold">{money(st.net)}</b></div>
-      <div className="note">Cash {money(p.cash)} + deposit {money(st.dep)} + lot value {money(st.val)}</div>
-      {p.dep && <div className="note">Fixed deposit {money(p.dep.amt)}: pays {money(p.dep.amt + depInterest(p.dep.amt, p.dep.n))} in {p.dep.made + p.dep.n - S.round} round{p.dep.made + p.dep.n - S.round === 1 ? '' : 's'}.</div>}
+      <div className="row sum"><span>{p.name}'s total assets</span><b className="gold">{money(st.netWorth)}</b></div>
+      <div className="note">Cash {money(p.cash)} + deposit {money(st.deposit)} + lot value {money(st.propertyValue)}</div>
+      {p.deposit && <div className="note">Fixed deposit {money(p.deposit.principal)}: pays {money(p.deposit.principal + depositInterest(p.deposit.principal, p.deposit.termRounds))} in {p.deposit.placedRound + p.deposit.termRounds - S.round} round{p.deposit.placedRound + p.deposit.termRounds - S.round === 1 ? '' : 's'}.</div>}
       {!mine.length && <div className="empty">No properties yet.</div>}
       {keys.map((k) => (
         <Fragment key={k}>
@@ -109,8 +109,8 @@ function Assets() {
           <div className="list">{mine.filter(([t]) => (t.region || 'inv') === k).map(([t, o]) => (
             <div className="item" key={t.i} data-tile={t.i} onClick={() => lookAtTile(t.i)}>
               <span className="sw" style={{ background: hex(t.color) }} /><Flag name={t.name} /><span className="grow">{t.name}</span>
-              {o.m && <span className="pill red">MORT</span>}
-              {t.type !== 'invest' && <Pips n={o.lv} max={maxLevel(t) || 1} />}
+              {o.mortgaged && <span className="pill red">MORT</span>}
+              {t.type !== 'invest' && <Pips n={o.level} max={maxLevel(t) || 1} />}
             </div>
           ))}</div>
         </Fragment>
@@ -119,7 +119,7 @@ function Assets() {
   );
 }
 
-const Log = () => <>{useGame().log.map((l) => <div className="logline" key={l.id}><i>R{l.r}</i><Rich m={l.m} /></div>)}</>;
+const Log = () => <>{useGame().log.map((l) => <div className="logline" key={l.id}><i>R{l.round}</i><Rich m={l.message} /></div>)}</>;
 
 const TABS: [Tab, () => JSX.Element][] = [['tile', TilePane], ['assets', Assets], ['log', Log]];
 function Side() {
@@ -133,12 +133,12 @@ function Side() {
 }
 
 function Actions() {
-  const chip = useCell(lastRoll), btn = useCell(actionBtn), aside = useCell(peeking), waiting = useCell(waitingFor), who = waiting >= 0 ? state().players[waiting] : null;
+  const chip = useCell(lastRoll), btn = useCell(actionBtn), aside = useCell(cardsSetAside), waiting = useCell(waitingFor), who = waiting >= 0 ? state().players[waiting] : null;
   return (
     <footer id="actions">
       {chip && <div className="dice-chip box"><Die v={chip[0]} /><Die v={chip[1]} /><span>= {chip[0] + chip[1]}</span></div>}
-      {btn && <button className="btn big primary" onClick={btn.click}>{btn.label}{btn.kbd && <> <kbd>SPACE</kbd></>}</button>}
-      {aside && <button className="btn big primary" onClick={() => peeking.set(false)}>SHOW CARD <kbd>SPACE</kbd></button>}
+      {btn && <button className="btn big primary" onClick={btn.click}>{btn.label}{btn.spaceShortcut && <> <kbd>SPACE</kbd></>}</button>}
+      {aside && <button className="btn big primary" onClick={() => cardsSetAside.set(false)}>SHOW CARD <kbd>SPACE</kbd></button>}
       {who && <div className="dice-chip box">WAITING FOR <b style={{ color: hex(who.color) }}>{who.name}</b></div>}
     </footer>
   );
@@ -167,23 +167,23 @@ export function Hud() {
 }
 
 export function Tip() {
-  const t = useCell(tip);
+  const t = useCell(hoveredTileTip);
   if (!t || !G.S) return null;
-  const S = G.S, tile = TILES[t.i], o = S.own[t.i], p = o && S.players[o.p];
+  const S = G.S, tile = TILES[t.tile], o = S.ownedByTile[t.tile], p = o && S.players[o.owner];
   const left = Math.round(Math.min(t.x + 18, innerWidth - 282)), top = Math.round(Math.min(t.y + 18, innerHeight - 140));
   return (
     <div id="tip" className="box" style={{ left, top }}>
       <b><Named name={tile.name} /></b>{tile.type !== 'public' && money(tile.price)}
-      {p && <><br /><span style={{ color: hex(p.color) }}>{p.name}</span> {'\u00B7'} {LEVEL_NAMES[o.lv]}{o.m && ` \u00B7 MORT.`}</>}
+      {p && <><br /><span style={{ color: hex(p.color) }}>{p.name}</span> {'\u00B7'} {LEVEL_NAMES[o.level]}{o.mortgaged && ` \u00B7 MORT.`}</>}
     </div>
   );
 }
 
 export function Overlays() {
-  const ts = useCell(toasts), fs = useCell(floats), cs = useCell(cards), aside = useCell(peeking);
+  const ts = useCell(toasts), fs = useCell(floats), cs = useCell(cards), aside = useCell(cardsSetAside);
   return (
     <>
-      <div id="toasts">{ts.map((t) => <div key={t.id} className={`toast box ${t.tone}`}><Rich m={t.m} /></div>)}</div>
+      <div id="toasts">{ts.map((t) => <div key={t.id} className={`toast box ${t.tone}`}><Rich m={t.message} /></div>)}</div>
       <div id="floats">{fs.map((f) => <div key={f.id} className={`float ${f.cls}`} style={{ left: f.x, top: f.y }}>{f.text}</div>)}</div>
       <div id="modals" hidden={aside}>{cs.map((c) => <Fragment key={c.key}>{c.node}</Fragment>)}</div>
     </>

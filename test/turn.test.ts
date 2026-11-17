@@ -18,55 +18,55 @@ test('the order roll: lowest total first, ties settled among themselves', async 
     { group: [0, 1], rolls: [[4, 4], [5, 5]] }, // the tied pair rolls again
   ]);
   assert.deepEqual(order.order, [2, 0, 1], 'the 3 goes first, then the pair as re-rolled');
-  assert.equal(h.pending.to, 2);
+  assert.equal(h.pending.player, 2);
 });
 
 test('the turn follows the order, skips the out and counts rounds', async () => {
   const { g, h } = await start(3);
-  const [A, B, C] = g.S.order;
-  assert.equal(h.pending.to, A);
+  const [A, B, C] = g.S.turnOrder;
+  assert.equal(h.pending.player, A);
   await idle(g, h);
-  assert.equal(h.pending.to, B);
+  assert.equal(h.pending.player, B);
   await idle(g, h);
-  assert.equal(h.pending.to, C);
+  assert.equal(h.pending.player, C);
   await idle(g, h);
-  assert.equal(h.pending.to, A);
+  assert.equal(h.pending.player, A);
   assert.equal(g.S.round, 2, 'the round counted the wrap');
   g.concede(B);
   await idle(g, h);
-  assert.equal(h.pending.to, C, 'an out player is never asked');
+  assert.equal(h.pending.player, C, 'an out player is never asked');
   g.dispose();
 });
 
 test('Buy One, Get One: the same player goes again at once', async () => {
   const { g, h } = await start(2);
-  const [A, B] = g.S.order;
+  const [A, B] = g.S.turnOrder;
   await draw(g, h, [22]); // NEWS deck position 22: 'Buy One, Get One'
   await goto(g, h, A, NEWS_T);
-  assert.equal(h.pending.to, A, 'A rolls again before B is asked');
+  assert.equal(h.pending.player, A, 'A rolls again before B is asked');
   assert.equal(h.evs.filter((e) => e.t === 'turn').length, 2, 'a second turn emitted for A');
   g.dispose();
 });
 
 test('stay: a held-up player skips one turn', async () => {
   const { g, h } = await start(3);
-  const [A, B, C] = g.S.order;
+  const [A, B, C] = g.S.turnOrder;
   setFlag(g, B, 'stay'); // what Strait Standoff sets on chokepoint owners
   await idle(g, h); // A's turn ends; B's is skipped
-  assert(h.evs.some((e) => e.t === 'skip' && e.pi === B), 'the skip event fired');
+  assert(h.evs.some((e) => e.t === 'skip' && e.player === B), 'the skip event fired');
   assert.equal(g.S.players[B].stay, false, 'the flag cleared');
-  assert.equal(h.pending.to, C);
+  assert.equal(h.pending.player, C);
   g.dispose();
 });
 
 test('a limited game ends after its rounds and ranks by net worth', async () => {
   const { g, h } = await start(2, { settings: { mode: 'limited', rounds: 1 } });
-  const [A, B] = g.S.order;
+  const [A, B] = g.S.turnOrder;
   give(g, 1, A); // a holding puts A's net above B's
   await idle(g, h);
   await idle(g, h); // both turns played: the round wraps past 1
   assert(g.S.over);
   const over = h.evs.findLast((e) => e.t === 'over');
   assert(over, 'the over event ranks them');
-  assert.deepEqual(over.rank.map((r) => r.p), [A, B]);
+  assert.deepEqual(over.rank.map((r) => r.player), [A, B]);
 });

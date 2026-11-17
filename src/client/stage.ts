@@ -7,16 +7,16 @@ import { POS } from './render/layout';
 import { camera, controls, finishTweens, focus, frame, initScene, overview, pan, pick, render, renderer, resetView, setLighting, toScreen, updateCamera, updateTweens } from './render/scene';
 import { strike } from './render/strike';
 import { FLOAT, initWorld, updateWorld } from './render/world';
-import { SEED, SEED_AT } from './seed';
-import { G, activeTab, hd2d, hudLive, selectedTile, tip } from './store';
+import { DEMO_LOTS, DEMO_TOKEN_TILES } from './seed';
+import { G, activeTab, hd2d, hoveredTileTip, hudLive, selectedTile } from './store';
 
 let board: ReturnType<typeof createBoard>;
 export const cam = { follow: -1 };
 export const loop = { paused: false, scale: 1, time: 0, step: (_dt: number) => {}, scrub: (_t: number) => {}, draw: () => {} };
 
-export const setOwner = (i: number, o: Owned | null, S: GameState) => board.setOwner(i, o && { color: S.players[o.p].color, lv: o.lv, m: o.m });
-export const setLot = (i: number, o: { p?: number; lv?: number; m?: boolean; sign?: boolean } | null) =>
-  board.setOwner(i, o?.p === undefined || o.p < 0 ? null : { color: PLAYER_DEFS[o.p].color, lv: o.lv ?? 0, m: !!o.m }, { sign: o?.sign });
+export const setOwner = (i: number, o: Owned | null, S: GameState) => board.setOwner(i, o && { color: S.players[o.owner].color, level: o.level, mortgaged: o.mortgaged });
+export const setLot = (i: number, lot: { owner?: number; level?: number; mortgaged?: boolean; sign?: boolean } | null) =>
+  board.setOwner(i, lot?.owner === undefined || lot.owner < 0 ? null : { color: PLAYER_DEFS[lot.owner].color, level: lot.level ?? 0, mortgaged: !!lot.mortgaged }, { sign: lot?.sign });
 export const rebuildTile = (i: number) => board.rebuild(i);
 export const isolateTile = (i: number | null) => board.isolate(i);
 export async function playStrike(from: number, to: number) {
@@ -29,22 +29,22 @@ const eachLot = (f: (i: number) => void) => TILES.forEach((t) => t.type !== 'pub
 export function showState(S: GameState) {
   clearTokens();
   S.players.forEach((p, i) => {
-    if (p.out) return;
+    if (p.bankruptRound) return;
     const t = addToken(i, p.color, p.tile);
     if (p.jail) { t.jailed = true; placeAt(t, p.tile); }
   });
-  eachLot((i) => setOwner(i, S.own[i] ?? null, S));
-  setActive(S.order[S.turn]);
+  eachLot((i) => setOwner(i, S.ownedByTile[i] ?? null, S));
+  setActive(S.turnOrder[S.turnIndex]);
   board.select(-1);
   board.hover(-1);
 }
 
 export function enterDemo() {
   clearTokens();
-  PLAYER_DEFS.forEach((p, i) => addToken(i, p.color, SEED_AT[i]));
+  PLAYER_DEFS.forEach((p, i) => addToken(i, p.color, DEMO_TOKEN_TILES[i]));
   eachLot((i) => {
-    const [p, lv, m] = SEED[i] ?? [-1, 0];
-    board.setOwner(i, p < 0 ? null : { color: PLAYER_DEFS[p].color, lv: Math.min(lv, maxLevel(TILES[i])), m: !!m });
+    const [owner, level, mortgaged] = DEMO_LOTS[i] ?? [-1, 0];
+    board.setOwner(i, owner < 0 ? null : { color: PLAYER_DEFS[owner].color, level: Math.min(level, maxLevel(TILES[i])), mortgaged: !!mortgaged });
   });
   board.select(-1);
   cam.follow = -1;
@@ -72,7 +72,7 @@ const lookAt = (x: number, z: number, zoom: number | 'fit' = 2) => { cam.follow 
 const zoom = (k: number) => lookAt(controls.target.x, controls.target.z, THREE.MathUtils.clamp(camera.zoom * k, controls.minZoom, controls.maxZoom));
 export const CAM = {
   in: () => zoom(1.5), out: () => zoom(1 / 1.5),
-  follow: () => focusTok(G.S!.order[G.S!.turn]), map: () => { resetView(); lookAt(0, 0, 'fit'); },
+  follow: () => focusTok(G.S!.turnOrder[G.S!.turnIndex]), map: () => { resetView(); lookAt(0, 0, 'fit'); },
 };
 export const lookAtTile = (i: number) => { selectTile(i); lookAt(POS[i].x, POS[i].z); };
 
@@ -92,7 +92,7 @@ export function tokenSpot(pi: number): [number, number] | null {
 function bindCanvas(signal: AbortSignal) {
   const cv = renderer.domElement;
   let down: [number, number] | null = null, moved: [number, number] | null = null;
-  const hover = (i: number, x = 0, y = 0) => { board.hover(i); cv.classList.toggle('hot', i >= 0); tip.set(i >= 0 ? { i, x, y } : null); };
+  const hover = (i: number, x = 0, y = 0) => { board.hover(i); cv.classList.toggle('hot', i >= 0); hoveredTileTip.set(i >= 0 ? { tile: i, x, y } : null); };
   cv.addEventListener('pointerdown', (e) => (down = [e.clientX, e.clientY]), { signal });
   cv.addEventListener('pointerup', (e) => {
     if (hudLive.get() && down && e.button === 0 && Math.hypot(e.clientX - down[0], e.clientY - down[1]) < 5) selectTile(pick(e.clientX, e.clientY, board.slabs));

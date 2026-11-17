@@ -17,20 +17,20 @@ export const PLAYER_DEFS = [
 export const MAX_PLAYERS = PLAYER_DEFS.length;
 export const START_CASH = 20000;
 
-export const DEP_STEP = 1000, DEP_MIN = 5, DEP_MAX = 15;
-export const depRate = (n: number) => (2 * n + 20) / 10000;
-export const depInterest = (amt: number, n: number) => Math.ceil((amt * n * (2 * n + 20)) / 10000);
+export const DEPOSIT_STEP = 1000, DEPOSIT_MIN_ROUNDS = 5, DEPOSIT_MAX_ROUNDS = 15;
+export const depositRate = (termRounds: number) => (2 * termRounds + 20) / 10000;
+export const depositInterest = (principal: number, termRounds: number) => Math.ceil((principal * termRounds * (2 * termRounds + 20)) / 10000);
 
 export type InvestKind = 'transport' | 'build' | 'military' | 'choke' | 'oil' | 'bbc' | 'devil';
 // Investment groups: shared price + effect text.
-export const INVEST: Record<InvestKind, { label: string; price: number; fx: string }> = {
-  transport: { label: 'Transport Co.', price: 2000, fx: 'Players landing here pay $500 / $1,000 / $2,000 when the owner holds 1 / 2 / 3 transport companies.' },
-  build: { label: 'Construction Co.', price: 4000, fx: 'Owner may upgrade any city from empty land to Lv1 for free.' },
-  military: { label: 'Military Base', price: 3000, fx: 'When the owner lands here, pay $500 to lower any city by 1 building level.' },
-  choke: { label: 'Chokepoint', price: 1500, fx: 'Players passing or stopping here pay $200 / $300 / $400 / $500 when the owner holds 1 / 2 / 3 / 4 chokepoints.' },
-  oil: { label: 'Oil Co.', price: 2000, fx: 'Owner earns $400 whenever they pass this tile.' },
-  bbc: { label: 'Media', price: 3000, fx: 'Whenever anyone triggers News, owner earns $200. When the owner triggers News, they may discard it and draw again.' },
-  devil: { label: 'Prison Island', price: 3000, fx: 'Whenever anyone goes to jail, owner earns $700. If the owner is jailed, they may pay $700 bail and skip the stay.' },
+export const INVEST: Record<InvestKind, { label: string; price: number; effect: string }> = {
+  transport: { label: 'Transport Co.', price: 2000, effect: 'Players landing here pay $500 / $1,000 / $2,000 when the owner holds 1 / 2 / 3 transport companies.' },
+  build: { label: 'Construction Co.', price: 4000, effect: 'Owner may upgrade any city from empty land to Lv1 for free.' },
+  military: { label: 'Military Base', price: 3000, effect: 'When the owner lands here, pay $500 to lower any city by 1 building level.' },
+  choke: { label: 'Chokepoint', price: 1500, effect: 'Players passing or stopping here pay $200 / $300 / $400 / $500 when the owner holds 1 / 2 / 3 / 4 chokepoints.' },
+  oil: { label: 'Oil Co.', price: 2000, effect: 'Owner earns $400 whenever they pass this tile.' },
+  bbc: { label: 'Media', price: 3000, effect: 'Whenever anyone triggers News, owner earns $200. When the owner triggers News, they may discard it and draw again.' },
+  devil: { label: 'Prison Island', price: 3000, effect: 'Whenever anyone goes to jail, owner earns $700. If the owner is jailed, they may pay $700 bail and skip the stay.' },
 };
 
 export const SPECIAL: Record<string, string> = {
@@ -57,17 +57,17 @@ export const COUNTRY: Record<string, string> = {
 
 export type PublicKind = 'start' | 'jail' | 'gojail' | 'exchange' | 'tax' | 'casino' | 'club' | 'bank' | 'news' | 'area51';
 // Public tiles: colour + effect text.
-export const PUBLIC: Record<PublicKind, { color: number; fx: string }> = {
-  start: { color: 0x38b764, fx: 'Collect $3,000 when you pass or stop here.' },
-  jail: { color: 0x8a8fa3, fx: 'Jailed players are sent here and skip their next turn. Stopping here does not jail you. Jailed players collect no fees.' },
-  gojail: { color: 0xd9423e, fx: 'Stop here and you are sent to Jail.' },
-  exchange: { color: 0x2d7d6f, fx: 'Stop here to collect (investments owned) × $500 from the bank.' },
-  tax: { color: 0x7a5c3e, fx: 'Pay the bank a tax. The first bureau charges (properties owned × $30) + (investments owned × $50); the second takes 3% of cash + 5% of any fixed deposit.' },
-  casino: { color: 0xb02a6b, fx: 'Try your luck with the dice. Beware of jail!' },
-  club: { color: 0x6a3fb5, fx: 'Pay $100 and stay here for one turn (effect does not repeat).' },
-  bank: { color: 0x3b7bd9, fx: 'Stop here to mortgage properties for their full lot value, or to place a fixed deposit.' },
-  news: { color: 0xe8b53a, fx: 'Stop here to trigger a random news event.' },
-  area51: { color: 0x2bb5c8, fx: 'Stop here and you are teleported to a random other tile, whose effect then applies. An event move: nothing on the way is passed.' },
+export const PUBLIC: Record<PublicKind, { color: number; effect: string }> = {
+  start: { color: 0x38b764, effect: 'Collect $3,000 when you pass or stop here.' },
+  jail: { color: 0x8a8fa3, effect: 'Jailed players are sent here and skip their next turn. Stopping here does not jail you. Jailed players collect no fees.' },
+  gojail: { color: 0xd9423e, effect: 'Stop here and you are sent to Jail.' },
+  exchange: { color: 0x2d7d6f, effect: 'Stop here to collect (investments owned) × $500 from the bank.' },
+  tax: { color: 0x7a5c3e, effect: 'Pay the bank a tax. The first bureau charges (properties owned × $30) + (investments owned × $50); the second takes 3% of cash + 5% of any fixed deposit.' },
+  casino: { color: 0xb02a6b, effect: 'Try your luck with the dice. Beware of jail!' },
+  club: { color: 0x6a3fb5, effect: 'Pay $100 and stay here for one turn (effect does not repeat).' },
+  bank: { color: 0x3b7bd9, effect: 'Stop here to mortgage properties for their full lot value, or to place a fixed deposit.' },
+  news: { color: 0xe8b53a, effect: 'Stop here to trigger a random news event.' },
+  area51: { color: 0x2bb5c8, effect: 'Stop here and you are teleported to a random other tile, whose effect then applies. An event move: nothing on the way is passed.' },
 };
 const PUBLIC_NAMES: Partial<Record<PublicKind, string>> = { start: 'START', jail: 'Jail', gojail: 'Go To Jail', tax: 'Tax Bureau', casino: 'Casino', club: 'Nightclub', bank: 'Bank', news: 'News Agency', area51: 'Area 51' };
 
@@ -75,14 +75,14 @@ export type TileType = 'city' | 'special' | 'invest' | 'public';
 export type CasinoVariant = 'lucky' | 'stakes';
 export interface Tile {
   i: number; type: TileType; kind: string; region: RegionKey | null; name: string;
-  price: number; up: number; variant?: CasinoVariant; color: number;
+  price: number; upgradeCost: number; variant?: CasinoVariant; color: number;
 }
 
 type Row = Omit<Tile, 'i'>;
-const row = (type: TileType, kind: string, name: string, price: number, up: number, color: number, region: RegionKey | null = null, variant?: CasinoVariant): Row =>
-  ({ type, kind, region, name, price, up, variant, color });
+const row = (type: TileType, kind: string, name: string, price: number, upgradeCost: number, color: number, region: RegionKey | null = null, variant?: CasinoVariant): Row =>
+  ({ type, kind, region, name, price, upgradeCost, variant, color });
 const city = (r: RegionKey, name: string, price: number) => row('city', r, name, price, price / 4, REGIONS[r][1], r);
-const special = (r: RegionKey, name: string, price: number, up: number) => row('special', r, name, price, up, REGIONS[r][1], r);
+const special = (r: RegionKey, name: string, price: number, upgradeCost: number) => row('special', r, name, price, upgradeCost, REGIONS[r][1], r);
 const invest = (k: InvestKind, name: string) => row('invest', k, name, INVEST[k].price, 0, 0x7d8aa6);
 const pub = (k: PublicKind, name = PUBLIC_NAMES[k] ?? '', variant?: CasinoVariant) => row('public', k, name, 0, 0, PUBLIC[k].color, null, variant);
 
@@ -122,5 +122,5 @@ export const kindAt = (kind: string) => TILES.findIndex((t) => t.kind === kind);
 
 // Regular-city numbers follow one formula in the rules table.
 export const cityRent = (t: Tile) => [t.price / 10, t.price / 4, t.price / 2, t.price];
-export const maxLevel = (t: Tile) => (t.type === 'city' ? 3 : t.type === 'special' ? (t.up ? 2 : 0) : 0);
+export const maxLevel = (t: Tile) => (t.type === 'city' ? 3 : t.type === 'special' ? (t.upgradeCost ? 2 : 0) : 0);
 export const LEVEL_NAMES = ['Empty', 'Lv 1', 'Lv 2', 'Lv 3'];

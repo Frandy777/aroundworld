@@ -44,8 +44,8 @@ function lights(t: number) {
   }
   for (let i = 0; i < cityLamps.length; i++) {
     const c = cityLamps[i], key = lamps[LAMP.city + i * 2], fill = lamps[LAMP.city + i * 2 + 1];
-    if (!c || !c.lv || !c.g.visible) { key.intensity = fill.intensity = 0; continue; }
-    const [kx, ky, kz, fx, fy, fz, col, kp, fp, reach] = CITY_LIT[c.lv - 1], p = POS[c.tile], y0 = p.y + c.g.position.y + PAD.h;
+    if (!c || !c.level || !c.g.visible) { key.intensity = fill.intensity = 0; continue; }
+    const [kx, ky, kz, fx, fy, fz, col, kp, fp, reach] = CITY_LIT[c.level - 1], p = POS[c.tile], y0 = p.y + c.g.position.y + PAD.h;
     key.position.set(p.x + LOT.x + kx, y0 + ky, p.z + LOT.z + kz);
     fill.position.set(p.x + LOT.x + fx, y0 + fy, p.z + LOT.z + fz);
     key.color.setHex(col); fill.color.setHex(col);

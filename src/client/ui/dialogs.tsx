@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { DEP_MAX, DEP_MIN, DEP_STEP, START_CASH, TILES, depInterest, depRate, maxLevel, type Tile } from '../../shared/data';
-import { READ } from '../../shared/protocol';
+import { DEPOSIT_MAX_ROUNDS, DEPOSIT_MIN_ROUNDS, DEPOSIT_STEP, START_CASH, TILES, depositInterest, depositRate, maxLevel, type Tile } from '../../shared/data';
+import { AUTO_CLOSE_MS } from '../../shared/protocol';
 import { canPick } from '../../shared/state';
 import type { CasinoView, NewsCard as News, Notice, OrderPass, Player, Prompt, RankRow } from '../../shared/types';
 import { reply } from '../asks';
 import { pace } from '../render/scene';
-import { state, useCell, G, paused, peeking, type Cell } from '../store';
+import { G, cardsSetAside, paused, state, useCell, type Cell } from '../store';
 import { Blocks, Die, Face, Flag, Icon, Pips, Rich, hex, money, tileHead } from './bits';
 import { TileBody } from './tile';
 
@@ -20,7 +20,7 @@ export function Card({ title, sub = '', tone = 0x333b66, ink = '#fff', cls = '',
       <div className={`card box ${cls}`} onPointerEnter={auto?.hold} onPointerLeave={auto?.free}>
         <div className="hd" style={{ '--tone': hex(tone), color: ink } as CSSProperties}><span>{title}</span><small>{sub}</small></div>
         <div className="bd">{children}</div>
-        <div className="ft">{peek && <Btn id="peek" cls="peek" onClick={() => { auto?.free(); peeking.set(true); }}>VIEW BOARD</Btn>}{foot}</div>
+        <div className="ft">{peek && <Btn id="peek" cls="peek" onClick={() => { auto?.free(); cardsSetAside.set(true); }}>VIEW BOARD</Btn>}{foot}</div>
         {auto && <div className="bar fuse"><i style={{ width: `${auto.left}%` }} /></div>}
       </div>
     </div>
@@ -45,7 +45,7 @@ function useAuto(ms: number, fn: () => void) {
     const t = setInterval(() => {
       const now = performance.now(), dt = now - last;
       last = now;
-      if (held.current || peeking.get() || paused.get() || document.hidden) return;
+      if (held.current || cardsSetAside.get() || paused.get() || document.hidden) return;
       gone += (dt * pace.speed) / ms;
       setTicks(Math.max(0, Math.ceil((1 - gone) * TICKS)));
     }, 50);
@@ -73,7 +73,7 @@ const RULES: Record<string, ReactNode> = {
   </>,
   DEBT: <>
     <h4>MORTGAGE</h4><p>You cannot mortgage by choice — only when you can't pay (each property pays half its lot value), or at the Bank (the full lot value). Mortgaged properties stop working: no rent, no upgrades, no effects. Redeeming one costs its full lot value.</p>
-    <h4>FIXED DEPOSIT</h4><p>At the Bank, lock cash away in whole thousands for {DEP_MIN}–{DEP_MAX} rounds: the rate per round is term × 0.02% + 0.2%. One deposit at a time, no auto-renew. Only a settlement you can't pay withdraws it early — principal back, no interest.</p>
+    <h4>FIXED DEPOSIT</h4><p>At the Bank, lock cash away in whole thousands for {DEPOSIT_MIN_ROUNDS}–{DEPOSIT_MAX_ROUNDS} rounds: the rate per round is term × 0.02% + 0.2%. One deposit at a time, no auto-renew. Only a settlement you can't pay withdraws it early — principal back, no interest.</p>
     <h4>BANKRUPTCY</h4><p>If cash + deposit + what mortgaging raises cannot cover a debt, you are out. The creditor only receives what you could raise.</p>
     <h4>JAIL</h4><p>Jailed players skip their next turn and collect no fees. Stopping on the Jail tile does not jail you.</p>
   </>,
@@ -93,21 +93,21 @@ export function RulesCard({ close }: { close(v: string): void }) {
 }
 
 export function NoticeCard({ n, close }: { n: Notice; close(): void }) {
-  const auto = useAuto(READ, close);
+  const auto = useAuto(AUTO_CLOSE_MS, close);
   return <Card title={n.title} sub={<Rich m={n.sub} />} tone={n.tone} auto={auto} foot={<Btn id="ok" cls={`primary ${n.danger ? 'danger' : ''}`} onClick={close}>{n.label}</Btn>}><Blocks blocks={n.body} /></Card>;
 }
 
 export function NewsCard({ c, close, redraw }: { c: News; close(): void; redraw?: (again: boolean) => void }) {
-  const auto = useAuto(redraw ? 0 : READ, close);
+  const auto = useAuto(redraw ? 0 : AUTO_CLOSE_MS, close);
   const foot = redraw
     ? <><Btn id="again" onClick={() => redraw(true)}>DRAW AGAIN</Btn><Btn id="keep" cls="primary" onClick={() => redraw(false)}>KEEP</Btn></>
     : <Btn id="ok" cls="primary" onClick={close}>GOT IT</Btn>;
   return (
     <Card title="NEWS" tone={0xf1e8cf} ink="#1a1c2c" cls="news" auto={auto} foot={foot}>
-      <span className="pill" style={{ alignSelf: 'flex-start' }}>{c.cat.toUpperCase()}</span>
+      <span className="pill" style={{ alignSelf: 'flex-start' }}>{c.category.toUpperCase()}</span>
       <h3>{c.title}</h3>
       <p>{c.text}</p>
-      {!!c.amt && <div className={`amt ${c.amt > 0 ? 'good' : 'bad'}`}>{c.amt > 0 ? '+' : ''}{money(c.amt)}</div>}
+      {!!c.amount && <div className={`amt ${c.amount > 0 ? 'good' : 'bad'}`}>{c.amount > 0 ? '+' : ''}{money(c.amount)}</div>}
       {redraw && <div className="note">You own the Media group: keep this story, or throw it away and draw again.</div>}
     </Card>
   );
@@ -130,10 +130,10 @@ export function DeedCard({ id, p }: { id: number; p: Of<'deed'> }) {
 export function PickCard({ id, p }: { id: number; p: Of<'pick'> }) {
   const S = state(), r = p.rule;
   const [sel, setSel] = useState<number[]>([]);
-  const sum = sel.reduce((s, i) => s + (p.items.find((x) => x.i === i)?.amt ?? 0), 0);
+  const sum = sel.reduce((s, i) => s + (p.items.find((x) => x.index === i)?.amount ?? 0), 0);
   const ok = canPick(r, sel.length, sum);
   const toggle = (i: number) => setSel(sel.includes(i) ? sel.filter((x) => x !== i) : r.k === 'one' ? [i] : [...sel, i]);
-  const priced = p.items.some((x) => x.amt !== undefined);
+  const priced = p.items.some((x) => x.amount !== undefined);
   const short = r.k === 'raise' ? r.need - r.cash - sum : 0;
   const tally = r.k === 'raise' ? (
     <div className="rows">
@@ -155,14 +155,14 @@ export function PickCard({ id, p }: { id: number; p: Of<'pick'> }) {
     </>}>
       <div className="note">{p.hint}</div>
       <div className="list">{p.items.map((x) => {
-        const t: Tile | null = p.of === 'tile' ? TILES[x.i] : null, who: Player | null = p.of === 'player' ? S.players[x.i] : null;
+        const t: Tile | null = p.of === 'tile' ? TILES[x.index] : null, who: Player | null = p.of === 'player' ? S.players[x.index] : null;
         return (
-          <div className={`item ${sel.includes(x.i) ? 'sel' : ''}`} key={x.i} onClick={() => toggle(x.i)}>
+          <div className={`item ${sel.includes(x.index) ? 'sel' : ''}`} key={x.index} onClick={() => toggle(x.index)}>
             <span className="check" />
             {t && <><span className="sw" style={{ background: hex(t.color) }} /><Flag name={t.name} /><span className="grow">{t.name}</span></>}
             {who && <><Face color={who.color} /><span className="grow">{who.name}</span></>}
-            {x.lv !== undefined && <Pips n={x.lv} max={maxLevel(TILES[x.i])} />}
-            {x.own ? <><Rich m={[{ p: x.own.p }]} /><Pips n={x.own.lv} max={maxLevel(TILES[x.i])} /></> : <b>{x.amt !== undefined ? money(x.amt) : x.note}</b>}
+            {x.level !== undefined && <Pips n={x.level} max={maxLevel(TILES[x.index])} />}
+            {x.owned ? <><Rich m={[{ player: x.owned.owner }]} /><Pips n={x.owned.level} max={maxLevel(TILES[x.index])} /></> : <b>{x.amount !== undefined ? money(x.amount) : x.note}</b>}
           </div>
         );
       })}</div>
@@ -181,30 +181,30 @@ export function ConfirmCard({ id, p }: { id: number; p: Of<'confirm'> }) {
 }
 
 export function DepCard({ id, p }: { id: number; p: Of<'dep'> }) {
-  const [amt, setAmt] = useState(Math.min(5 * DEP_STEP, p.max));
-  const [n, setN] = useState(10);
-  const interest = depInterest(amt, n);
+  const [principal, setPrincipal] = useState(Math.min(5 * DEPOSIT_STEP, p.maxPrincipal));
+  const [termRounds, setTermRounds] = useState(10);
+  const interest = depositInterest(principal, termRounds);
   return (
     <Card title="FIXED DEPOSIT" sub="Bank" tone={0x3b7bd9} foot={<>
       <Btn id="leave" onClick={() => reply(id, null)}>LEAVE</Btn>
-      <Btn id="dep" cls="primary" onClick={() => reply(id, { amt, n })}>DEPOSIT {money(amt)}</Btn>
+      <Btn id="dep" cls="primary" onClick={() => reply(id, { principal, termRounds })}>DEPOSIT {money(principal)}</Btn>
     </>}>
-      <div className="note">Lock cash away for {DEP_MIN}–{DEP_MAX} rounds: it cannot be spent until it matures. A settlement you cannot pay withdraws the principal early, without interest.</div>
+      <div className="note">Lock cash away for {DEPOSIT_MIN_ROUNDS}–{DEPOSIT_MAX_ROUNDS} rounds: it cannot be spent until it matures. A settlement you cannot pay withdraws the principal early, without interest.</div>
       <div className="stepper dep">
-        <button className="btn sm" onClick={() => setAmt(Math.max(DEP_STEP, amt - DEP_STEP))}><Icon n="minus" /></button>
-        <b>{money(amt)}</b>
-        <button className="btn sm" onClick={() => setAmt(Math.min(p.max, amt + DEP_STEP))}><Icon n="plus" /></button>
-        <button className="btn sm gold max" onClick={() => setAmt(p.max)}>MAX</button>
+        <button className="btn sm" onClick={() => setPrincipal(Math.max(DEPOSIT_STEP, principal - DEPOSIT_STEP))}><Icon n="minus" /></button>
+        <b>{money(principal)}</b>
+        <button className="btn sm" onClick={() => setPrincipal(Math.min(p.maxPrincipal, principal + DEPOSIT_STEP))}><Icon n="plus" /></button>
+        <button className="btn sm gold max" onClick={() => setPrincipal(p.maxPrincipal)}>MAX</button>
       </div>
       <div className="stepper dep">
-        <button className="btn sm" onClick={() => setN(Math.max(DEP_MIN, n - 1))}><Icon n="minus" /></button>
-        <b>{n} ROUNDS</b>
-        <button className="btn sm" onClick={() => setN(Math.min(DEP_MAX, n + 1))}><Icon n="plus" /></button>
+        <button className="btn sm" onClick={() => setTermRounds(Math.max(DEPOSIT_MIN_ROUNDS, termRounds - 1))}><Icon n="minus" /></button>
+        <b>{termRounds} ROUNDS</b>
+        <button className="btn sm" onClick={() => setTermRounds(Math.min(DEPOSIT_MAX_ROUNDS, termRounds + 1))}><Icon n="plus" /></button>
       </div>
       <div className="rows">
-        <div className="row"><span>Rate per round</span><b>{(depRate(n) * 100).toFixed(1)}%</b></div>
+        <div className="row"><span>Rate per round</span><b>{(depositRate(termRounds) * 100).toFixed(1)}%</b></div>
         <div className="row"><span>Interest at maturity</span><b className="good">+{money(interest)}</b></div>
-        <div className="row sum"><span>Payout after {n} rounds</span><b>{money(amt + interest)}</b></div>
+        <div className="row sum"><span>Payout after {termRounds} rounds</span><b>{money(principal + interest)}</b></div>
       </div>
     </Card>
   );
@@ -233,7 +233,7 @@ export function OrderCard({ players, passes, order, close }: { players: Player[]
     })();
     return () => { dead = true; };
   }, []);
-  useAuto(ready ? READ : 0, close);
+  useAuto(ready ? AUTO_CLOSE_MS : 0, close);
   return (
     <Card title="WHO GOES FIRST?" sub="Lowest total moves first" peek={false} foot={<Btn id="go" cls="primary" disabled={!ready} onClick={close}>LET{'\u2019'}S GO</Btn>}>
       <div className="list" id="ord">{players.map((p, i) => (
@@ -249,7 +249,7 @@ export function OrderCard({ players, passes, order, close }: { players: Player[]
 }
 
 export function ResultsCard({ rank, close }: { rank: RankRow[]; close(v: 'menu' | 'again'): void }) {
-  const S = state(), rows = rank.map((r) => ({ ...S.players[r.p], net: r.net }));
+  const S = state(), rows = rank.map((r) => ({ ...S.players[r.player], netWorth: r.netWorth }));
   const pod = [1, 0, 2].filter((k) => rows[k]).map((k) => ({ r: rows[k], k }));
   return (
     <Card title="GAME OVER" sub={`${rows.length} players`} cls="wide" tone={0xb8860b} foot={<>
@@ -266,7 +266,7 @@ export function ResultsCard({ rank, close }: { rank: RankRow[]; close(v: 'menu' 
       <div className="list">{rows.map((r, k) => (
         <div className="item" style={{ cursor: 'default' }} key={k}>
           <b>#{k + 1}</b><Face color={r.color} /><span className="grow">{r.name}</span>
-          {r.out ? <span className="pill red">BANKRUPT R{r.out}</span> : <b className="gold">{money(r.net)}</b>}
+          {r.bankruptRound ? <span className="pill red">BANKRUPT R{r.bankruptRound}</span> : <b className="gold">{money(r.netWorth)}</b>}
         </div>
       ))}</div>
     </Card>
@@ -276,7 +276,7 @@ export function ResultsCard({ rank, close }: { rank: RankRow[]; close(v: 'menu' 
 export interface Ctl { view: Cell<CasinoView>; ask: Cell<{ id: number; mine: boolean } | null> }
 
 export function CasinoCard({ ctl, close }: { ctl: Ctl; close(): void }) {
-  const v = useCell(ctl.view), ask = useCell(ctl.ask), lucky = v.v === 'lucky';
+  const v = useCell(ctl.view), ask = useCell(ctl.ask), lucky = v.variant === 'lucky';
   const [bet, setBet] = useState(v.bet);
   useEffect(() => setBet(v.bet), [v.bet]);
   const [num, setNum] = useState(d6);
@@ -310,11 +310,11 @@ export function CasinoCard({ ctl, close }: { ctl: Ctl; close(): void }) {
   const last = shown ? v.rolls[shown - 1] : null, won = v.rolls.slice(0, shown).reduce((s, r) => s + r[2], 0), stake = v.stage === 'bet' || v.stage === 'again' ? bet : v.bet;
   const hits = last ? (last[0] === last[4] ? 1 : 0) + (last[1] === last[4] ? 1 : 0) : 0;
   const betting = (v.stage === 'bet' && !shown) || (v.stage === 'again' && done);
-  const finished = done && v.stage === 'end', me = state().order[state().turn] === G.me;
-  useAuto(finished ? READ : 0, close);
+  const finished = done && v.stage === 'end', me = state().turnOrder[state().turnIndex] === G.myPlayer;
+  useAuto(finished ? AUTO_CLOSE_MS : 0, close);
   useEffect(() => { if (done && v.stage === 'cash') close(); }, [done, v.stage]);
 
-  const go = () => { setSent(true); setRolling(true); reply(ask!.id, { act: 'roll', bet: betting ? bet : v.bet, num }); };
+  const go = () => { setSent(true); setRolling(true); reply(ask!.id, { act: 'roll', bet: betting ? bet : v.bet, pickedNumber: num }); };
   const cash = () => { setSent(true); reply(ask!.id, { act: 'cash' }); };
   const sgn = (n: number) => (n > 0 ? '+' : '') + money(n);
   const staked = v.rolls.slice(0, shown).reduce((s, r) => s + r[3], 0);
@@ -325,7 +325,7 @@ export function CasinoCard({ ctl, close }: { ctl: Ctl; close(): void }) {
       !rolling && (
         v.stage === 'bet' && mine ? <Btn id="roll" cls="primary" onClick={go}>{lucky ? `ROLL ${money(bet)}` : 'ROLL 1/2'}</Btn>
         : v.stage === 'again' && done && mine ? <><Btn id="roll" cls="primary" onClick={go}>ROLL {money(bet)}</Btn><Btn id="cash" cls="gold" onClick={cash}>CASH OUT</Btn></>
-        : finished ? <Btn id="done" cls={`primary ${v.jail ? 'danger' : ''}`} onClick={close}>{me ? (v.jail ? 'GO TO JAIL' : 'COLLECT') : 'OK'}</Btn>
+        : finished ? <Btn id="done" cls={`primary ${v.jailed ? 'danger' : ''}`} onClick={close}>{me ? (v.jailed ? 'GO TO JAIL' : 'COLLECT') : 'OK'}</Btn>
         : null
       )
     }>
@@ -340,18 +340,18 @@ export function CasinoCard({ ctl, close }: { ctl: Ctl; close(): void }) {
         <div className="stepper">
           <button className="btn sm" onClick={() => setBet(Math.max(lucky ? 100 : 200, bet - 100))}><Icon n="minus" /></button>
           <b>BET {money(bet)}</b>
-          <button className="btn sm" onClick={() => setBet(Math.min(v.max, bet + 100))}><Icon n="plus" /></button>
-          <button className="btn sm gold" onClick={() => setBet(v.max)}>ALL IN</button>
+          <button className="btn sm" onClick={() => setBet(Math.min(v.maxBet, bet + 100))}><Icon n="plus" /></button>
+          <button className="btn sm gold" onClick={() => setBet(v.maxBet)}>ALL IN</button>
         </div>
       )}
       <div className="dice-row"><Die v={dice[0]} cls={rolling ? 'roll' : ''} n={32} /><Die v={dice[1]} cls={rolling ? 'roll' : ''} n={32} /></div>
       <div className="big-msg">
         {!last ? (lucky ? 'Pick your number!' : 'Feeling lucky?')
-          : lucky ? (finished && v.jail ? <span className="bad">Two jackpots! Off to jail!</span>
+          : lucky ? (finished && v.jailed ? <span className="bad">Two jackpots! Off to jail!</span>
             : hits === 2 ? <span className="good">JACKPOT! Double {last[4]} = +{money(last[2])}</span>
             : hits === 1 ? <>One {last[4]}: <span className="good">+{money(last[2])}</span></>
             : <span className="bad">No {last[4]}!</span>)
-          : finished && v.jail ? <span className="bad">Same pair twice! Straight to jail!</span>
+          : finished && v.jailed ? <span className="bad">Same pair twice! Straight to jail!</span>
           : <>Total {last[0] + last[1]}: <span className="good">+{money(last[2])}</span></>}
       </div>
       {(sent || shown > 0 || v.stage !== 'bet') && (

@@ -23,7 +23,7 @@ const out = await build({
 const W = await import(`data:text/javascript;base64,${Buffer.from(out.outputFiles[0].contents).toString('base64')}`);
 
 export const { Game, fresh, NEWS, TILES, TILE_COUNT, PLAYER_DEFS, MAX_PLAYERS, START_CASH,
-  DEP_STEP, DEP_MIN, DEP_MAX, depRate, depInterest, REGIONS, INVEST, SPECIAL, PUBLIC, COUNTRY,
+  DEPOSIT_STEP, DEPOSIT_MIN_ROUNDS, DEPOSIT_MAX_ROUNDS, depositRate, depositInterest, REGIONS, INVEST, SPECIAL, PUBLIC, COUNTRY,
   cityRent, maxLevel, LEVEL_NAMES, tileAt, kindAt,
   apply, lotValue, canMortgage, stats, ranking, canPick, hasMonopoly } = W;
 
@@ -55,7 +55,7 @@ export const orderRig = (n) => Array.from({ length: n }, (_, i) => [i + 1, i + 1
 // Start a game (a dev room by default: its roll question also takes panel commands); returns once the first question is up.
 export async function start(n = 2, { dev = true, settings = { mode: 'endless', rounds: 30 }, rig } = {}) {
   const h = host({ dev });
-  const g = new Game(h, { ...fresh(players(n), settings), rig: rig ?? orderRig(n) });
+  const g = new Game(h, { ...fresh(players(n), settings), riggedDraws: rig ?? orderRig(n) });
   g.done = g.run();
   void g.done.catch(() => {});
   await settle();
@@ -63,28 +63,28 @@ export async function start(n = 2, { dev = true, settings = { mode: 'endless', r
 }
 
 // ---- State setup: the same events the dev commands emit, just without a question ----
-export const give = (g, i, p, lv = 0, m = false, paid) =>
-  g.emit({ t: 'own', i, o: { p, lv, m, ...(paid === undefined ? {} : { paid }) } });
-export const seize = (g, i) => g.emit({ t: 'own', i, o: null });
-export const setCash = (g, pi, v) => g.emit({ t: 'cash', pi, d: v - g.S.players[pi].cash });
-export const putAt = (g, pi, i) => g.emit({ t: 'move', pi, to: i, how: 'jump' });
-export const setDep = (g, pi, amt, n, made = 1) => g.emit({ t: 'dep', pi, d: { amt, n, made } });
-export const setFlag = (g, pi, k, v = true) => g.emit({ t: 'flag', pi, k, v });
-export const cash = (g, pi) => g.S.players[pi].cash;
-export const cur = (g) => g.S.order[g.S.turn];
+export const give = (g, tile, owner, level = 0, mortgaged = false, upgradePaid) =>
+  g.emit({ t: 'own', tile, owned: { owner, level, mortgaged, ...(upgradePaid === undefined ? {} : { upgradePaid }) } });
+export const seize = (g, tile) => g.emit({ t: 'own', tile, owned: null });
+export const setCash = (g, player, cash) => g.emit({ t: 'cash', player, delta: cash - g.S.players[player].cash });
+export const putAt = (g, player, tile) => g.emit({ t: 'move', player, to: tile, how: 'jump' });
+export const setDep = (g, player, principal, termRounds, placedRound = 1) => g.emit({ t: 'dep', player, deposit: { principal, termRounds, placedRound } });
+export const setFlag = (g, player, flag, active = true) => g.emit({ t: 'flag', player, flag, active });
+export const cash = (g, player) => g.S.players[player].cash;
+export const cur = (g) => g.S.turnOrder[g.S.turnIndex];
 
 // ---- Prompts ----
 export function asked(h, k) {
   const a = h.pending;
   assert(a, 'no question is open');
-  if (k !== undefined) assert.equal(a.p.k, k, `expected a ${k} question, got ${a.p.k}`);
+  if (k !== undefined) assert.equal(a.prompt.k, k, `expected a ${k} question, got ${a.prompt.k}`);
   return a;
 }
 
 // Answer whatever is open, whoever it is for.
 export async function answer(g, h, v) {
   const a = asked(h);
-  g.answer(a.to, a.id, v);
+  g.answer(a.player, a.id, v);
   await settle();
 }
 
@@ -92,22 +92,22 @@ export async function answer(g, h, v) {
 // (a command runs and the roll question is asked again, so `draw`/`goto` chain freely)
 export async function cmd(g, h, c) {
   const a = asked(h, 'roll');
-  g.answer(a.to, a.id, c);
+  g.answer(a.player, a.id, c);
   await settle();
 }
-export const draw = (g, h, v) => cmd(g, h, { c: 'draw', v }); // rig the next random draws (dice, card picks, coins)
-export const goto = (g, h, pi, i) => cmd(g, h, { c: 'goto', pi, i, land: true }); // jump to a tile and resolve it — the whole turn
+export const draw = (g, h, draws) => cmd(g, h, { c: 'draw', draws }); // rig the next random draws (dice, card picks, coins)
+export const goto = (g, h, player, tile) => cmd(g, h, { c: 'goto', player, tile, resolveLanding: true }); // jump to a tile and resolve it — the whole turn
 
 // Rig the dice, then roll for real: the player walks (pass effects apply) and lands.
 export async function roll(g, h, dice) {
   await draw(g, h, dice);
   const a = asked(h, 'roll');
-  g.answer(a.to, a.id, true);
+  g.answer(a.player, a.id, true);
   await settle();
 }
 
 // Burn the asked player's turn with no side effects: a visit to the Jail tile.
-export const idle = (g, h) => goto(g, h, h.pending.to, kindAt('jail'));
+export const idle = (g, h) => goto(g, h, h.pending.player, kindAt('jail'));
 
 // ---- Auto-answering ----
 // The default answers of a player who declines everything (mirrors the timeout fallback).
@@ -121,23 +121,23 @@ export function benign(p) {
       if (p.rule.k === 'raise') {
         let need = p.rule.need - p.rule.cash;
         const sel = [];
-        for (const x of [...p.items].sort((a, b) => (b.amt ?? 0) - (a.amt ?? 0))) { if (need <= 0) break; sel.push(x.i); need -= x.amt ?? 0; }
+        for (const x of [...p.items].sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))) { if (need <= 0) break; sel.push(x.index); need -= x.amount ?? 0; }
         return sel;
       }
-      return p.items.slice(0, 1).map((x) => x.i);
+      return p.items.slice(0, 1).map((x) => x.index);
     }
-    case 'casino': return p.view.stage === 'bet' ? { act: 'roll', bet: p.view.bet, num: 6 } : { act: 'cash' };
+    case 'casino': return p.view.stage === 'bet' ? { act: 'roll', bet: p.view.bet, pickedNumber: 6 } : { act: 'cash' };
     default: return false;
   }
 }
 // Every roll question answers itself with a jump to the Jail tile: deterministic turns with no side effects.
-export const idler = (p, to) => (p.k === 'roll' ? { c: 'goto', pi: to, i: kindAt('jail'), land: true } : benign(p));
+export const idler = (p, to) => (p.k === 'roll' ? { c: 'goto', player: to, tile: kindAt('jail'), resolveLanding: true } : benign(p));
 
 // Auto-answer until pred() holds (or the cap hits, which fails the test).
 export async function playUntil(g, h, pred, answerer = benign, limit = 400) {
   for (let k = 0; k < limit && !pred(); k++) {
     const a = h.pending;
-    if (a) g.answer(a.to, a.id, answerer(a.p, a.to));
+    if (a) g.answer(a.player, a.id, answerer(a.prompt, a.player));
     await settle();
   }
   assert(pred(), 'playUntil: condition not reached');

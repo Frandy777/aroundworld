@@ -49,7 +49,7 @@ Choose verification by the behavior affected, not just the filename (`game.ts` c
   - `start(n, { dev, settings, rig })` — boots a game and waits for the first ask; default rig makes turn order = seat order. `h.pending` is the open ask, `h.evs` the event log.
   - Setup via events: `give` / `seize`, `setCash`, `putAt`, `setDep`, `setFlag`; readers `cash` / `cur`.
   - Driving via the roll question's dev commands: `draw`, `idle`, `goto` (lands a tile as the whole turn), `roll(dice)` (walks for real, pass effects apply); prompts via `answer`, `asked`, `playUntil` with `benign` / `idler` answerers.
-- Drive games deterministically through these — never stub `Math.random` or `Date.now`. Assert on rule outcomes (`cash`, `own`, flags, `tile`) and relevant gameplay events, not on copy, log/toast text, or replay/transport details. Expected outcomes must come from the rule, not recompute the implementation under test.
+- Drive games deterministically through these — never stub `Math.random` or `Date.now`. Assert on rule outcomes (`cash`, `ownedByTile`, flags, `tile`) and relevant gameplay events, not on copy, log/toast text, or replay/transport details. Expected outcomes must come from the rule, not recompute the implementation under test.
 
 ## Scene Automation & Visual Testing
 
@@ -64,9 +64,9 @@ await window.__aw.ready; // fonts, lighting, optional autostart settled
 window.__aw.state(); // { view, look, hour, zoom, lod, target, elev, az, gamePaused, ... }
 await window.__aw.setView({ hd: true, hour: 0, tile: 1, zoom: 2.2, elev: 52, az: 0, ui: false });
 await window.__aw.strike(6, 28, 4.9); // launch & freeze missile; also step(dt), scrub(t), setLoop({ paused, scale })
-await window.__aw.setLot(28, { p: 0, lv: 3 }); // preview lot without a room (`{ p: -1, sign: false }` hides SALE); also rebuild(i), isolate(i | null)
+await window.__aw.setLot(28, { owner: 0, level: 3 }); // preview lot without a room (`{ owner: -1, sign: false }` hides SALE); also rebuild(i), isolate(i | null)
 await window.__aw.quickGame(3); window.__aw.pause(true); // dev room; pause(true) freezes server question clocks
-await window.__aw.cmd({ c: 'goto', pi: 0, i: 1, land: true }, { wait: 30000 }); // runs on ROLL DICE ({ wait } waits for it to open)
+await window.__aw.cmd({ c: 'goto', player: 0, tile: 1, resolveLanding: true }, { wait: 30000 }); // runs on ROLL DICE ({ wait } waits for it to open)
 await window.__aw.idle(); window.__aw.ui(); // event-driven HUD/card waits & state (no fixed sleeps)
 await window.__aw.click('SKIP'); // data-id, text/prefix, or selector on top modal/screen; also until(pred, ms)
 window.__aw.diag(); // where the page stands: view, me/turn, waiting, action, top card, pauses, visibility, viewport, narrow, ws
@@ -88,6 +88,11 @@ node scripts/shot-matrix.mjs --looks=pixel --hours=0,12,18 --vs --expect=same # 
 ## Style & Conventions
 
 - Keep code compact and direct; match local naming/helpers and `strict` / `noUnusedLocals` / `noUnusedParameters` / `verbatimModuleSyntax`.
+- **Naming**:
+  - Name fields, state cells, constants, and module/class variables so their role, domain type, and unit are clear without a decoder comment (`bankruptRound`, `principal`/`termRounds`/`placedRound`, `remainingMs`/`totalMs`, `dropSeatAt`, `idleDissolveAt`, `pongTimeout`, `activeAutoCard` — never `out`, `amt`/`n`/`made`, `ms`/`of`, `drop`, `idle`, `dead`, `shown` explained by `//`). When renaming an opaque identifier, delete the comment that only explained its name.
+  - Keep distinct index spaces unambiguous on shared, wire, and stored shapes: lobby seat (`seat`, `mySeat`) vs in-game player (`player`, `playerIndex`, `myPlayer`) vs turn cursor (`turnIndex` into `turnOrder`) vs board tile (`tile`). Never overload `me`, `turn`, `p`, or `i` across them.
+  - Encode units on durations/counts (`*Ms`, `*Rounds`) and `*At` on epoch-ms deadlines (`pausedAt`, `deadlineAt`, `expiresAt`). Numeric sentinels where `0` means "none/active" must name the stored quantity (`bankruptRound`), never read like a boolean (`out`).
+  - Tagged-union discriminants (`t`, `k`, `c`) and short local loop/math bindings (`x`, `y`, `i`, `dt`) may stay terse; exported/interface fields, wire/event/command payloads, class properties, and module state use full domain words.
 - Trailing `//` comments take a single natural space — never pad spaces to align columns or rewrap untouched lines.
-- Preserve explanatory (*why*) comments; do not overwrite user-tuned constants or style parameters unasked.
+- Preserve explanatory (*why*) comments (invariants, replay/hibernation/wire subtleties); never add or keep *what*-comments that restate an identifier, and do not overwrite user-tuned constants or style parameters unasked.
 - Git commits: concise single-line imperative subjects matching `git log --oneline`, without extra trailers unless requested.

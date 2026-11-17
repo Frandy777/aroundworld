@@ -49,9 +49,9 @@ export function Rich({ m }: { m: Msg }) {
   const S = state();
   return <>{m.map((s, k) => {
     if (typeof s === 'string') return s;
-    if ('p' in s) return <b key={k} style={{ color: hex(S.players[s.p].color) }}>{S.players[s.p].name}</b>;
-    if ('t' in s) { const name = <Named name={TILES[s.t].name} />; return s.b ? <b key={k}>{name}</b> : <Fragment key={k}>{name}</Fragment>; }
-    return <b key={k}>{s.b}</b>;
+    if ('player' in s) return <b key={k} style={{ color: hex(S.players[s.player].color) }}>{S.players[s.player].name}</b>;
+    if ('tile' in s) { const name = <Named name={TILES[s.tile].name} />; return s.bold ? <b key={k}>{name}</b> : <Fragment key={k}>{name}</Fragment>; }
+    return <b key={k}>{s.bold}</b>;
   })}</>;
 }
 
@@ -64,9 +64,9 @@ export function Blocks({ blocks }: { blocks: Block[] }) {
   const S = state();
   return <>{blocks.map((b, k) => {
     switch (b.k) {
-      case 'note': return <div className="note" key={k}><Rich m={b.m} /></div>;
-      case 'rows': return <Rows key={k} a={b.rows.map((r: Row): [ReactNode, ReactNode, string] => [<Rich m={r.l} />, r.tone ? <b className={r.tone}><Rich m={r.v} /></b> : <Rich m={r.v} />, r.sum ? 'sum' : ''])} />;
-      case 'face': return <div key={k} style={{ display: 'flex', justifyContent: 'center' }}><Face color={S.players[b.p].color} /></div>;
+      case 'note': return <div className="note" key={k}><Rich m={b.message} /></div>;
+      case 'rows': return <Rows key={k} a={b.rows.map((r: Row): [ReactNode, ReactNode, string] => [<Rich m={r.label} />, r.tone ? <b className={r.tone}><Rich m={r.value} /></b> : <Rich m={r.value} />, r.sum ? 'sum' : ''])} />;
+      case 'face': return <div key={k} style={{ display: 'flex', justifyContent: 'center' }}><Face color={S.players[b.player].color} /></div>;
     }
   })}</>;
 }

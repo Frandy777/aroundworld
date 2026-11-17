@@ -24,7 +24,7 @@ const JAIL = kindAt('jail'), GOJAIL = kindAt('gojail'), NEWS_T = kindAt('news');
 
 test('Transport: rent scales with companies held', async () => {
   const { g, h } = await start(2);
-  const [A, B] = g.S.order;
+  const [A, B] = g.S.turnOrder;
   give(g, CR, B);
   await goto(g, h, A, CR);
   assert.equal(cash(g, A), START_CASH - 500);
@@ -44,7 +44,7 @@ test('Transport: rent scales with companies held', async () => {
 
 test('Chokepoint: toll on pass and on stop, scaling with count', async () => {
   const { g, h } = await start(2);
-  const [A, B] = g.S.order;
+  const [A, B] = g.S.turnOrder;
   give(g, MAL, B);
   putAt(g, A, MAL - 1); // on Singapore
   await roll(g, h, [1, 1]); // passes Malacca, lands on Kuala Lumpur
@@ -68,7 +68,7 @@ test('Chokepoint: toll on pass and on stop, scaling with count', async () => {
 
 test('Oil: owner earns $400 passing their own tile — not stopping, not others passing', async () => {
   const { g, h } = await start(2);
-  const [A, B] = g.S.order;
+  const [A, B] = g.S.turnOrder;
   give(g, VENO, A);
   putAt(g, A, VENO - 1); // on Bogotá
   await roll(g, h, [1, 1]); // A passes its own oil, lands on Buenos Aires
@@ -89,59 +89,59 @@ test('Oil: owner earns $400 passing their own tile — not stopping, not others 
 
 test('Construction: the upgrade from empty land to Lv 1 is free', async () => {
   const { g, h } = await start(2);
-  const [A] = g.S.order;
+  const [A] = g.S.turnOrder;
   give(g, CSCEC, A);
   give(g, WEL, A, 0);
   await goto(g, h, A, WEL);
-  assert.equal(asked(h, 'deed').p.price, 0);
+  assert.equal(asked(h, 'deed').prompt.price, 0);
   await answer(g, h, true);
-  assert.equal(g.S.own[WEL].lv, 1);
-  assert.equal(g.S.own[WEL].paid, 0, 'a free upgrade adds no lot value');
+  assert.equal(g.S.ownedByTile[WEL].level, 1);
+  assert.equal(g.S.ownedByTile[WEL].upgradePaid, 0, 'a free upgrade adds no lot value');
   assert.equal(cash(g, A), START_CASH);
-  assert.equal(lotValue(TILES[WEL], g.S.own[WEL]), 1600, 'lot value counts price only');
+  assert.equal(lotValue(TILES[WEL], g.S.ownedByTile[WEL]), 1600, 'lot value counts price only');
 });
 
 test('without Construction the same upgrade costs its price', async () => {
   const { g, h } = await start(2);
-  const [A] = g.S.order;
+  const [A] = g.S.turnOrder;
   give(g, WEL, A, 0); // Wellington: upgrade $400
   await goto(g, h, A, WEL);
-  assert.equal(asked(h, 'deed').p.price, 400);
+  assert.equal(asked(h, 'deed').prompt.price, 400);
   await answer(g, h, true);
-  assert.equal(g.S.own[WEL].lv, 1);
-  assert.equal(g.S.own[WEL].paid, 400);
+  assert.equal(g.S.ownedByTile[WEL].level, 1);
+  assert.equal(g.S.ownedByTile[WEL].upgradePaid, 400);
   assert.equal(cash(g, A), START_CASH - 400);
 });
 
 test('Military Base: owner may pay $500 to lower any built city', async () => {
   const { g, h } = await start(2);
-  const [A, B] = g.S.order;
+  const [A, B] = g.S.turnOrder;
   give(g, WSB, A);
   give(g, SYD, B, 2); // paid assumed 2 × 650 = 1300
   await goto(g, h, A, WSB);
   const a = asked(h, 'pick');
-  assert.deepEqual(a.p.items.map((x) => x.i), [SYD], 'every built city is a target');
+  assert.deepEqual(a.prompt.items.map((x) => x.index), [SYD], 'every built city is a target');
   await answer(g, h, [SYD]);
-  assert.equal(g.S.own[SYD].lv, 1);
-  assert.equal(g.S.own[SYD].paid, 650, 'one upgrade is removed from the lot value');
+  assert.equal(g.S.ownedByTile[SYD].level, 1);
+  assert.equal(g.S.ownedByTile[SYD].upgradePaid, 650, 'one upgrade is removed from the lot value');
   assert.equal(cash(g, A), START_CASH - 500);
   assert(h.evs.some((e) => e.t === 'strike' && e.to === SYD));
 });
 
 test('Military Base: skipping the strike costs nothing', async () => {
   const { g, h } = await start(2);
-  const [A, B] = g.S.order;
+  const [A, B] = g.S.turnOrder;
   give(g, WSB, A);
   give(g, SYD, B, 2);
   await goto(g, h, A, WSB);
   await answer(g, h, null); // SKIP
-  assert.equal(g.S.own[SYD].lv, 2);
+  assert.equal(g.S.ownedByTile[SYD].level, 2);
   assert.equal(cash(g, A), START_CASH);
 });
 
 test('Media: owner earns $200 whenever anyone triggers News', async () => {
   const { g, h } = await start(2);
-  const [A, B] = g.S.order;
+  const [A, B] = g.S.turnOrder;
   give(g, BBC, B);
   await draw(g, h, [1, 1]); // first NEWS card (Lost Wallet), first amount ($20)
   await goto(g, h, A, NEWS_T);
@@ -151,7 +151,7 @@ test('Media: owner earns $200 whenever anyone triggers News', async () => {
 
 test('Media: the owner may discard their own News and draw again', async () => {
   const { g, h } = await start(2);
-  const [A] = g.S.order;
+  const [A] = g.S.turnOrder;
   give(g, BBC, A);
   await draw(g, h, [1, 1, 5, 1]); // Lost Wallet ($20) → redrawn as Insurance Adjustment ($30)
   await goto(g, h, A, NEWS_T);
@@ -162,7 +162,7 @@ test('Media: the owner may discard their own News and draw again', async () => {
 
 test("Devil's Island: owner earns $700 whenever anyone is jailed", async () => {
   const { g, h } = await start(2);
-  const [A, B] = g.S.order;
+  const [A, B] = g.S.turnOrder;
   give(g, DEVIL, B);
   await goto(g, h, A, GOJAIL);
   assert.equal(g.S.players[A].jail, true);
@@ -172,7 +172,7 @@ test("Devil's Island: owner earns $700 whenever anyone is jailed", async () => {
 
 test("Devil's Island: a jailed owner may pay $700 bail and skip the stay", async () => {
   const { g, h } = await start(2);
-  const [A] = g.S.order;
+  const [A] = g.S.turnOrder;
   give(g, DEVIL, A);
   await goto(g, h, A, GOJAIL);
   asked(h, 'confirm');
@@ -184,7 +184,7 @@ test("Devil's Island: a jailed owner may pay $700 bail and skip the stay", async
 
 test("Devil's Island: declining bail jails the owner — and pays them nothing", async () => {
   const { g, h } = await start(2);
-  const [A] = g.S.order;
+  const [A] = g.S.turnOrder;
   give(g, DEVIL, A);
   await goto(g, h, A, GOJAIL);
   await answer(g, h, false); // GO TO JAIL

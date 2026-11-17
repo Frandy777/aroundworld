@@ -20,7 +20,7 @@ export const session = cell<{ view: View; room: RoomInfo | null }>({ view: 'titl
 // subscribe, so what reads it only changes when something else happens to render it. ----
 export const G = {
   S: null as GameState | null,
-  me: -1, // my player index
+  myPlayer: -1,
 };
 const version = cell(0);
 export const bump = () => version.set(version.get() + 1);
@@ -28,23 +28,23 @@ export const useGame = () => { useCell(version); return G.S as GameState; };
 export const state = () => G.S as GameState;
 
 // A player's `stats`, kept until ownership or cash changes (`bumpAssets`): a card draws again every frame while its cash rolls
-let tallies: ReturnType<typeof stats>[] = [];
-export const statsOf = (i: number) => (tallies[i] ??= stats(state(), i));
-export const bumpAssets = () => { tallies = []; bump(); };
+let cachedPlayerStats: ReturnType<typeof stats>[] = [];
+export const statsOf = (i: number) => (cachedPlayerStats[i] ??= stats(state(), i));
+export const bumpAssets = () => { cachedPlayerStats = []; bump(); };
 
 // ---- The rest of the screen: a cell each, so a change wakes only the parts that show it, not everything that shows the game ----
 export type Tab = 'tile' | 'assets' | 'log';
-export interface Button { label: string; click(): void; kbd?: boolean; reply?(v: Answer): void } // reply: the question behind the button takes other answers too (the roll question: the dev panel's commands)
-export const hudLive = cell(false); // the HUD is up (the turn order is settled)
+export interface Button { label: string; click(): void; spaceShortcut?: boolean; submitAnswer?(value: Answer): void } // submitAnswer: the question behind the button takes other answers too (the roll question: the dev panel's commands)
+export const hudLive = cell(false); // true once the turn order is settled
 export const stageOnly = cell(false); // dev: hide the screen's chrome so the 3D board stands alone
-export const selectedTile = cell(-1); // the tile in the side panel
-export const viewedPlayer = cell(-1); // whose assets the side panel shows
-export const activeTab = cell<Tab>('tile'); // which pane
-export const lastRoll = cell<[number, number] | null>(null); // the last roll, in the action bar
-export const actionBtn = cell<Button | null>(null); // the one button in the action bar
-export const waitingFor = cell(-1); // the player the game is waiting for
+export const selectedTile = cell(-1);
+export const viewedPlayer = cell(-1);
+export const activeTab = cell<Tab>('tile');
+export const lastRoll = cell<[number, number] | null>(null);
+export const actionBtn = cell<Button | null>(null);
+export const waitingFor = cell(-1);
 export const paused = cell(false); // dev: the room froze its question clocks (a `paused` event) — gauges and card timers stand still, the game still takes answers
-export const countdown = cell<{ pi: number; ms: number; left: number; end: number } | null>(null); // the player on the clock (mine too): the time the question gave, what was left as the gauge went up, and when it runs out by this page's clock (a new `end` is a new gauge)
+export const countdown = cell<{ player: number; totalMs: number; remainingMs: number; expiresAt: number } | null>(null);
 
 // ---- Preferences: this client's own, kept in localStorage ----
 const FOCUS_KEY = 'autoFocus';
@@ -65,7 +65,7 @@ export const fullscreen: Cell<boolean> = {
 };
 
 // ---- Toasts and floating numbers: they remove themselves ----
-export interface Toast { id: number; m: Msg; tone: Tone }
+export interface Toast { id: number; message: Msg; tone: Tone }
 export interface Float { id: number; x: number; y: number; text: string; cls: string }
 export const toasts = cell<Toast[]>([]);
 export const floats = cell<Float[]>([]);
@@ -74,7 +74,7 @@ const expire = <T extends { id: number }>(c: Cell<T[]>, item: T, ms: number) => 
   c.set([...c.get(), item]);
   setTimeout(() => c.set(c.get().filter((x) => x.id !== item.id)), ms);
 };
-export const toast = (m: Msg | string, tone: Tone = '') => expire(toasts, { id: seq++, m: typeof m === 'string' ? [m] : m, tone }, 5000);
+export const toast = (m: Msg | string, tone: Tone = '') => expire(toasts, { id: seq++, message: typeof m === 'string' ? [m] : m, tone }, 5000);
 export const floatText = (x: number, y: number, text: string, cls = '') => expire(floats, { id: seq++, x: Math.round(x), y: Math.round(y), text, cls }, 1500);
 // The cash on each player's card, put here by the card itself (a ref): what floats numbers over a card finds it by player, without knowing the HUD's markup
 export const cashEls: (HTMLElement | null)[] = [];
@@ -95,8 +95,7 @@ export function openCard<T = void>(render: (close: (v: T) => void) => ReactNode)
   return { key, done, close };
 }
 export const clearCards = () => cards.set([]);
-export const peeking = cell(false); // the cards are set aside, to look at the board and the panels while a question stands (see Card)
-cards.sub(() => peeking.set(false)); // a card that comes or goes brings them back
+export const cardsSetAside = cell(false); // to look at the board and the panels while a question stands (see Card)
+cards.sub(() => cardsSetAside.set(false)); // a card that comes or goes brings them back
 
-// The tile under the pointer
-export const tip = cell<{ i: number; x: number; y: number } | null>(null);
+export const hoveredTileTip = cell<{ tile: number; x: number; y: number } | null>(null);

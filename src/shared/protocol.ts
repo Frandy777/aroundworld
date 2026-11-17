@@ -2,33 +2,32 @@ import type { Ev, GameState, Settings } from './types';
 
 export const NAME_MAX = 10;
 export const CODE_RE = /^\d{6}$/;
-export const PID_RE = /^[\w-]{8,64}$/; // a player's id (the client makes a UUID)
+export const PLAYER_ID_RE = /^[\w-]{8,64}$/;
 export const ROUNDS_MIN = 5;
 export const ROUNDS_MAX = 100;
 export const DEFAULT_SETTINGS: Settings = { mode: 'limited', rounds: 30 };
-export const READ = 20_000; // ms a card with nothing to decide stays up before it closes itself
+export const AUTO_CLOSE_MS = 20_000;
 
-export interface SeatInfo { seat: number; name: string; online: boolean; host: boolean; bot: boolean; pi: number } // seat picks the colour; pi is the player index once the game runs, else -1
-export interface RoomInfo { code: string; seats: SeatInfo[]; settings: Settings; started: boolean; me: number; dev: boolean } // me: the receiver's seat; dev: the host may seat bots
+export interface SeatInfo { seat: number; name: string; online: boolean; host: boolean; bot: boolean; playerIndex: number } // seat picks the colour; playerIndex is -1 before the game runs
+export interface RoomInfo { code: string; seats: SeatInfo[]; settings: Settings; started: boolean; mySeat: number; dev: boolean } // dev: the host may seat bots
 export type Fail = 'no-room' | 'full' | 'started' | 'busy';
 
 export type C2S =
   | { t: 'name'; name: string }
-  | { t: 'settings'; s: Settings }
+  | { t: 'settings'; settings: Settings }
   | { t: 'start' }
   | { t: 'bot'; seat: number } // dev room, host: put a bot on an empty seat, or send away the one on it
-  | { t: 'answer'; id: number; v: unknown }
+  | { t: 'answer'; id: number; value: unknown }
   | { t: 'bankrupt' }
-  | { t: 'pause'; on: boolean } // dev room, host: freeze every question's clock (the game still takes real answers)
+  | { t: 'pause'; paused: boolean } // dev room, host: freeze every question's clock (the game still takes real answers)
   | { t: 'again' } // after the game: back to the lobby
   | { t: 'ping' };
 
 export type S2C =
   | { t: 'room'; room: RoomInfo }
-  | { t: 'game'; me: number; state: GameState; ask: Ev | null; paused?: boolean } // a full snapshot (join, reconnect): `me` is the receiver's player index; `paused` is a dev room's frozen clocks
+  | { t: 'game'; myPlayer: number; state: GameState; openAsk: Ev | null; paused?: boolean } // a full snapshot (join, reconnect); `paused` is a dev room's frozen clocks
   | { t: 'ev'; ev: Ev[] }
-  | { t: 'fail'; why: Fail };
+  | { t: 'fail'; reason: Fail };
 
-// WebSocket close codes
-export const LEAVE = 4001; // the client chose to go
-export const REPLACED = 4002; // the same player connected again elsewhere
+export const WS_CLOSE_LEAVE = 4001;
+export const WS_CLOSE_REPLACED = 4002;

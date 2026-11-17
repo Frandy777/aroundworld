@@ -11,7 +11,7 @@ import { buildLevels, buildProps, building, flag, modelKey, modelOwner, setModel
 import { MISSILE_NAME } from './models/missile';
 
 const VACANT = 0xb9b2a0;
-export interface CityLamp { tile: number; g: THREE.Group; lv: number }
+export interface CityLamp { tile: number; g: THREE.Group; level: number }
 export const cityLamps: CityLamp[] = [];
 const tileGroups: THREE.Group[] = [];
 export const lotVisible = (i: number) => tileGroups[i]?.visible ?? true;
@@ -77,7 +77,7 @@ export function createBoard() {
     root.add(g);
     if (pad) { sign(bld); bake(bld); }
     tileGroups[t.i] = g;
-    const lamp = t.type === 'city' ? (cityLamps.push({ tile: t.i, g, lv: 0 }), cityLamps[cityLamps.length - 1]) : null;
+    const lamp = t.type === 'city' ? (cityLamps.push({ tile: t.i, g, level: 0 }), cityLamps[cityLamps.length - 1]) : null;
     return { g, slab, card, letters, props, rocket, side, tint: [ground, card.material], pad, bld, lamp, key: '', pop: 1, redo: () => {} };
   });
   const liveOf = (g: THREE.Group) => { const l: THREE.Object3D[] = []; g.traverse((c) => c.userData.tick && l.push(c)); return l; };
@@ -85,26 +85,26 @@ export function createBoard() {
   type Plot = (typeof tiles)[number];
   const squash = (o: Plot) => { const e = 1 + 2.70158 * (o.pop - 1) ** 3 + 1.70158 * (o.pop - 1) ** 2; o.bld.scale.set(1 + (1 - e) * 0.3, Math.max(e, 0.01), 1 + (1 - e) * 0.3); };
 
-  function setOwner(i: number, st: { color: number; lv: number; m: boolean } | null, opts?: { sign?: boolean }) {
+  function setOwner(i: number, st: { color: number; level: number; mortgaged: boolean } | null, opts?: { sign?: boolean }) {
     const t = TILES[i], o = tiles[i];
     if (t.type === 'public') return;
     o.redo = () => setOwner(i, st, opts);
-    const key = st ? `${st.color}|${st.lv}` : '';
+    const key = st ? `${st.color}|${st.level}` : '';
     if (st && key !== o.key) { o.pop = 0; squash(o); }
     o.key = key;
     freeBaked(o.bld);
     o.bld.clear();
-    o.tint.forEach((m) => m.color.set(st?.m ? 0x808080 : 0xffffff));
-    o.letters.material = inkMat(codeOf(t)[1], !!st?.m);
-    const col = st?.m ? 0x555555 : st?.color ?? VACANT;
+    o.tint.forEach((m) => m.color.set(st?.mortgaged ? 0x808080 : 0xffffff));
+    o.letters.material = inkMat(codeOf(t)[1], !!st?.mortgaged);
+    const col = st?.mortgaged ? 0x555555 : st?.color ?? VACANT;
     o.pad!.material = padMats(col);
-    const lit = st && !st.m ? st.color : null;
+    const lit = st && !st.mortgaged ? st.color : null;
     o.g.userData.lit = lit !== null; modelOwner(t, lit);
     padMats(col).forEach((m) => (backlitOf(m).value = lit !== null ? THROUGH.plotHd : 0));
     if (!st) { if (opts?.sign !== false) sign(o.bld); }
-    else if (t.type === 'special') buildLevels(o.bld, t, st.lv, st.m);
-    else if (t.type === 'city') st.lv ? building(o.bld, st.lv, st.m ? 0x8c8c8c : new THREE.Color(t.color).lerp(new THREE.Color(0xffffff), 0.6).getHex(), col, st.m) : flag(o.bld, st.m ? 0x666666 : st.color);
-    if (o.lamp) o.lamp.lv = st && !st.m ? st.lv : 0;
+    else if (t.type === 'special') buildLevels(o.bld, t, st.level, st.mortgaged);
+    else if (t.type === 'city') st.level ? building(o.bld, st.level, st.mortgaged ? 0x8c8c8c : new THREE.Color(t.color).lerp(new THREE.Color(0xffffff), 0.6).getHex(), col, st.mortgaged) : flag(o.bld, st.mortgaged ? 0x666666 : st.color);
+    if (o.lamp) o.lamp.level = st && !st.mortgaged ? st.level : 0;
     bake(o.bld); live[i] = liveOf(o.g);
     dirtyShadow();
   }

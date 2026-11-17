@@ -6,7 +6,7 @@
 import { kindAt } from '../shared/data';
 import type { C2S } from '../shared/protocol';
 import type { Cmd } from '../shared/types';
-import { dismissShown } from './director';
+import { dismissAutoCard } from './director';
 import { loop } from './stage';
 import { G, actionBtn, cards, paused, waitingFor } from './store';
 
@@ -21,22 +21,22 @@ export interface SceneDrv {
   ui(): unknown;
 }
 
-const me = () => G.me;
+const myPlayer = () => G.myPlayer;
 /** A live player that is not me (at game start, any of the bots). */
 const other = () => {
-  const p = G.S!.order.find((x) => x !== me() && !G.S!.players[x].out);
+  const p = G.S!.turnOrder.find((x) => x !== myPlayer() && !G.S!.players[x].bankruptRound);
   if (p === undefined) throw new Error('scenario: no other player alive');
   return p;
 };
 /** My turn's roll question. Bots ahead of me in the order take whole turns first; their cards are waved past, not waited out. */
 const myTurn = (d: SceneDrv) =>
   d.until(() => {
-    dismissShown();
-    return !!actionBtn.get()?.reply;
+    dismissAutoCard();
+    return !!actionBtn.get()?.submitAnswer;
   }, 120_000);
 /** Freeze the room's question clocks (not the render loop: the scene stays alive, just nothing times out). */
 const freeze = (d: SceneDrv) => {
-  d.send({ t: 'pause', on: true });
+  d.send({ t: 'pause', paused: true });
   return d.until(() => paused.get(), 10_000);
 };
 /** A card is up; resolves with the screen's own description of it. */
@@ -60,8 +60,8 @@ export const SCENARIOS: Record<string, { hint: string; run(d: SceneDrv): Promise
     hint: 'BUY card up for an unowned Wellington; the deed question is frozen',
     async run(d) {
       await open(d);
-      await dev(d, { c: 'own', i: 1, o: null });
-      await dev(d, { c: 'goto', pi: me(), i: 1, land: true });
+      await dev(d, { c: 'own', tile: 1, owned: null });
+      await dev(d, { c: 'goto', player: myPlayer(), tile: 1, resolveLanding: true });
       return card(d);
     },
   },
@@ -70,8 +70,8 @@ export const SCENARIOS: Record<string, { hint: string; run(d: SceneDrv): Promise
     hint: 'NEWS card (Lost Wallet) up; the room is frozen so it never reads itself out',
     async run(d) {
       await open(d);
-      await dev(d, { c: 'draw', v: [1, 3] });
-      await dev(d, { c: 'goto', pi: me(), i: kindAt('news'), land: true });
+      await dev(d, { c: 'draw', draws: [1, 3] });
+      await dev(d, { c: 'goto', player: myPlayer(), tile: kindAt('news'), resolveLanding: true });
       return card(d);
     },
   },
@@ -80,10 +80,10 @@ export const SCENARIOS: Record<string, { hint: string; run(d: SceneDrv): Promise
     hint: 'MORTGAGE TO PAY card up (owe $3,000 rent, $1,000 in hand, three cities to mortgage); frozen',
     async run(d) {
       await open(d);
-      await dev(d, { c: 'own', i: 18, o: { p: other(), lv: 3, m: false } }); // Shanghai Lv3: rent is the price, $3,000
-      for (const i of [1, 2, 3]) await dev(d, { c: 'own', i, o: { p: me(), lv: 0, m: false } });
-      await dev(d, { c: 'cash', pi: me(), v: 1000 });
-      await dev(d, { c: 'goto', pi: me(), i: 18, land: true });
+      await dev(d, { c: 'own', tile: 18, owned: { owner: other(), level: 3, mortgaged: false } }); // Shanghai Lv3: rent is the price, $3,000
+      for (const tile of [1, 2, 3]) await dev(d, { c: 'own', tile, owned: { owner: myPlayer(), level: 0, mortgaged: false } });
+      await dev(d, { c: 'cash', player: myPlayer(), cash: 1000 });
+      await dev(d, { c: 'goto', player: myPlayer(), tile: 18, resolveLanding: true });
       return card(d);
     },
   },
@@ -92,7 +92,7 @@ export const SCENARIOS: Record<string, { hint: string; run(d: SceneDrv): Promise
     hint: 'LUCKY CASINO card at the bet stage; frozen with the question open',
     async run(d) {
       await open(d);
-      await dev(d, { c: 'goto', pi: me(), i: kindAt('casino'), land: true });
+      await dev(d, { c: 'goto', player: myPlayer(), tile: kindAt('casino'), resolveLanding: true });
       return card(d);
     },
   },
@@ -104,9 +104,9 @@ export const SCENARIOS: Record<string, { hint: string; run(d: SceneDrv): Promise
       const err = await d.quickGame(3);
       if (err) throw new Error(`scenario: no room: ${err}`);
       await myTurn(d);
-      await dev(d, { c: 'own', i: 44, o: { p: other(), lv: 2, m: false } }); // London Lv2: something to watch them fight over
+      await dev(d, { c: 'own', tile: 44, owned: { owner: other(), level: 2, mortgaged: false } }); // London Lv2: something to watch them fight over
       d.send({ t: 'bankrupt' });
-      await d.until(() => !!G.S?.players[me()]?.out, 15_000);
+      await d.until(() => !!G.S?.players[myPlayer()]?.bankruptRound, 15_000);
       await freeze(d);
       await d.until(() => waitingFor.get() >= 0 || !!G.S?.over, 60_000); // the game goes on without me: a question to a bot opens and stays
       return d.ui();
