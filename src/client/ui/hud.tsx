@@ -4,7 +4,7 @@ import { maxRounds } from '../../shared/state';
 import { leaveRoom } from '../controller';
 import { send } from '../net';
 import { CAM, focusTok, lookAtTile } from '../stage';
-import { G, actionBtn, activeTab, cards, cardsSetAside, cashEls, countdown, floats, fullscreen, hd2d, hoveredTileTip, hudLive, lastRoll, paused, selectedTile, session, state, statsOf, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
+import { G, actionBtn, activeTab, cards, cardsSetAside, cashEls, countdown, floats, fullscreen, hd2d, hoveredTileTip, hudLive, lastRoll, paused, selectedTile, session, statsOf, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
 import { Die, Face, Flag, FullBtn, Icon, Named, Pips, Rich, hex, money, tileHead } from './bits';
 import { openMenu, openRules } from './open';
 import { TileBody } from './tile';
@@ -133,13 +133,20 @@ function Side() {
 }
 
 function Actions() {
-  const chip = useCell(lastRoll), btn = useCell(actionBtn), aside = useCell(cardsSetAside), waiting = useCell(waitingFor), who = waiting >= 0 ? state().players[waiting] : null;
+  const S = useGame();
+  const chip = useCell(lastRoll), btn = useCell(actionBtn), aside = useCell(cardsSetAside), waiting = useCell(waitingFor), who = waiting >= 0 ? S.players[waiting] : null;
+  const me = G.myPlayer, spectating = me >= 0 && !S.over && !!S.players[me].bankruptRound;
   return (
     <footer id="actions">
       {chip && <div className="dice-chip box"><Die v={chip[0]} /><Die v={chip[1]} /><span>= {chip[0] + chip[1]}</span></div>}
       {btn && <button className="btn big primary" onClick={btn.click}>{btn.label}{btn.spaceShortcut && <> <kbd>SPACE</kbd></>}</button>}
       {aside && <button className="btn big primary" onClick={() => cardsSetAside.set(false)}>SHOW CARD <kbd>SPACE</kbd></button>}
-      {who && <div className="dice-chip box">WAITING FOR <b style={{ color: hex(who.color) }}>{who.name}</b></div>}
+      {(spectating || who) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+          {spectating && <div className="dice-chip box">OUT IN ROUND {S.players[me].bankruptRound} · WATCHING</div>}
+          {who && <div className="dice-chip box">WAITING FOR <b style={{ color: hex(who.color) }}>{who.name}</b></div>}
+        </div>
+      )}
     </footer>
   );
 }

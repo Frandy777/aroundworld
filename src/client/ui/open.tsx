@@ -35,18 +35,29 @@ const openConfirm = (title: string, text: string, yes: string) => openCard<boole
   </>}><div className="note">{text}</div></Card>
 )).done;
 
-export const openMenu = (room: string, quit: () => void, bankrupt?: () => void) => openCard((close) => (
-  <Card title="MENU" sub={`Room ${room}`} dismiss="resume" foot={<>
-    {bankrupt && <Btn id="bankrupt" cls="danger" onClick={() => void openConfirm('GO BANKRUPT?', 'Everything you own goes back to the bank and you are out of the game. You stay in the room and can keep watching.', 'GO BANKRUPT').then((yes) => { if (yes) { close(); bankrupt(); } })}>GO BANKRUPT</Btn>}
-    <Btn id="quit" cls="danger" onClick={() => { close(); quit(); }}>QUIT TO TITLE</Btn>
-    <Btn id="rules" onClick={() => void openRules()}>HOW TO PLAY</Btn>
-    <Btn id="resume" cls="primary" onClick={() => close()}>RESUME</Btn>
-  </>}>
-    <Check label="Auto-focus on current player" on={autoFocus} />
-    <Check label="HD-2D lighting" on={hd2d} />
-    {document.fullscreenEnabled && <Check label="Fullscreen" on={fullscreen} />}
-  </Card>
-));
+const quitConfirm = 'You forfeit the game. Everything you own goes back to the bank and you can\'t come back to this room.';
+
+export const openMenu = (room: string, quit: () => void, bankrupt?: () => void) => openCard((close) => {
+  const onQuit = bankrupt ? () => void openConfirm('QUIT TO TITLE?', quitConfirm, 'QUIT TO TITLE').then((yes) => { if (yes) { close(); quit(); } }) : () => { close(); quit(); };
+  return (
+    <Card title="MENU" sub={`Room ${room}`} dismiss="resume" foot={<>
+      {!bankrupt && <Btn id="quit" onClick={onQuit}>QUIT TO TITLE</Btn>}
+      <Btn id="rules" onClick={() => void openRules()}>HOW TO PLAY</Btn>
+      <Btn id="resume" cls="primary" onClick={() => close()}>RESUME</Btn>
+    </>}>
+      <Check label="Auto-focus on current player" on={autoFocus} />
+      <Check label="HD-2D lighting" on={hd2d} />
+      {document.fullscreenEnabled && <Check label="Fullscreen" on={fullscreen} />}
+      {bankrupt && <>
+        <div className="grp">FORFEIT</div>
+        <div className="pl-row">
+          <Btn id="bankrupt" cls="danger" onClick={() => void openConfirm('GO BANKRUPT?', 'Everything you own goes back to the bank and you are out of the game. You stay in the room and can keep watching.', 'GO BANKRUPT').then((yes) => { if (yes) { close(); bankrupt(); } })}>GO BANKRUPT</Btn>
+          <Btn id="quit" cls="danger" onClick={onQuit}>QUIT TO TITLE</Btn>
+        </div>
+      </>}
+    </Card>
+  );
+});
 
 export function openCasino(view: CasinoView, ask: { id: number; mine: boolean } | null) {
   const ctl: Ctl = { view: cell(view), ask: cell(ask) };

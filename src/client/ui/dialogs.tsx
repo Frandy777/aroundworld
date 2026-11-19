@@ -251,8 +251,10 @@ export function OrderCard({ players, passes, order, close }: { players: Player[]
 export function ResultsCard({ rank, close }: { rank: RankRow[]; close(v: 'menu' | 'again'): void }) {
   const S = state(), rows = rank.map((r) => ({ ...S.players[r.player], netWorth: r.netWorth }));
   const pod = [1, 0, 2].filter((k) => rows[k]).map((k) => ({ r: rows[k], k }));
+  const myRank = rank.findIndex((r) => r.player === G.myPlayer), mine = rows[myRank];
+  const sub = !mine ? `${rows.length} players` : mine.bankruptRound ? `You went out in round ${mine.bankruptRound}` : `You finished ${['1ST', '2ND', '3RD', '4TH'][myRank]} of ${rows.length}`;
   return (
-    <Card title="GAME OVER" sub={`${rows.length} players`} cls="wide" tone={0xb8860b} foot={<>
+    <Card title={myRank === 0 ? 'YOU WIN!' : 'GAME OVER'} sub={sub} cls="wide" tone={0xb8860b} foot={<>
       <Btn id="menu" onClick={() => close('menu')}>MAIN MENU</Btn>
       <Btn id="again" cls="primary" onClick={() => close('again')}>PLAY AGAIN</Btn>
     </>}>
@@ -264,8 +266,8 @@ export function ResultsCard({ rank, close }: { rank: RankRow[]; close(v: 'menu' 
         </div>
       ))}</div>
       <div className="list">{rows.map((r, k) => (
-        <div className="item" style={{ cursor: 'default' }} key={k}>
-          <b>#{k + 1}</b><Face color={r.color} /><span className="grow">{r.name}</span>
+        <div className={`item${k === myRank ? ' sel' : ''}`} style={{ cursor: 'default' }} key={k}>
+          <b>#{k + 1}</b><Face color={r.color} /><span className="grow">{r.name}{k === myRank && <span className="badge gold">YOU</span>}</span>
           {r.bankruptRound ? <span className="pill red">BANKRUPT R{r.bankruptRound}</span> : <b className="gold">{money(r.netWorth)}</b>}
         </div>
       ))}</div>
@@ -309,6 +311,7 @@ export function CasinoCard({ ctl, close }: { ctl: Ctl; close(): void }) {
   const done = !rolling && shown === v.rolls.length;
   const last = shown ? v.rolls[shown - 1] : null, won = v.rolls.slice(0, shown).reduce((s, r) => s + r[2], 0), stake = v.stage === 'bet' || v.stage === 'again' ? bet : v.bet;
   const hits = last ? (last[0] === last[4] ? 1 : 0) + (last[1] === last[4] ? 1 : 0) : 0;
+  const rollNet = last ? last[2] - last[3] : 0;
   const betting = (v.stage === 'bet' && !shown) || (v.stage === 'again' && done);
   const finished = done && v.stage === 'end', me = state().turnOrder[state().turnIndex] === G.myPlayer;
   useAuto(finished ? AUTO_CLOSE_MS : 0, close);
@@ -352,7 +355,7 @@ export function CasinoCard({ ctl, close }: { ctl: Ctl; close(): void }) {
             : hits === 1 ? <>One {last[4]}: <span className="good">+{money(last[2])}</span></>
             : <span className="bad">No {last[4]}!</span>)
           : finished && v.jailed ? <span className="bad">Same pair twice! Straight to jail!</span>
-          : <>Total {last[0] + last[1]}: <span className="good">+{money(last[2])}</span></>}
+          : <>Total {last[0] + last[1]}: <span className={rollNet > 0 ? 'good' : rollNet < 0 ? 'bad' : ''}>{sgn(rollNet)}</span></>}
       </div>
       {(sent || shown > 0 || v.stage !== 'bet') && (
         <div className="rows">{tally.map(([k, n]) => <div className={`row${k === 'Net' ? ' sum' : ''}`} key={k}><span>{k}</span><b className={n > 0 ? 'good' : n < 0 ? 'bad' : ''}>{sgn(n)}</b></div>)}</div>
