@@ -155,7 +155,7 @@ button, [data-tile], .pcard, .item { cursor: var(--cur-hand); }
 }
 
 #narrow { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 14px; background: var(--dither) 0 0 / 4px 4px, var(--ink); }
-@media (width >= calc(348px + 110vh)) and (height >= 760px) {
+@media (width >= 1280px) and (height >= 660px) {
   :root { --cr: calc(var(--col) + 2 * var(--m)); }
   #narrow { display: none; }
 }
