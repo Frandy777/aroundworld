@@ -18,9 +18,10 @@ const PENTATONIC = [523.25, 587.33, 659.25, 783.99, 880, 1046.5, 1174.66, 1318.5
 const activeStops = new Set<() => void>();
 const lastPlayedAt = new Map<string, number>();
 
-let ctx: AudioContext | null = null;
-let masterGain: GainNode | null = null;
-let noiseBuf: AudioBuffer | null = null;
+const kept = (import.meta.hot?.data ?? {}) as { ctx?: AudioContext; masterGain?: GainNode; noiseBuf?: AudioBuffer };
+let ctx: AudioContext | null = kept.ctx ?? null;
+let masterGain: GainNode | null = kept.masterGain ?? null;
+let noiseBuf: AudioBuffer | null = kept.noiseBuf ?? null;
 let hopStepIndex = 0;
 let suppressCardSound = false;
 
@@ -41,11 +42,11 @@ function makeNoiseBuffer(audioCtx: BaseAudioContext) {
 }
 
 function ensureContext(): AudioContext | null {
-  if (ctx) return ctx;
+  if (ctx && ctx.state !== 'closed') return ctx;
   const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!Ctor) return null;
-  ctx = new Ctor();
-  masterGain = ctx.createGain();
+  ctx = kept.ctx = new Ctor();
+  masterGain = kept.masterGain = ctx.createGain();
   masterGain.gain.value = effectiveGain();
   const comp = ctx.createDynamicsCompressor();
   comp.threshold.value = -10;
@@ -55,12 +56,12 @@ function ensureContext(): AudioContext | null {
   comp.release.value = 0.12;
   masterGain.connect(comp);
   comp.connect(ctx.destination);
-  noiseBuf = makeNoiseBuffer(ctx);
+  noiseBuf = kept.noiseBuf = makeNoiseBuffer(ctx);
   return ctx;
 }
 
 function syncMasterGain() {
-  if (!ctx || !masterGain) return;
+  if (!ctx || !masterGain || ctx.state === 'closed') return;
   masterGain.gain.setTargetAtTime(effectiveGain(), ctx.currentTime, 0.015);
 }
 
@@ -90,25 +91,42 @@ function panOf(at?: THREE.Vector3 | number): number {
   return Number.isFinite(fx) ? clamp((fx - 0.5) * 1.1, -0.55, 0.55) : 0;
 }
 
-function liveGraph(pan = 0, bypassPause = false): Graph | null {
-  if (gated(bypassPause)) return null;
-  const c = ensureContext();
-  if (!c || !masterGain || !noiseBuf || c.state !== 'running') return null;
-  let out: AudioNode = masterGain;
+function buildGraph(c: AudioContext, pan: number): Graph {
+  let out: AudioNode = masterGain!;
   if (pan && typeof c.createStereoPanner === 'function') {
     const panner = c.createStereoPanner();
     panner.pan.value = clamp(pan, -0.6, 0.6);
-    panner.connect(masterGain);
+    panner.connect(masterGain!);
     out = panner;
   }
   return {
     ctx: c,
     out,
-    noise: noiseBuf,
+    noise: noiseBuf!,
     scale: 1 / Math.sqrt(Math.max(1, pace.speed)),
     now: c.currentTime,
     track: (stop) => activeStops.add(stop),
   };
+}
+
+function liveGraph(pan = 0, bypassPause = false): Graph | null {
+  if (gated(bypassPause)) return null;
+  const c = ensureContext();
+  if (!c || !masterGain || !noiseBuf || c.state !== 'running') return null;
+  return buildGraph(c, pan);
+}
+
+function playWithGraph(pan: number, bypassPause: boolean, fn: (g: Graph) => void) {
+  if (gated(bypassPause)) return;
+  const c = ensureContext();
+  if (!c || !masterGain || !noiseBuf) return;
+  if (c.state === 'running') {
+    fn(buildGraph(c, pan));
+  } else if (c.state === 'suspended') {
+    void c.resume().then(() => {
+      if (c.state === 'running' && !gated(bypassPause)) fn(buildGraph(c, pan));
+    }).catch(() => {});
+  }
 }
 
 export function stopActiveSounds() {
@@ -500,118 +518,96 @@ function synthGameOver(g: Graph, won: boolean) {
 // ---- Public trigger API ----
 export function playUiClick() {
   if (!cooled('uiClick', 30)) return;
-  const g = liveGraph(0, true);
-  if (g) synthUiClick(g);
+  playWithGraph(0, true, synthUiClick);
 }
 
 export function playUiPrimary() {
   if (!cooled('uiPrimary', 40)) return;
-  const g = liveGraph(0, true);
-  if (g) synthUiPrimary(g);
+  playWithGraph(0, true, synthUiPrimary);
 }
 
 export function playUiDanger() {
   if (!cooled('uiDanger', 40)) return;
-  const g = liveGraph(0, true);
-  if (g) synthUiDanger(g);
+  playWithGraph(0, true, synthUiDanger);
 }
 
 export function playUiStep(up: boolean) {
   if (!cooled('uiStep', 28)) return;
-  const g = liveGraph(0, true);
-  if (g) synthUiStep(g, up);
+  playWithGraph(0, true, (g) => synthUiStep(g, up));
 }
 
 export function playTileHover(tile?: number) {
   if (!cooled('tileHover', 45)) return;
-  const g = liveGraph(panOf(tile));
-  if (g) synthTileHover(g);
+  playWithGraph(panOf(tile), false, synthTileHover);
 }
 
 export function playTileSelect(tile?: number) {
   if (!cooled('tileSelect', 40)) return;
-  const g = liveGraph(panOf(tile), true);
-  if (g) synthTileSelect(g);
+  playWithGraph(panOf(tile), true, synthTileSelect);
 }
 
 export function playCardOpen() {
   if (!cooled('cardOpen', 50)) return;
-  const g = liveGraph(0, true);
-  if (g) synthCardOpen(g);
+  playWithGraph(0, true, synthCardOpen);
 }
 
 export function playCardClose() {
   if (!cooled('cardClose', 50)) return;
-  const g = liveGraph(0, true);
-  if (g) synthCardClose(g);
+  playWithGraph(0, true, synthCardClose);
 }
 
 export function playVolumePreview() {
   unlock();
   if (!cooled('volumePreview', 90)) return;
-  const g = liveGraph(0, true);
-  if (g) synthVolumePreview(g);
+  playWithGraph(0, true, synthVolumePreview);
 }
 
 export function playDiceBounce(bounceIndex: number, at?: THREE.Vector3) {
   if (!cooled(`diceBounce:${bounceIndex}`, 30)) return;
-  const g = liveGraph(panOf(at));
-  if (g) synthDiceBounce(g, bounceIndex, 0.94 + Math.random() * 0.12);
+  playWithGraph(panOf(at), false, (g) => synthDiceBounce(g, bounceIndex, 0.94 + Math.random() * 0.12));
 }
 
 export function playDiceDoubles(at?: THREE.Vector3) {
-  const g = liveGraph(panOf(at));
-  if (g) synthDiceDoubles(g);
+  playWithGraph(panOf(at), false, synthDiceDoubles);
 }
 
 export function playTokenHop(at?: THREE.Vector3) {
-  const g = liveGraph(panOf(at));
-  if (g) synthTokenHop(g, hopStepIndex++);
+  playWithGraph(panOf(at), false, (g) => synthTokenHop(g, hopStepIndex++));
 }
 
 export function playTokenTeleport(phase: 'out' | 'in', at?: THREE.Vector3) {
-  const g = liveGraph(panOf(at));
-  if (g) synthTokenTeleport(g, phase);
+  playWithGraph(panOf(at), false, (g) => synthTokenTeleport(g, phase));
 }
 
 export function playLotBuy(tile?: number) {
-  const g = liveGraph(panOf(tile));
-  if (g) synthLotBuy(g);
+  playWithGraph(panOf(tile), false, synthLotBuy);
 }
 
 export function playLotUpgrade(level: number, tile?: number) {
-  const g = liveGraph(panOf(tile));
-  if (g) synthLotUpgrade(g, level);
+  playWithGraph(panOf(tile), false, (g) => synthLotUpgrade(g, level));
 }
 
 export function playLotMortgage(mortgaged: boolean, tile?: number) {
-  const g = liveGraph(panOf(tile));
-  if (g) synthLotMortgage(g, mortgaged);
+  playWithGraph(panOf(tile), false, (g) => synthLotMortgage(g, mortgaged));
 }
 
 export function playCash(delta: number, at?: THREE.Vector3) {
-  if (!delta || !cooled('cashEvent', 40)) return;
-  const g = liveGraph(panOf(at));
-  if (!g) return;
-  if (delta > 0) synthCashGain(g, delta);
-  else synthCashLoss(g);
+  if (!delta || !cooled(delta > 0 ? 'cashGain' : 'cashLoss', 40)) return;
+  playWithGraph(panOf(at), false, (g) => (delta > 0 ? synthCashGain(g, delta) : synthCashLoss(g)));
 }
 
 export function playCashTick() {
   if (!cooled('cashTick', 55)) return;
-  const g = liveGraph();
-  if (g) synthCashTick(g);
+  playWithGraph(0, false, synthCashTick);
 }
 
 export function playTurnMine() {
-  const g = liveGraph(0, true);
-  if (g) synthTurnMine(g);
+  playWithGraph(0, true, synthTurnMine);
 }
 
 export function playClockWarn(secondsLeft: number) {
   if (!cooled('clockWarn', 500)) return;
-  const g = liveGraph(0, true);
-  if (g) synthClockWarn(g, secondsLeft);
+  playWithGraph(0, true, (g) => synthClockWarn(g, secondsLeft));
 }
 
 export interface StrikeFlightAudio {
@@ -688,52 +684,43 @@ export function startStrikeFlight(at: THREE.Vector3): StrikeFlightAudio {
 }
 
 export function playStrikeImpact(at?: THREE.Vector3) {
-  const g = liveGraph(panOf(at));
-  if (g) synthStrikeImpact(g);
+  playWithGraph(panOf(at), false, synthStrikeImpact);
 }
 
 export function playOrderTick(settled = false) {
   if (!settled && !cooled('orderTick', 35)) return;
-  const g = liveGraph();
-  if (g) synthOrderTick(g, settled);
+  playWithGraph(0, false, (g) => synthOrderTick(g, settled));
 }
 
 export function playOrderReady() {
-  const g = liveGraph();
-  if (g) synthOrderReady(g);
+  playWithGraph(0, false, synthOrderReady);
 }
 
 export function playNewsSpin() {
   suppressCardSound = true;
-  const g = liveGraph(0, true);
-  if (g) synthNewsSpin(g);
+  playWithGraph(0, true, synthNewsSpin);
 }
 
 export function playCasinoTick() {
   if (!cooled('casinoTick', 35)) return;
-  const g = liveGraph(0, true);
-  if (g) synthCasinoTick(g);
+  playWithGraph(0, true, synthCasinoTick);
 }
 
 export function playCasinoResult(outcome: 'miss' | 'hit' | 'jackpot' | 'jail') {
-  const g = liveGraph(0, true);
-  if (g) synthCasinoResult(g, outcome);
+  playWithGraph(0, true, (g) => synthCasinoResult(g, outcome));
 }
 
 export function playJailClang(at?: THREE.Vector3) {
-  const g = liveGraph(panOf(at));
-  if (g) synthJailClang(g);
+  playWithGraph(panOf(at), false, synthJailClang);
 }
 
 export function playBankruptOut(at?: THREE.Vector3) {
-  const g = liveGraph(panOf(at));
-  if (g) synthBankruptOut(g);
+  playWithGraph(panOf(at), false, synthBankruptOut);
 }
 
 export function playGameOver(won: boolean) {
   suppressCardSound = true;
-  const g = liveGraph(0, true);
-  if (g) synthGameOver(g, won);
+  playWithGraph(0, true, (g) => synthGameOver(g, won));
 }
 
 // ---- Audition catalog (for ?dev=1 panel & offline inspection) ----
@@ -781,8 +768,7 @@ export function auditionSound(label: string) {
   unlock();
   const entry = AUDIO_AUDITIONS.find(([k]) => k === label);
   if (!entry) return;
-  const g = liveGraph(0, true);
-  if (g) entry[2](g);
+  playWithGraph(0, true, entry[2]);
 }
 
 /** Render a named audition recipe offline via OfflineAudioContext (used for acoustic inspection). */
@@ -858,7 +844,7 @@ export function initAudio() {
     unsubMute();
     unsubCards();
     stopActiveSounds();
-    if (ctx) {
+    if (!import.meta.hot && ctx && ctx.state !== 'closed') {
       const closing = ctx;
       ctx = null;
       masterGain = null;
