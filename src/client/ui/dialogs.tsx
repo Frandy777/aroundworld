@@ -83,6 +83,7 @@ const RULES: Record<string, ReactNode> = {
   </>,
   TURN: <>
     <h4>YOUR TURN</h4><ul><li><b>1. Redeem</b> (optional): pay a mortgaged property's full lot value to restore it.</li><li><b>2. Roll</b> two dice.</li><li><b>3. Move</b> tile by tile. Passing START or a chokepoint can trigger effects.</li><li><b>4. Stop</b> on the target tile and resolve it.</li></ul>
+    <p><b>Doubles:</b> rolling the same number on both dice lets you roll again after resolving the tile, within the same turn. Three doubles in a row send you straight to jail.</p>
     <p><b>Normal moves</b> pass every tile on the way. <b>Event moves</b> (news, jail, Area 51) jump straight to the target.</p>
   </>,
   CITIES: <>

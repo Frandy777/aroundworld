@@ -28,8 +28,8 @@ const WEL = tileAt('Wellington'), CAN = tileAt('Canberra'), SYD = tileAt('Sydney
 test('START pays $3,000 on pass and on stop', async () => {
   const { g, h } = await start(2);
   const [A] = g.S.turnOrder;
-  putAt(g, A, TILE_COUNT - 1); // Mumbai — one step before START
-  await roll(g, h, [1, 1]); // passes START, lands on Wellington
+  putAt(g, A, TILE_COUNT - 2); // New Delhi — two steps before START
+  await roll(g, h, [1, 2]); // passes START, lands on Wellington
   assert.equal(cash(g, A), START_CASH + 3000);
   await answer(g, h, false); // Wellington deed
 

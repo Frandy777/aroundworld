@@ -74,11 +74,11 @@ test('what cannot be raised pays the creditor as the estate goes bankrupt', asyn
 test('a player who leaves answers by default and goes bankrupt on their next turn', async () => {
   const { g, h } = await start(3);
   const [A, B, C] = g.S.turnOrder;
-  await draw(g, h, [1, 1]); // rig what A is about to roll
+  await draw(g, h, [1, 2]); // rig what A is about to roll
   g.forfeit(A); // the open roll question settles with `true`
   await settle();
-  assert.equal(g.S.players[A].tile, 2, 'the turn played on to Canberra');
-  assert.equal(g.S.ownedByTile[2], undefined, 'the deed answered itself with no');
+  assert.equal(g.S.players[A].tile, 3, 'the turn played on to Sydney');
+  assert.equal(g.S.ownedByTile[3], undefined, 'the deed answered itself with no');
   assert.equal(h.pending.player, B, 'the turn ended without A');
   await idle(g, h); // B
   await idle(g, h); // C

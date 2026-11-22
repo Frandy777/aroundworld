@@ -46,8 +46,8 @@ test('Chokepoint: toll on pass and on stop, scaling with count', async () => {
   const { g, h } = await start(2);
   const [A, B] = g.S.turnOrder;
   give(g, MAL, B);
-  putAt(g, A, MAL - 1); // on Singapore
-  await roll(g, h, [1, 1]); // passes Malacca, lands on Kuala Lumpur
+  putAt(g, A, MAL - 2); // on Jakarta
+  await roll(g, h, [1, 2]); // passes Malacca, lands on Kuala Lumpur
   assert.equal(cash(g, A), START_CASH - 200);
   assert.equal(cash(g, B), START_CASH + 200);
   await answer(g, h, false); // Kuala Lumpur deed
@@ -59,8 +59,8 @@ test('Chokepoint: toll on pass and on stop, scaling with count', async () => {
 
   await idle(g, h);
   for (const i of [BER, PAN, HOR]) give(g, i, B); // four chokepoints held: $500
-  putAt(g, A, MAL - 1);
-  await roll(g, h, [1, 1]);
+  putAt(g, A, MAL - 2);
+  await roll(g, h, [1, 2]);
   assert.equal(cash(g, A), START_CASH - 900);
   assert.equal(cash(g, B), START_CASH + 900);
   await answer(g, h, false);
@@ -70,8 +70,8 @@ test('Oil: owner earns $400 passing their own tile — not stopping, not others 
   const { g, h } = await start(2);
   const [A, B] = g.S.turnOrder;
   give(g, VENO, A);
-  putAt(g, A, VENO - 1); // on Bogotá
-  await roll(g, h, [1, 1]); // A passes its own oil, lands on Buenos Aires
+  putAt(g, A, VENO - 2); // on Panama Canal
+  await roll(g, h, [1, 2]); // A passes its own oil, lands on Buenos Aires
   assert.equal(cash(g, A), START_CASH + 400);
   await answer(g, h, false); // Buenos Aires deed
 
@@ -80,8 +80,8 @@ test('Oil: owner earns $400 passing their own tile — not stopping, not others 
   assert.equal(cash(g, A), START_CASH + 400);
 
   await idle(g, h);
-  putAt(g, B, VENO - 1);
-  await roll(g, h, [1, 1]); // B walks past A's oil
+  putAt(g, B, VENO - 2);
+  await roll(g, h, [1, 2]); // B walks past A's oil
   assert.equal(cash(g, B), START_CASH);
   assert.equal(cash(g, A), START_CASH + 400);
   await answer(g, h, false); // B declines Buenos Aires

@@ -430,18 +430,31 @@ export class Game {
       if (sel?.length) { for (const i of sel) this.own(i, { ...S.ownedByTile[i], mortgaged: false }); this.cash(player, -sel.reduce((s, i) => s + lotValue(TILES[i], S.ownedByTile[i]), 0), m`redeemed ${tiles(sel)}`); }
     }
     // 2. Roll (in a dev room the question may be answered with a command of the panel instead: it runs, and the question is asked again)
-    this.emit({ t: 'step', step: 'roll' });
-    for (let go = await this.ask(player, { k: 'roll' }); go !== true; go = await this.ask(player, { k: 'roll' })) if (go && (await this.debug(go as Cmd))) return;
-    if (p.bankruptRound) return; // declared bankruptcy while the question stood
-    const dieA = this.d6(), dieB = this.d6();
-    this.emit({ t: 'dice', dieA, dieB });
-    if (dieA === dieB) this.bonus('Rio', [200, 500, 1000], m`${P(player)} rolled doubles`);
-    // 3. Move and 4. resolve the tile
-    this.emit({ t: 'step', step: 'move' });
-    await this.walk(player, dieA + dieB);
-    if (p.bankruptRound || this.over()) return;
-    this.emit({ t: 'step', step: 'resolve' });
-    await this.landOn(player, p.tile);
+    for (let doubles = 0; ;) {
+      this.emit({ t: 'step', step: 'roll' });
+      for (let go = await this.ask(player, { k: 'roll' }); go !== true; go = await this.ask(player, { k: 'roll' })) if (go && (await this.debug(go as Cmd))) return;
+      if (p.bankruptRound) return; // declared bankruptcy while the question stood
+      const dieA = this.d6(), dieB = this.d6(), isDoubles = dieA === dieB;
+      this.emit({ t: 'dice', dieA, dieB });
+      if (isDoubles) {
+        this.bonus('Rio', [200, 500, 1000], m`${P(player)} rolled doubles`);
+        if (++doubles === 3) {
+          this.toast(`${p.name} rolled doubles 3 times!`, 'bad');
+          this.log(m`${P(player)} rolled doubles 3 times`);
+          this.emit({ t: 'step', step: 'resolve' });
+          await this.sendToJail(player);
+          return;
+        }
+      }
+      // 3. Move and 4. resolve the tile
+      this.emit({ t: 'step', step: 'move' });
+      await this.walk(player, dieA + dieB);
+      if (p.bankruptRound || this.over()) return;
+      this.emit({ t: 'step', step: 'resolve' });
+      await this.landOn(player, p.tile);
+      if (!isDoubles || p.bankruptRound || this.over() || p.jail || p.party || p.stay) return;
+      this.toast(`${p.name} rolled doubles: roll again!`, 'good');
+    }
   }
 
   /** A command of the dev panel, which came as the answer to the roll question. It is an input like the dice and the answers: it is on the tape and plays again after a restart, and the clients hear it in order, so neither needs anything of its own. True when it played the turn out, in the roll's place. */

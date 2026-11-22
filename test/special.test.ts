@@ -22,8 +22,8 @@ test('Hong Kong: passers-by pay a share of their cash by owner level', async () 
   const [A, B] = g.S.turnOrder;
   give(g, HK, B, 0);
   setCash(g, A, 19849);
-  putAt(g, A, HK - 1);
-  await roll(g, h, [1, 1]); // passes Hong Kong, lands on Shenzhen
+  putAt(g, A, HK - 2);
+  await roll(g, h, [1, 2]); // passes Hong Kong, lands on Shenzhen
   assert.equal(cash(g, A), 19849 - 990); // 5% of 19849 = 992.45, levied 990 after the $10 rounding
   assert.equal(cash(g, B), START_CASH + 990);
   await answer(g, h, false); // declines the Shenzhen deed
@@ -31,8 +31,8 @@ test('Hong Kong: passers-by pay a share of their cash by owner level', async () 
   give(g, HK, B, 2); // Lv 2: 15%
   await idle(g, h);
   setCash(g, A, 20000);
-  putAt(g, A, HK - 1);
-  await roll(g, h, [1, 1]);
+  putAt(g, A, HK - 2);
+  await roll(g, h, [1, 2]);
   assert.equal(cash(g, A), 20000 - 3000);
   assert.equal(cash(g, B), START_CASH + 990 + 3000);
   await answer(g, h, false);
@@ -51,16 +51,16 @@ test('Hong Kong: a mortgaged tile, or the owner passing, charges nothing', async
   const { g, h } = await start(2);
   const [A, B] = g.S.turnOrder;
   give(g, HK, B, 0, true); // mortgaged
-  putAt(g, A, HK - 1);
-  await roll(g, h, [1, 1]); // A passes the mortgaged tile
+  putAt(g, A, HK - 2);
+  await roll(g, h, [1, 2]); // A passes the mortgaged tile
   assert.equal(cash(g, A), START_CASH);
   assert.equal(cash(g, B), START_CASH);
   await answer(g, h, false); // Shenzhen deed
 
   await answer(g, h, null); // B's turn opens with a redeem offer for its mortgaged Hong Kong: skipped
   give(g, HK, B, 0); // unmortgaged again
-  putAt(g, B, HK - 1);
-  await roll(g, h, [1, 1]); // B walks past its own Hong Kong
+  putAt(g, B, HK - 2);
+  await roll(g, h, [1, 2]); // B walks past its own Hong Kong
   assert.equal(cash(g, A), START_CASH);
   assert.equal(cash(g, B), START_CASH);
   await answer(g, h, false); // B declines the Shenzhen deed
@@ -70,16 +70,16 @@ test('Zurich: earns when anyone gets bank money, nothing while jailed', async ()
   const { g, h } = await start(2);
   const [A, B] = g.S.turnOrder;
   give(g, ZUR, B, 2); // Lv 2: $300
-  putAt(g, A, TILE_COUNT - 1);
-  await roll(g, h, [1, 1]); // passes START: +$3,000
+  putAt(g, A, TILE_COUNT - 2);
+  await roll(g, h, [1, 2]); // passes START: +$3,000
   assert.equal(cash(g, A), START_CASH + 3000);
   assert.equal(cash(g, B), START_CASH + 300);
   await answer(g, h, false); // Wellington deed
 
   await idle(g, h);
   setFlag(g, B, 'jail');
-  putAt(g, A, TILE_COUNT - 1);
-  await roll(g, h, [1, 1]);
+  putAt(g, A, TILE_COUNT - 2);
+  await roll(g, h, [1, 2]);
   assert.equal(cash(g, A), START_CASH + 6000);
   assert.equal(cash(g, B), START_CASH + 300, 'a jailed owner collects nothing');
   await answer(g, h, false);
@@ -118,10 +118,25 @@ test('Rio: owner earns on any doubles, nothing while jailed', async () => {
   assert.equal(cash(g, B), START_CASH + 500);
   await answer(g, h, false); // Jakarta deed
 
-  await idle(g, h);
   setFlag(g, B, 'jail');
-  await roll(g, h, [4, 4]); // doubles again — the owner is jailed now
+  await roll(g, h, [4, 4]); // doubles again on the bonus roll — the owner is jailed now
   assert.equal(cash(g, B), START_CASH + 500, 'a jailed owner collects nothing');
+});
+
+test('Rio: on a third consecutive double, the owner collects before going to jail', async () => {
+  const { g, h } = await start(2);
+  const [A] = g.S.turnOrder;
+  give(g, RIO, A, 0); // $200
+  await roll(g, h, [1, 1]);
+  await answer(g, h, false);
+  await roll(g, h, [2, 2]);
+  await answer(g, h, false);
+  await roll(g, h, [3, 3]); // 3rd double: Rio pays A before A is jailed
+  assert.equal(g.S.players[A].jail, true);
+  assert.equal(cash(g, A), START_CASH + 600, 'collected on all three doubles before being jailed');
+  const lastCash = h.evs.findLastIndex((e) => e.t === 'cash' && e.player === A);
+  const jailedAt = h.evs.findLastIndex((e) => e.t === 'flag' && e.player === A && e.flag === 'jail' && e.active);
+  assert(lastCash >= 0 && lastCash < jailedAt, 'Rio payout precedes jailing');
 });
 
 test('Jerusalem: every other player pays the dice total × level rate', async () => {
