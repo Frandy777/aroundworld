@@ -53,6 +53,30 @@ autoFocus.sub(() => localStorage.setItem(FOCUS_KEY, String(autoFocus.get())));
 const HD_KEY = 'hd2d';
 export const hd2d = cell(localStorage.getItem(HD_KEY) === 'true'); // the HD-2D light (see render/light.ts) instead of the restrained pixel look; off until asked for
 hd2d.sub(() => localStorage.setItem(HD_KEY, String(hd2d.get())));
+const VOLUME_KEY = 'soundVolume', MUTED_KEY = 'soundMuted';
+const readVolume = () => {
+  const raw = Number(localStorage.getItem(VOLUME_KEY));
+  return localStorage.getItem(VOLUME_KEY) !== null && Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : 0.7;
+};
+export const soundVolume = cell(readVolume());
+soundVolume.sub(() => localStorage.setItem(VOLUME_KEY, String(soundVolume.get())));
+export const soundMuted = cell(localStorage.getItem(MUTED_KEY) === 'true');
+soundMuted.sub(() => localStorage.setItem(MUTED_KEY, String(soundMuted.get())));
+export function setSoundVolume(volume: number) {
+  const clamped = Math.min(1, Math.max(0, Math.round(volume * 20) / 20));
+  soundVolume.set(clamped);
+  soundMuted.set(clamped <= 0);
+}
+export function toggleSoundMute() {
+  if (soundMuted.get()) {
+    if (soundVolume.get() <= 0) soundVolume.set(0.5);
+    soundMuted.set(false);
+  } else {
+    soundMuted.set(true);
+  }
+}
+export const cardHitAt = cell<Record<number, number>>({});
+export const triggerCardHit = (player: number) => cardHitAt.set({ ...cardHitAt.get(), [player]: performance.now() });
 
 // ---- Fullscreen: not a preference, the browser's own state. get reads it; set asks for the change, which lands back here through the event ----
 export const fullscreen: Cell<boolean> = {

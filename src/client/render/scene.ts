@@ -208,12 +208,29 @@ const post = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMater
 const postScene = new THREE.Scene().add(post), postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
 const snapped = new THREE.Vector3();
+const shake = { mag: 0, dur: 0, left: 0, sx: 0, sy: 0, tick: 0 };
+const SHAKE_ART_PX = 7;
+
+export function shakeCamera(intensity: number, durationSec: number) {
+  if (intensity <= 0 || durationSec <= 0 || document.hidden || navigator.webdriver) return;
+  if (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (intensity < shake.mag && shake.left > 0.05) return;
+  shake.mag = intensity;
+  shake.dur = durationSec;
+  shake.left = durationSec;
+  shake.tick = 0;
+}
+
+export const shakeOffset = (): [number, number] => [shake.sx * SHAKE_ART_PX, shake.sy * SHAKE_ART_PX];
+
 function snap() {
   camera.updateMatrixWorld();
   const m = camera.matrixWorld.elements, p = camera.position, u = pxUnit();
   const a = p.x * m[0] + p.y * m[1] + p.z * m[2], b = p.x * m[4] + p.y * m[5] + p.z * m[6];
   const ox = (rt.width & 1) / 2, oy = (rt.height & 1) / 2;
-  const da = (Math.round(a / u - ox + 1e-6) + ox) * u - a, db = (Math.round(b / u - oy + 1e-6) + oy) * u - b;
+  const qx = shake.sx ? Math.round(shake.sx * SHAKE_ART_PX) * u : 0;
+  const qy = shake.sy ? Math.round(shake.sy * SHAKE_ART_PX) * u : 0;
+  const da = (Math.round(a / u - ox + 1e-6) + ox) * u - a + qx, db = (Math.round(b / u - oy + 1e-6) + oy) * u - b + qy;
   camera.position.add(snapped.set(m[0] * da + m[4] * db, m[1] * da + m[5] * db, m[2] * da + m[6] * db));
   camera.updateMatrixWorld();
   unit.value = u;
@@ -350,6 +367,23 @@ const still = () => {};
 export const wait = (s: number) => tween(s, still);
 export function updateTweens(dt: number) {
   lastFrame = performance.now();
+  if (shake.left > 0 && dt > 0) {
+    shake.left = Math.max(0, shake.left - dt);
+    if (shake.left <= 0) {
+      shake.sx = shake.sy = 0;
+    } else {
+      const frac = shake.dur > 0 ? shake.left / shake.dur : 0;
+      const amp = shake.mag * frac * Math.exp(-2.8 * (1 - frac));
+      shake.tick += dt;
+      const step = Math.floor(shake.tick * 42);
+      const a = Math.sin(step * 12.9898 + 1.3) * 43758.5453;
+      const b = Math.sin(step * 78.233 + 4.7) * 43758.5453;
+      shake.sx = ((a - Math.floor(a)) * 2 - 1) * amp;
+      shake.sy = ((b - Math.floor(b)) * 2 - 1) * amp;
+    }
+  } else if (shake.left <= 0 && (shake.sx || shake.sy)) {
+    shake.sx = shake.sy = 0;
+  }
   for (const tw of tweens) {
     tw.t = Math.min(1, tw.t + (dt * pace.speed) / tw.dur);
     tw.fn(tw.ease(tw.t));
@@ -361,6 +395,7 @@ export function updateTweens(dt: number) {
 export function finishTweens() {
   for (const tw of tweens) { tw.fn(tw.ease(1)); tw.res(); }
   tweens.clear();
+  shake.left = shake.sx = shake.sy = 0;
   dirtyShadow();
 }
 

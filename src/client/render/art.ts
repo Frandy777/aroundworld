@@ -220,6 +220,18 @@ export const ICONS: Record<string, string[]> = {
     '................', '................', '...ooo....ooo...', '....ao....oa....',
     '...o.o....o.o...', '..o..........o..', '.o............o.', 'o..............o',
   ],
+  sound: [
+    '................', '......oo........', '.....oao...oo...', '....oaao..oYgo..',
+    '.ooooabo...oYo..', 'oaaabbbo.oo.oYo.', 'oabbbbbo.oYo.oYo', 'oabbbbbo..oYooYo',
+    'oabbbbbo..oYooYo', 'obbbbcco.oYo.oYo', 'obbbbcco.oo.oYo.', '.oooobco...oYo..',
+    '....occo..oYgo..', '.....oco...oo...', '......oo........', '................',
+  ],
+  mute: [
+    '................', '......oo........', '.....oao........', '....oaao........',
+    '.ooooabo.oo...oo', 'oaaabbbo.oro.oro', 'oabbbbbo..oRoRo.', 'oabbbbbo...oRo..',
+    'oabbbbbo..oRoRo.', 'obbbbcco.oqo.oqo', 'obbbbcco.oo...oo', '.oooobco........',
+    '....occo........', '.....oco........', '......oo........', '................',
+  ],
 };
 const CHECK = [
   '.........oo.', '........owwo', '.......owwo.', '.oo...owwo..', 'owwo.owwo...', '.owwowwo....', '..owwwo.....', '...owo......', '....o.......',

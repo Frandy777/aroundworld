@@ -6,7 +6,7 @@ import { LOT, PAD, POS } from './layout';
 import { fixedLamps } from './lamps';
 import { LAMP, U, lamps, spot } from './light';
 import { defOf } from './models';
-import { AIR, AIR_GLSL, controls, free, hdCam, LAYER_FX, LENS, renderer, scene, sun, zoomed } from './scene';
+import { AIR, AIR_GLSL, controls, free, hdCam, LAYER_FX, LENS, pxUnit, renderer, scene, shakeOffset, sun, zoomed } from './scene';
 import { sky } from './sky';
 import { SEA_Y } from './world';
 
@@ -459,29 +459,45 @@ function uniforms() {
   endMid.value.set(free.w / 2, 0.5); endAsp.value.set((T!.main.width * free.w) / h, 1);
 }
 
+const hdShake = new THREE.Vector3();
 export function render() {
   if (!T) return;
   const auto = renderer.autoClear;
-  lights(performance.now() / 1000);
-  uniforms();
-  renderer.autoClear = true;
-  renderer.setRenderTarget(T.main);
-  renderer.render(scene, hdCam);
-  SHM.value.copy(sun.shadow.matrix); SHT.value = sun.shadow.map?.depthTexture ?? null;
-  SPM.value.copy(spot.shadow.matrix); SPSH.value = spot.shadow.map?.depthTexture ?? null;
-  pass(nrmPass, T.nrm);
-  pass(aoPass, T.ao[0]); denoise(aoBlur, aoSrc, T.ao);
-  pass(volPass, T.vol[0]); denoise(volBlur, volSrc, T.vol);
-  pass(compPass, T.hdr);
-  translucent();
-  pass(cocPass, T.coc); pass(tilePass, T.tile[0]); pass(spreadPass, T.tile[1]);
-  pass(gatherPass, T.hdr);
-  pass(softPass, T.coc);
-  const b = T.bloom;
-  bPx.value.set(1 / T.coc.width, 1 / T.coc.height); pass(bright, b[0]);
-  for (let i = 1; i < b.length; i++) { bSrc.value = b[i - 1].texture; bPx.value.set(1 / b[i - 1].width, 1 / b[i - 1].height); pass(down, b[i]); }
-  for (let i = b.length - 2; i >= 0; i--) { bSrc.value = b[i + 1].texture; bPx.value.set(1 / b[i + 1].width, 1 / b[i + 1].height); pass(up, b[i], true); }
-  pass(endPass, T.aa);
-  renderer.autoClear = true; smaa.render(renderer, T.aa, T.aa, 0, false);
-  renderer.autoClear = auto;
+  const [sx, sy] = shakeOffset();
+  const hasShake = !!(sx || sy);
+  if (hasShake) {
+    const e = hdCam.matrixWorld.elements, u = pxUnit(), ox = sx * u, oy = sy * u;
+    hdShake.set(e[0] * ox + e[4] * oy, e[1] * ox + e[5] * oy, e[2] * ox + e[6] * oy);
+    hdCam.position.add(hdShake);
+    hdCam.updateMatrixWorld();
+  }
+  try {
+    lights(performance.now() / 1000);
+    uniforms();
+    renderer.autoClear = true;
+    renderer.setRenderTarget(T.main);
+    renderer.render(scene, hdCam);
+    SHM.value.copy(sun.shadow.matrix); SHT.value = sun.shadow.map?.depthTexture ?? null;
+    SPM.value.copy(spot.shadow.matrix); SPSH.value = spot.shadow.map?.depthTexture ?? null;
+    pass(nrmPass, T.nrm);
+    pass(aoPass, T.ao[0]); denoise(aoBlur, aoSrc, T.ao);
+    pass(volPass, T.vol[0]); denoise(volBlur, volSrc, T.vol);
+    pass(compPass, T.hdr);
+    translucent();
+    pass(cocPass, T.coc); pass(tilePass, T.tile[0]); pass(spreadPass, T.tile[1]);
+    pass(gatherPass, T.hdr);
+    pass(softPass, T.coc);
+    const b = T.bloom;
+    bPx.value.set(1 / T.coc.width, 1 / T.coc.height); pass(bright, b[0]);
+    for (let i = 1; i < b.length; i++) { bSrc.value = b[i - 1].texture; bPx.value.set(1 / b[i - 1].width, 1 / b[i - 1].height); pass(down, b[i]); }
+    for (let i = b.length - 2; i >= 0; i--) { bSrc.value = b[i + 1].texture; bPx.value.set(1 / b[i + 1].width, 1 / b[i + 1].height); pass(up, b[i], true); }
+    pass(endPass, T.aa);
+    renderer.autoClear = true; smaa.render(renderer, T.aa, T.aa, 0, false);
+  } finally {
+    if (hasShake) {
+      hdCam.position.sub(hdShake);
+      hdCam.updateMatrixWorld();
+    }
+    renderer.autoClear = auto;
+  }
 }

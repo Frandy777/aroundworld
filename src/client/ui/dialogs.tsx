@@ -4,6 +4,7 @@ import { AUTO_CLOSE_MS } from '../../shared/protocol';
 import { canPick } from '../../shared/state';
 import type { CasinoView, NewsCard as News, Notice, OrderPass, Player, Prompt, RankRow } from '../../shared/types';
 import { reply } from '../asks';
+import { playCasinoResult, playCasinoTick, playGameOver, playNewsSpin, playOrderReady, playOrderTick, playUiStep } from '../audio';
 import { pace } from '../render/scene';
 import { G, cardsSetAside, paused, state, useCell, type Cell } from '../store';
 import { Blocks, Die, Face, Flag, Icon, Pips, Rich, hex, money, tileHead } from './bits';
@@ -122,6 +123,7 @@ export function NoticeCard({ n, close }: { n: Notice; close(): void }) {
 }
 
 export function NewsCard({ c, close, redraw }: { c: News; close(): void; redraw?: (again: boolean) => void }) {
+  useEffect(() => { playNewsSpin(); }, []);
   const auto = useAuto(redraw ? 0 : AUTO_CLOSE_MS, close);
   const foot = redraw
     ? <><Btn id="again" onClick={() => redraw(true)}>DRAW AGAIN</Btn><Btn id="keep" cls="primary" onClick={() => redraw(false)}>KEEP</Btn></>
@@ -248,12 +250,13 @@ export function OrderCard({ players, passes, order, close }: { players: Player[]
         if (k) { setTie(pass.group); await sleep(1000); }
         for (const [n, i] of pass.group.entries()) {
           setTie([]);
-          for (let s = 0; s < 7; s++) { put(i, s < 6 ? [d6(), d6()] : pass.rolls[n]); await sleep(70); if (dead) return; }
+          for (let s = 0; s < 7; s++) { put(i, s < 6 ? [d6(), d6()] : pass.rolls[n]); playOrderTick(s === 6); await sleep(70); if (dead) return; }
           await sleep(250);
         }
       }
       setRank(Object.fromEntries(order.map((p, k) => [p, ['1ST', '2ND', '3RD', '4TH'][k]])));
       setReady(true);
+      playOrderReady();
     })();
     return () => { dead = true; };
   }, []);
@@ -276,6 +279,7 @@ export function ResultsCard({ rank, close }: { rank: RankRow[]; close(v: 'menu' 
   const S = state(), rows = rank.map((r) => ({ ...S.players[r.player], netWorth: r.netWorth }));
   const pod = [1, 0, 2].filter((k) => rows[k]).map((k) => ({ r: rows[k], k }));
   const myRank = rank.findIndex((r) => r.player === G.myPlayer), mine = rows[myRank];
+  useEffect(() => { playGameOver(myRank === 0); }, [myRank]);
   const sub = !mine ? `${rows.length} players` : mine.bankruptRound ? `You went out in round ${mine.bankruptRound}` : `You finished ${['1ST', '2ND', '3RD', '4TH'][myRank]} of ${rows.length}`;
   return (
     <Card title={myRank === 0 ? 'YOU WIN!' : 'GAME OVER'} sub={sub} cls="wide" tone={0xb8860b} foot={<>
@@ -305,8 +309,8 @@ export function CasinoCard({ ctl, close }: { ctl: Ctl; close(): void }) {
   const v = useCell(ctl.view), ask = useCell(ctl.ask), lucky = v.variant === 'lucky';
   const [bet, setBet] = useState(v.bet);
   useEffect(() => setBet(v.bet), [v.bet]);
-  const minus = useHold(() => setBet((b) => Math.max(lucky ? 100 : 200, b - 100)));
-  const plus = useHold(() => setBet((b) => Math.min(v.maxBet, b + 100)));
+  const minus = useHold(() => { setBet((b) => Math.max(lucky ? 100 : 200, b - 100)); playUiStep(false); });
+  const plus = useHold(() => { setBet((b) => Math.min(v.maxBet, b + 100)); playUiStep(true); });
   const [num, setNum] = useState(d6);
   const [shown, setShown] = useState(0);
   const [rolling, setRolling] = useState(false);
@@ -315,6 +319,10 @@ export function CasinoCard({ ctl, close }: { ctl: Ctl; close(): void }) {
   const next = v.rolls[shown];
   const nextRef = useRef(next);
   nextRef.current = next;
+  const viewRef = useRef(v);
+  viewRef.current = v;
+  const shownRef = useRef(shown);
+  shownRef.current = shown;
   const mine = !!ask?.mine && !sent;
 
   useEffect(() => setSent(false), [ask?.id]);
@@ -328,8 +336,23 @@ export function CasinoCard({ ctl, close }: { ctl: Ctl; close(): void }) {
     let n = 0;
     const t = setInterval(() => {
       const r = nextRef.current;
-      if (++n >= 8 && r) { clearInterval(t); setDice([r[0], r[1]]); setShown((s) => s + 1); setRolling(false); }
-      else setDice([d6(), d6()]);
+      if (++n >= 8 && r) {
+        clearInterval(t);
+        setDice([r[0], r[1]]);
+        setShown((s) => s + 1);
+        setRolling(false);
+        const cur = viewRef.current, isLast = shownRef.current + 1 === cur.rolls.length && cur.stage === 'end';
+        if (isLast && cur.jailed) playCasinoResult('jail');
+        else if (cur.variant === 'lucky') {
+          const h = (r[0] === r[4] ? 1 : 0) + (r[1] === r[4] ? 1 : 0);
+          playCasinoResult(h === 2 ? 'jackpot' : h === 1 ? 'hit' : 'miss');
+        } else {
+          playCasinoResult(r[0] + r[1] === 12 ? 'jackpot' : r[2] > r[3] ? 'hit' : 'miss');
+        }
+      } else {
+        setDice([d6(), d6()]);
+        playCasinoTick();
+      }
     }, 70);
     return () => clearInterval(t);
   }, [rolling]);
@@ -367,9 +390,9 @@ export function CasinoCard({ ctl, close }: { ctl: Ctl; close(): void }) {
       )}
       {betting && mine && (
         <div className="stepper">
-          <button className="btn sm" {...minus}><Icon n="minus" /></button>
+          <button className="btn sm" data-audio="none" {...minus}><Icon n="minus" /></button>
           <b>BET {money(bet)}</b>
-          <button className="btn sm" {...plus}><Icon n="plus" /></button>
+          <button className="btn sm" data-audio="none" {...plus}><Icon n="plus" /></button>
           <button className="btn sm gold" onClick={() => setBet(v.maxBet)}>ALL IN</button>
         </div>
       )}

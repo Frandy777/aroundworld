@@ -3,6 +3,7 @@ import { TILES, maxLevel } from '../../shared/data';
 import { canMortgage, command } from '../../shared/state';
 import type { Cmd, NewsCard, Notice, Prompt } from '../../shared/types';
 import { hold } from '../asks';
+import { AUDIO_AUDITIONS, auditionSound } from '../audio';
 import { quickGame } from '../controller';
 import { devUrl, send } from '../net';
 import { POS } from '../render/layout';
@@ -94,6 +95,11 @@ function Scene({ show, tile, setTile, view, bump }: Pane & { view: View; bump: (
           ...[0.25, 1, 2].map((s): Opt => [`${s}x`, !loop.paused && loop.scale === s, () => setPace(false, s)]),
           ['+0.2s', false, () => { loop.step(0.2); bump(); }, !loop.paused],
         ]} />
+      </Field>
+      <Field label="AUDIO">
+        <div className="audition">
+          {AUDIO_AUDITIONS.map(([label]) => <button key={label} className="btn sm" data-audio="none" onClick={() => auditionSound(label)}>{label}</button>)}
+        </div>
       </Field>
     </div>
   );

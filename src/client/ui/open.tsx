@@ -1,6 +1,7 @@
 import type { Answer, CasinoView, NewsCard as News, Notice, OrderPass, Player, Prompt, RankRow } from '../../shared/types';
 import { reply } from '../asks';
 import { autoFocus, cell, fullscreen, hd2d, openCard, type Open } from '../store';
+import { VolumeRow } from './bits';
 import { Btn, Card, CasinoCard, Check, ConfirmCard, DeedCard, DepCard, NewsCard, NoticeCard, OrderCard, PickCard, ResultsCard, RulesCard, type Ctl } from './dialogs';
 
 export const openRules = () => openCard<string>((close) => <RulesCard close={close} />).done;
@@ -45,6 +46,7 @@ export const openMenu = (room: string, quit: () => void, bankrupt?: () => void) 
       <Btn id="rules" onClick={() => void openRules()}>HOW TO PLAY</Btn>
       <Btn id="resume" cls="primary" onClick={() => close()}>RESUME</Btn>
     </>}>
+      <VolumeRow />
       <Check label="Auto-focus on current player" on={autoFocus} />
       <Check label="HD-2D lighting" on={hd2d} />
       {document.fullscreenEnabled && <Check label="Fullscreen" on={fullscreen} />}

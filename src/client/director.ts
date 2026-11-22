@@ -1,12 +1,13 @@
 import { apply, ranking } from '../shared/state';
 import type { CasinoView, Ev, GameState, NewsCard, Prompt } from '../shared/types';
 import { close, forget, hold, reply, wasClosed } from './asks';
+import { playBankruptOut, playCash, playJailClang, playLotBuy, playLotMortgage, playLotUpgrade, playTurnMine, resetHopChain, stopActiveSounds } from './audio';
 import { send } from './net';
 import { clearDice, hideDice, hop, jump, placeAt, removeToken, rollDice, setActive, tokens } from './render/actors';
 import { POS } from './render/layout';
-import { finishTweens, pace, wait } from './render/scene';
+import { finishTweens, pace, shakeCamera, wait } from './render/scene';
 import { enterDemo, enterGame, focusTok, playStrike, selectTile, setOwner, showState, tokenSpot } from './stage';
-import { G, actionBtn, activeTab, autoFocus, bump, bumpAssets, cashEls, clearCards, countdown, floatText, floats, hoveredTileTip, hudLive, lastRoll, paused, selectedTile, session, toast, toasts, viewedPlayer, waitingFor, type Button, type Open } from './store';
+import { G, actionBtn, activeTab, autoFocus, bump, bumpAssets, cashEls, clearCards, countdown, floatText, floats, hoveredTileTip, hudLive, lastRoll, paused, selectedTile, session, toast, toasts, triggerCardHit, viewedPlayer, waitingFor, type Button, type Open } from './store';
 import { openAsk, openCasino, openNews, openNotice, openOrder, openResults } from './ui/open';
 import { money } from './ui/bits';
 
@@ -72,6 +73,7 @@ function reset() {
   clearCards();
   toasts.set([]); floats.set([]); hoveredTileTip.set(null);
   finishTweens();
+  stopActiveSounds();
   clearDice();
   actionBtn.set(null); waitingFor.set(-1); lastRoll.set(null);
 }
@@ -169,6 +171,7 @@ async function play(ev: Ev) {
     case 'turn': {
       if (S.step === 'resolve' && !S.over && !S.players[cur].bankruptRound) await waitTurnEnd(cur); // a turn that was played to its end
       apply(S, ev);
+      resetHopChain();
       lastRoll.set(null); actionBtn.set(null); waitingFor.set(-1);
       setActive(S.turnOrder[S.turnIndex]);
       focusTurn(S.turnOrder[S.turnIndex]);
@@ -197,6 +200,8 @@ async function play(ev: Ev) {
     case 'cash': {
       apply(S, ev);
       if (!isTabHidden()) {
+        playCash(ev.delta, tokens[ev.player]?.g.position);
+        if (ev.delta <= -500) triggerCardHit(ev.player);
         const text = (ev.delta > 0 ? '+' : '') + money(ev.delta), tone = ev.delta > 0 ? 'good' : 'bad', at = tokenSpot(ev.player);
         if (at) floatText(at[0], at[1], text, tone);
         floatCard(ev.player, text, tone);
@@ -204,17 +209,38 @@ async function play(ev: Ev) {
       bumpAssets();
       return;
     }
-    case 'own': apply(S, ev); setOwner(ev.tile, ev.owned, S); bumpAssets(); return;
+    case 'own': {
+      const prev = S.ownedByTile[ev.tile];
+      apply(S, ev);
+      setOwner(ev.tile, ev.owned, S);
+      if (!isTabHidden() && ev.owned) {
+        if (!prev) playLotBuy(ev.tile);
+        else if (ev.owned.level > prev.level) playLotUpgrade(ev.owned.level, ev.tile);
+        else if (ev.owned.mortgaged !== prev.mortgaged) playLotMortgage(ev.owned.mortgaged, ev.tile);
+      }
+      bumpAssets();
+      return;
+    }
     case 'dep': apply(S, ev); bumpAssets(); return;
     case 'flag': {
       apply(S, ev);
       const tok = tokens[ev.player];
       if (tok && ev.flag === 'jail') { tok.jailed = ev.active; if (!ev.active) placeAt(tok, tok.tile); } // out of the cage: back to the yard
+      if (!isTabHidden() && ev.flag === 'jail' && ev.active) {
+        playJailClang(tok?.g.position);
+        shakeCamera(0.4, 0.18);
+        triggerCardHit(ev.player);
+      }
       bump();
       return;
     }
     case 'out': {
       apply(S, ev);
+      if (!isTabHidden()) {
+        playBankruptOut(tokens[ev.player]?.g.position);
+        shakeCamera(0.55, 0.28);
+        triggerCardHit(ev.player);
+      }
       if (tokens[ev.player]) void removeToken(tokens[ev.player]);
       bumpAssets();
       return;
@@ -252,6 +278,7 @@ async function ask(id: number, player: number, prompt: Prompt) {
   else if (mine) card = openAsk(id, prompt, (v) => { if (prompt.k === 'news' && v === false) keptRedrawNews = prompt.card; }); // the others only see who is being waited for
   waitingFor.set(mine ? -1 : player);
   askedPlayer = player; showClock();
+  if (mine) playTurnMine();
   await live(over);
   card?.close();
   if (prompt.k === 'casino' && openCasinoModal?.ask.get()?.id === id) openCasinoModal.ask.set(null);

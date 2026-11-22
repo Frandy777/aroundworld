@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { PLAYER_DEFS, TILES, maxLevel } from '../shared/data';
 import type { GameState, Owned } from '../shared/types';
+import { playTileHover, playTileSelect } from './audio';
 import { addToken, clearTokens, initActors, placeAt, setActive, tokens, updateActors } from './render/actors';
 import { createBoard } from './render/board';
 import { POS } from './render/layout';
@@ -80,6 +81,7 @@ export function selectTile(i: number) {
   selectedTile.set(i);
   activeTab.set('tile');
   board.select(i);
+  if (i >= 0) playTileSelect(i);
 }
 
 export function tokenSpot(pi: number): [number, number] | null {
@@ -92,7 +94,11 @@ export function tokenSpot(pi: number): [number, number] | null {
 function bindCanvas(signal: AbortSignal) {
   const cv = renderer.domElement;
   let down: [number, number] | null = null, moved: [number, number] | null = null;
-  const hover = (i: number, x = 0, y = 0) => { board.hover(i); cv.classList.toggle('hot', i >= 0); hoveredTileTip.set(i >= 0 ? { tile: i, x, y } : null); };
+  const hover = (i: number, x = 0, y = 0) => {
+    const prev = hoveredTileTip.get()?.tile ?? -1;
+    if (i >= 0 && i !== prev) playTileHover(i);
+    board.hover(i); cv.classList.toggle('hot', i >= 0); hoveredTileTip.set(i >= 0 ? { tile: i, x, y } : null);
+  };
   cv.addEventListener('pointerdown', (e) => (down = [e.clientX, e.clientY]), { signal });
   cv.addEventListener('pointerup', (e) => {
     if (hudLive.get() && down && e.button === 0 && Math.hypot(e.clientX - down[0], e.clientY - down[1]) < 5) selectTile(pick(e.clientX, e.clientY, board.slabs));

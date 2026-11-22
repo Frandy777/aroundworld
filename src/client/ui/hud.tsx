@@ -2,10 +2,11 @@ import { Fragment, useEffect, useRef, useState, type CSSProperties, type JSX } f
 import { LEVEL_NAMES, REGIONS, TILES, depositInterest, maxLevel } from '../../shared/data';
 import { maxRounds } from '../../shared/state';
 import { leaveRoom } from '../controller';
+import { playCashTick, playClockWarn } from '../audio';
 import { send } from '../net';
 import { CAM, focusTok, lookAtTile } from '../stage';
-import { G, actionBtn, activeTab, cards, cardsSetAside, cashEls, countdown, floats, fullscreen, hoveredTileTip, hudLive, lastRoll, paused, selectedTile, session, statsOf, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
-import { Die, Face, Flag, FullBtn, Icon, Named, Pips, Rich, hex, money, tileHead } from './bits';
+import { G, actionBtn, activeTab, cardHitAt, cards, cardsSetAside, cashEls, countdown, floats, fullscreen, hoveredTileTip, hudLive, lastRoll, paused, selectedTile, session, statsOf, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
+import { Die, Face, Flag, FullBtn, Icon, Named, Pips, Rich, SoundBtn, hex, money, tileHead } from './bits';
 import { openMenu, openRules } from './open';
 import { TileBody } from './tile';
 
@@ -17,6 +18,7 @@ function Topbar() {
       <div className="tools">
         <button className="btn sm" id="btn-help" onClick={() => void openRules()}><Icon n="help" /></button>
         <button className="btn sm" id="btn-menu" onClick={() => void openMenu(room!.code, leaveRoom, me && !me.bankruptRound && !S.over ? () => send({ t: 'bankrupt' }) : undefined)}><Icon n="menu" /></button>
+        <SoundBtn />
         <FullBtn />
       </div>
     </header>
@@ -31,6 +33,7 @@ function useRoll(cash: number) {
     const tick = (now: number) => {
       const k = 1 - Math.pow(1e-5, Math.min((now - last) / 1000, 0.1));
       last = now;
+      if (Math.abs(cash - at.current) >= 20) playCashTick();
       at.current = Math.abs(cash - at.current) < 1 ? cash : at.current + (cash - at.current) * k;
       setShown(at.current);
       if (at.current !== cash) raf = requestAnimationFrame(tick);
@@ -43,15 +46,37 @@ function useRoll(cash: number) {
 
 function Clock({ i }: { i: number }) {
   const c = useCell(countdown), p = useCell(paused);
+  useEffect(() => {
+    if (c?.player !== i || p) return;
+    let lastSec = -1;
+    const check = () => {
+      const sec = Math.ceil((c.expiresAt - performance.now()) / 1000);
+      if (sec >= 1 && sec <= 10 && sec !== lastSec) {
+        lastSec = sec;
+        playClockWarn(sec);
+      }
+    };
+    check();
+    const id = setInterval(check, 150);
+    return () => clearInterval(id);
+  }, [c, i, p]);
   if (c?.player !== i) return null;
   return <div className="clock" key={c.expiresAt}><i style={{ '--w': `${(c.remainingMs * 100) / c.totalMs}%`, '--t': `${c.remainingMs}ms`, animationPlayState: p ? 'paused' : undefined } as CSSProperties} /></div>;
 }
 
 function PCard({ i, on, viewing }: { i: number; on: boolean; viewing: boolean }) {
   const S = useGame(), p = S.players[i], s = statsOf(i), v = useRoll(p.cash), room = useCell(session).room;
+  const hitAt = useCell(cardHitAt)[i];
+  const [hit, setHit] = useState(false);
+  useEffect(() => {
+    if (!hitAt) return;
+    setHit(true);
+    const id = setTimeout(() => setHit(false), 250);
+    return () => clearTimeout(id);
+  }, [hitAt]);
   const offline = room?.seats.find((x) => x.playerIndex === i)?.online === false;
   return (
-    <div className={`pcard box ${on ? 'on' : ''} ${viewing ? 'viewing' : ''} ${p.bankruptRound ? 'out' : ''} ${v < p.cash ? 'gain' : v > p.cash ? 'loss' : ''}`}
+    <div className={`pcard box ${on ? 'on' : ''} ${viewing ? 'viewing' : ''} ${p.bankruptRound ? 'out' : ''} ${v < p.cash ? 'gain' : v > p.cash ? 'loss' : ''} ${hit ? 'hit' : ''}`}
       onClick={() => { viewedPlayer.set(i); activeTab.set('assets'); focusTok(i); }}>
       <Face color={p.color} />
       <div className="nm">

@@ -1,10 +1,11 @@
 import * as THREE from 'three';
+import { playStrikeImpact, startStrikeFlight } from '../audio';
 import { exhaust } from './exhaust';
 import { flight } from './flight';
 import { LOT, PAD, POS } from './layout';
 import { LAMP, glow, lamps } from './light';
 import { LAUNCH_PAD, MISSILE_LENGTH, MISSILE_SCALE, missile } from './models/missile';
-import { LAYER_FX, fxOf, scene, tween } from './scene';
+import { LAYER_FX, fxOf, scene, shakeCamera, tween } from './scene';
 import { sky } from './sky';
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -68,6 +69,8 @@ export async function strike(from: number, to: number, start = launchPoint(from)
       mesh.material.opacity = 0.48 * Math.min(1, q * 12) * (1 - q) ** 2;
     });
   };
+  const flightAudio = startStrikeFlight(start);
+  let impacted = false;
   try {
     await tween(total, (k) => {
       const time = k * total, flightTime = Math.max(0, time - IGNITION_TIME), hit = time - impactTime;
@@ -105,10 +108,17 @@ export async function strike(from: number, to: number, start = launchPoint(from)
         const terminal = THREE.MathUtils.smoothstep(flightTime, plan.boost + plan.coast - 0.15, plan.boost + plan.coast + 0.2);
         const dive = THREE.MathUtils.clamp((flightTime - plan.boost - plan.coast) / plan.terminal, 0, 1), thrust = dive * dive * (3 - 2 * dive);
         flame.update(time, ignition * (1 - 0.4 * sustain + 0.25 * terminal + 0.45 * thrust));
+        flightAudio.update(p, ignition, dive);
         fire.position.copy(p).addScaledVector(v, -MISSILE_LENGTH * MISSILE_SCALE); fire.color.setHex(0xffa860); fire.intensity = 26 * ignition * dim;
         aim.scale.setScalar(0.8 + 0.07 * Math.sin(time * 8));
         aimMaterial.opacity = Math.min(1, flightTime / plan.duration * 2) * (0.22 + terminal * 0.3);
         return;
+      }
+      if (!impacted) {
+        impacted = true;
+        flightAudio.stop();
+        playStrikeImpact(end);
+        shakeCamera(1.0, 0.38);
       }
       const q = Math.min(1, hit / BLAST_TIME), fade = 1 - q;
       const flashAge = Math.min(1, hit / 0.3);
@@ -128,6 +138,7 @@ export async function strike(from: number, to: number, start = launchPoint(from)
       ringMaterial.opacity = 0.7 * (1 - shock) ** 2;
     });
   } finally {
+    flightAudio.stop();
     fire.intensity = 0;
     scene.remove(rocket, effects);
     flame.dispose();

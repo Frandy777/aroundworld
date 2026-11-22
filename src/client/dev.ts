@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { TILES } from '../shared/data';
 import { command } from '../shared/state';
 import type { Cmd } from '../shared/types';
+import { AUDIO_AUDITIONS, auditionSound, renderAuditionPcm } from './audio';
 import { leaveRoom, quickGame } from './controller';
 import { busy } from './director';
 import { send, socketReadyState } from './net';
@@ -287,6 +288,7 @@ export function initDev() {
     scenario: (name: string) => runScenario(name, driver), // a fresh dev room played to a named resting state, then paused: `scenarios` says what each rests on
     scenarios: Object.fromEntries(Object.entries(SCENARIOS).map(([k, s]) => [k, s.hint])),
     snapDataUrl: () => (loop.draw(), renderer.domElement.toDataURL('image/png')),
+    audio: { labels: AUDIO_AUDITIONS.map(([k]) => k), play: auditionSound, renderPcm: renderAuditionPcm },
     refs: { G, TILES, POS, LOT, PAD, clock, sky, U, camera, hdCam, controls, renderer, scene, loop },
   };
   (window as unknown as { __aw?: typeof api }).__aw = api;

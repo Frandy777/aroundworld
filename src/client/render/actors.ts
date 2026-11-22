@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { scene, toon, lodMap, pixelTexture, texels, tween, easeInOut, dirtyShadow, DENSITY } from './scene';
+import { playDiceBounce, playDiceDoubles, playTokenHop, playTokenTeleport } from '../audio';
+import { scene, toon, lodMap, pixelTexture, texels, tween, easeInOut, dirtyShadow, shakeCamera, DENSITY } from './scene';
 import { LOT, POS } from './layout';
 import { PAL, dieRows, paint, canvas, facePal, FACE, TORSO } from './art';
 import { TILES } from '../../shared/data';
@@ -84,6 +85,7 @@ export async function hop(tok: Token, to: number, dur = 0.22) {
   tok.tile = to; tok.slot = slot(tok, to); tok.busy = true;
   const b = spot(tok, to), dir = Math.atan2(b.x - a.x, b.z - a.z);
   tok.g.rotation.y = dir;
+  playTokenHop(b);
   await tween(dur, (k) => {
     const s = Math.sin(k * Math.PI);
     tok.g.position.lerpVectors(a, b, k); tok.g.position.y += s * 1.4;
@@ -94,8 +96,10 @@ export async function hop(tok: Token, to: number, dur = 0.22) {
 
 export async function jump(tok: Token, to: number) {
   tok.busy = true;
+  playTokenTeleport('out', tok.g.position);
   await tween(0.25, (k) => tok.g.scale.setScalar(1 - k));
   place(tok, to);
+  playTokenTeleport('in', tok.g.position);
   await tween(0.25, (k) => tok.g.scale.setScalar(k));
   tok.busy = false;
 }
@@ -116,7 +120,10 @@ const dice = [0, 1].map(() => {
 });
 export const initActors = () => scene.add(...dice);
 
+const DICE_BOUNCES = [0.2, 0.6, 1.0];
 export function rollDice(at: THREE.Vector3, values: number[]) {
+  const doubles = values[0] === values[1];
+  let doublesPlayed = false;
   return Promise.all(dice.map((d, k) => {
     const target = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.random() * 6.28)
       .multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(...UP[values[k]])));
@@ -125,9 +132,21 @@ export function rollDice(at: THREE.Vector3, values: number[]) {
     const land = new THREE.Vector3(k ? -0.35 : -1.65, 0, -0.25);
     const x1 = at.x + land.x, z1 = at.z + land.z, x0 = x1 + (k ? 5 : -5), z0 = z1 + 4;
     d.visible = true; d.scale.setScalar(1);
+    let nextBounce = 0;
     return tween(1.3, (t) => {
       d.position.set(x0 + (x1 - x0) * t, at.y + 0.6 + 7 * (1 - t) * Math.abs(Math.cos(t * Math.PI * 2.5)), z0 + (z1 - z0) * t);
       d.quaternion.copy(target).multiply(q.setFromAxisAngle(axis, spin * (1 - t) * (1 - t)));
+      while (nextBounce < DICE_BOUNCES.length && t >= DICE_BOUNCES[nextBounce]) {
+        const idx = nextBounce++;
+        if (k === 0) {
+          playDiceBounce(idx, d.position);
+          if (idx === 0 || idx === 2) shakeCamera(0.18, 0.08);
+        }
+        if (idx === 2 && doubles && !doublesPlayed) {
+          doublesPlayed = true;
+          playDiceDoubles(at);
+        }
+      }
     });
   }));
 }

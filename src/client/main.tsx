@@ -6,6 +6,7 @@ import './styles/style.css';
 import './styles/cards.css';
 import { createRoot, type Root } from 'react-dom/client';
 import { App } from './App';
+import { initAudio } from './audio';
 import { boot } from './controller';
 import { skin } from './render/art';
 import { initStage } from './stage';
@@ -25,7 +26,7 @@ async function main() {
   const dev = import.meta.env.DEV ? await import('./dev') : null;
   dev?.preBoot();
   skin(); // frames, cursors and sprites become CSS variables before the first paint
-  stops.push(initStage(), bindKeys());
+  stops.push(initStage(), initAudio(), bindKeys());
   (hmrData.root ??= createRoot(document.getElementById('root')!)).render(<App />);
   stops.push(boot());
   if (dev) stops.push(dev.initDev());

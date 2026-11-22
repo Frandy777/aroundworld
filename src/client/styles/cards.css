@@ -104,3 +104,12 @@
 .pod { width: 96px; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
 .pod b { font: 34px / 36px var(--font-hd); }
 .pod .blk { width: 100%; background: var(--c); display: flex; align-items: flex-start; justify-content: center; padding-top: 6px; font: 34px / 36px var(--font-hd); color: rgba(0, 0, 0, 0.55); box-shadow: 0 0 0 2px var(--ink), inset 0 4px rgba(255, 255, 255, 0.4), inset 0 -4px rgba(0, 0, 0, 0.25); }
+.vol-row { display: flex; align-items: center; gap: 10px; padding: 4px 8px; background: var(--navy); box-shadow: inset 0 -2px var(--ink); }
+.vol-row .btn { margin: 0; padding: 0; flex: none; }
+.vol-track { position: relative; flex: 1; height: 22px; background: var(--navy) padding-box; border: 6px solid transparent; border-image: var(--fr-well) 3 / 6px; cursor: var(--cur-hand); touch-action: none; outline: 0; }
+.vol-track:focus-visible { border-image-source: var(--fr-gold); }
+.vol-track > i { display: block; height: 100%; background: linear-gradient(var(--gold-hi) 0 2px, var(--gold) 2px 50%, var(--gold-lo) 50%); pointer-events: none; }
+.vol-track.muted > i { background: var(--indigo); }
+.vol-track > b { position: absolute; top: 50%; width: 12px; height: 22px; transform: translate(-50%, -50%); pointer-events: none; background: linear-gradient(var(--mist) 0 2px, var(--sky) 2px 55%, var(--peri) 55%); box-shadow: 0 0 0 2px var(--ink), inset -2px -2px var(--blue); }
+.vol-track.muted > b { background: linear-gradient(var(--peri) 0 2px, var(--blue) 2px 55%, var(--indigo) 55%); }
+.vol-val { min-width: 44px; text-align: right; font: var(--fs) / 20px var(--font); }
