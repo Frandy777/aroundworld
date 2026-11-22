@@ -4,7 +4,7 @@ import { maxRounds } from '../../shared/state';
 import { leaveRoom } from '../controller';
 import { send } from '../net';
 import { CAM, focusTok, lookAtTile } from '../stage';
-import { G, actionBtn, activeTab, cards, cardsSetAside, cashEls, countdown, floats, fullscreen, hd2d, hoveredTileTip, hudLive, lastRoll, paused, selectedTile, session, statsOf, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
+import { G, actionBtn, activeTab, cards, cardsSetAside, cashEls, countdown, floats, fullscreen, hoveredTileTip, hudLive, lastRoll, paused, selectedTile, session, statsOf, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
 import { Die, Face, Flag, FullBtn, Icon, Named, Pips, Rich, hex, money, tileHead } from './bits';
 import { openMenu, openRules } from './open';
 import { TileBody } from './tile';
@@ -119,7 +119,7 @@ function Assets() {
   );
 }
 
-const Log = () => <>{useGame().log.map((l) => <div className="logline" key={l.id}><i>R{l.round}</i><Rich m={l.message} /></div>)}</>;
+const Log = () => <>{useGame().log.map((l) => <div className="logline" key={l.id}><i>R{l.round}</i><Rich m={l.message} z={1} /></div>)}</>;
 
 const TABS: [Tab, () => JSX.Element][] = [['tile', TilePane], ['assets', Assets], ['log', Log]];
 function Side() {
@@ -151,11 +151,10 @@ function Actions() {
   );
 }
 
-const CAMS = [['in', 'plus', 'Zoom in'], ['out', 'minus', 'Zoom out'], ['follow', 'focus', 'Focus on current player'], ['map', 'globe', 'Whole board']] as const;
-const LOOKS = [['pixel', 'pixel', 'Pixel look', false], ['hd2d', 'star', 'HD-2D look', true]] as const;
+const CAMS = [['in', 'plus', 'Zoom in (or mouse wheel)'], ['out', 'minus', 'Zoom out (or mouse wheel)'], ['follow', 'focus', 'Focus on current player'], ['map', 'globe', 'Whole board']] as const;
 
 export function Hud() {
-  const live = useCell(hudLive), hd = useCell(hd2d);
+  const live = useCell(hudLive);
   if (!live) return null;
   return (
     <div id="hud">
@@ -166,7 +165,6 @@ export function Hud() {
       </div>
       <Actions />
       <div id="camctl">
-        {LOOKS.map(([c, ic, title, v]) => <button key={c} className={`btn sm${hd === v ? ' on' : ''}`} data-cam={c} title={title} onClick={() => hd2d.set(v)}><Icon n={ic} /></button>)}
         {CAMS.map(([c, ic, title]) => <button key={c} className="btn sm" data-cam={c} title={title} onClick={CAM[c]}><Icon n={ic} /></button>)}
       </div>
     </div>

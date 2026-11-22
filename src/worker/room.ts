@@ -23,6 +23,16 @@ interface Seat {
 interface Stored { code: string; hostPlayerId: string; dev: boolean; settings: Settings; idleDissolveAt: number; lifetimeExpiresAt: number; stageExpiresAt: number; seats: Seat[]; game?: Omit<Saved, 'checkpoint'> }
 
 const cleanName = (raw: string, seat: number) => Array.from(raw.replace(/[\u0000-\u001f\u007f]/g, '').trim()).slice(0, NAME_MAX).join('').trim() || PLAYER_DEFS[seat].name;
+// A taken name gets ' 2', ' 3', ... — the smallest free number, compared case-insensitively; the base is cut so the suffix still fits NAME_MAX.
+const uniqueName = (name: string, taken: string[]) => {
+  const takenLower = new Set(taken.map((n) => n.toLowerCase()));
+  let unique = name;
+  for (let k = 2; takenLower.has(unique.toLowerCase()); k++) {
+    const suffix = ` ${k}`;
+    unique = Array.from(name).slice(0, NAME_MAX - suffix.length).join('').trimEnd() + suffix;
+  }
+  return unique;
+};
 
 // One room = one object, written to storage whenever it changes: an object that was evicted or restarted comes back as the room it was (`restore`). The connections hibernate with it (the runtime
 // keeps them, tagged with their player's id, and wakes the object for what they say), and everything that waits for a time is a deadline, which the alarm watches (`save` sets it).
@@ -192,7 +202,7 @@ export class Room extends DurableObject<Env> implements Host {
     if (!s) {
       if (this.seats.length >= MAX_PLAYERS) return this.fail(ws, 'full');
       const seat = PLAYER_DEFS.findIndex((_, k) => !this.seats.some((x) => x.seat === k));
-      s = { playerId, seat, name: cleanName(name, seat), playerIndex: -1, left: false, dropSeatAt: 0 };
+      s = { playerId, seat, name: uniqueName(cleanName(name, seat), this.seats.map((x) => x.name)), playerIndex: -1, left: false, dropSeatAt: 0 };
       this.seats.push(s);
       if (!this.hostPlayerId) this.hostPlayerId = playerId;
     }
@@ -268,7 +278,7 @@ export class Room extends DurableObject<Env> implements Host {
     switch (msg.t) {
       case 'name':
         if (this.game || typeof msg.name !== 'string') return;
-        seat.name = cleanName(msg.name, seat.seat);
+        seat.name = uniqueName(cleanName(msg.name, seat.seat), this.seats.filter((x) => x !== seat).map((x) => x.name));
         this.changed();
         break;
       case 'settings': {
@@ -282,7 +292,7 @@ export class Room extends DurableObject<Env> implements Host {
         const { seat: seatIndex } = msg, occupant = this.seats.find((x) => x.seat === seatIndex);
         if (!this.dev || this.game || !isHost || !Number.isInteger(seatIndex) || seatIndex < 0 || seatIndex >= MAX_PLAYERS || (occupant && !occupant.bot)) return;
         if (occupant) this.seats = this.seats.filter((x) => x !== occupant);
-        else this.seats.push({ playerId: crypto.randomUUID(), seat: seatIndex, name: `Bot ${PLAYER_DEFS[seatIndex].name}`, playerIndex: -1, left: false, dropSeatAt: 0, bot: true }); // the id is nobody's to guess: no connection can take the seat over
+        else this.seats.push({ playerId: crypto.randomUUID(), seat: seatIndex, name: uniqueName(`Bot ${PLAYER_DEFS[seatIndex].name}`, this.seats.map((x) => x.name)), playerIndex: -1, left: false, dropSeatAt: 0, bot: true }); // the id is nobody's to guess: no connection can take the seat over
         this.changed();
         break;
       }

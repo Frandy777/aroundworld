@@ -88,9 +88,10 @@ button, [data-tile], .pcard, .item { cursor: var(--cur-hand); }
 .badge { font: var(--fs) / 20px var(--font); padding: 0 6px; background: var(--red); color: #fff; margin-left: 4px; text-shadow: none; box-shadow: 0 0 0 2px var(--ink), inset 0 2px rgba(255, 255, 255, 0.3), inset 0 -2px rgba(0, 0, 0, 0.3); }
 .badge.blue { background: #6a3fb5; }
 .pcard.on::before { content: ''; position: absolute; left: -26px; top: 50%; margin-top: -9px; width: 16px; height: 18px; background: var(--spr-tri) center / contain no-repeat; image-rendering: pixelated; animation: blink 0.8s steps(2) infinite; }
-.clock { position: absolute; left: 12px; right: 12px; bottom: -8px; height: 10px; padding: 2px; background: var(--ink); pointer-events: none; }
-.clock > i { display: block; width: var(--w); height: 100%; background: linear-gradient(var(--gold-hi) 0 2px, var(--gold) 2px 4px, var(--gold-lo) 4px); animation: drain var(--t) steps(20) forwards; }
+.clock { --warn: 10s; position: absolute; left: 12px; right: 12px; bottom: -8px; height: 10px; padding: 2px; background: var(--ink); pointer-events: none; }
+.clock > i { display: block; width: var(--w); height: 100%; background: linear-gradient(var(--gold-hi) 0 2px, var(--gold) 2px 4px, var(--gold-lo) 4px); animation: drain var(--t) steps(20) forwards, alarm 0.5s steps(1) calc(var(--t) - var(--warn)) infinite; }
 @keyframes drain { to { width: 0; } }
+@keyframes alarm { 0%, 100% { background: linear-gradient(var(--red-hi) 0 2px, var(--red) 2px 4px, var(--red-lo) 4px); } 50% { background: linear-gradient(var(--red) 0 2px, var(--red-lo) 2px 4px, var(--wine) 4px); } }
 
 #side { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .tabs { display: flex; gap: 2px; background: var(--ink); }
@@ -108,7 +109,7 @@ button, [data-tile], .pcard, .item { cursor: var(--cur-hand); }
 .dice-chip { display: flex; align-items: center; gap: 8px; padding: 4px 12px 2px; font: 34px / 36px var(--font-hd); color: var(--gold); text-shadow: 2px 2px 0 var(--brown); }
 .dice-chip .die { width: 32px; height: 32px; }
 
-#camctl { position: fixed; right: 14px; bottom: 28px; width: var(--col); display: flex; justify-content: space-between; z-index: 11; }
+#camctl { position: fixed; right: 14px; bottom: 28px; width: var(--col); display: flex; justify-content: flex-end; gap: 6px; z-index: 11; }
 #camctl .btn { margin: 0; padding-inline: 3px; }
 #dev { position: fixed; left: 14px; top: 12px; width: 340px; z-index: 50; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 #dev .dock { display: flex; gap: 6px; }
@@ -163,4 +164,4 @@ button, [data-tile], .pcard, .item { cursor: var(--cur-hand); }
 .badge.dim { background: var(--indigo); color: var(--dim); }
 .pl-row .nm { flex: 1; min-width: 0; padding-left: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .invite { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
-.invite .note { flex: 1 1 auto; }
+.invite .code { flex: 1; font: 34px / 36px var(--font-hd); color: var(--gold); text-shadow: 2px 2px 0 var(--brown); letter-spacing: 4px; }

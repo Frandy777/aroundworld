@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent, type ReactNode } from 'react';
 import { DEPOSIT_MAX_ROUNDS, DEPOSIT_MIN_ROUNDS, DEPOSIT_STEP, START_CASH, TILES, depositInterest, depositRate, maxLevel, type Tile } from '../../shared/data';
 import { AUTO_CLOSE_MS } from '../../shared/protocol';
 import { canPick } from '../../shared/state';
@@ -57,6 +57,24 @@ function useAuto(ms: number, fn: () => void) {
   return ms ? { left: (ticks * 100) / TICKS, hold: () => (held.current = true), free: () => (held.current = false) } : undefined;
 }
 
+const HOLD_FIRST_REPEAT_MS = 400, HOLD_FASTEST_REPEAT_MS = 30;
+// Press-and-hold auto-repeat for stepper buttons: the first step fires on pointerdown, so the click
+// that follows it is ignored — a keyboard click (detail 0) still steps.
+function useHold(step: () => void) {
+  const stepRef = useRef(step), timer = useRef<ReturnType<typeof setTimeout>>(undefined), gapMs = useRef(0);
+  stepRef.current = step;
+  const stop = () => { clearTimeout(timer.current); timer.current = undefined; };
+  useEffect(() => stop, []);
+  const repeat = () => { stepRef.current(); timer.current = setTimeout(repeat, gapMs.current = Math.max(HOLD_FASTEST_REPEAT_MS, gapMs.current * 0.8)); };
+  return {
+    onPointerDown: (e: PointerEvent<HTMLButtonElement>) => { if (!e.button) { stop(); stepRef.current(); timer.current = setTimeout(repeat, gapMs.current = HOLD_FIRST_REPEAT_MS); } },
+    onPointerUp: stop,
+    onPointerLeave: stop,
+    onPointerCancel: stop,
+    onClick: (e: MouseEvent<HTMLButtonElement>) => { if (!e.detail) stepRef.current(); },
+  };
+}
+
 const RULES: Record<string, ReactNode> = {
   GOAL: <>
     <h4>THE GOAL</h4><p>Buy cities and investments, collect rent, and push everyone else into bankruptcy. Everyone starts on START with {money(START_CASH)}.</p>
@@ -80,6 +98,11 @@ const RULES: Record<string, ReactNode> = {
   TILES: <>
     <h4>INVESTMENTS</h4><p>Transport, Construction, Military, Chokepoints, Oil, Media and Prison Island. Own more of a group to make it stronger.</p>
     <h4>PUBLIC TILES</h4><ul><li><b>START:</b> collect $3,000 passing or stopping.</li><li><b>Exchanges:</b> investments owned {'\u00D7'} $500.</li><li><b>Tax Bureau:</b> properties {'\u00D7'} $30 + investments {'\u00D7'} $50 (1st); 3% of cash + 5% of deposit (2nd).</li><li><b>Casino:</b> gamble on the dice — certain rolls can send you to jail.</li><li><b>Nightclub:</b> pay $100, stay one turn.</li><li><b>Bank:</b> mortgage at full lot value, or place a fixed deposit.</li><li><b>News Agency:</b> draw a random news event.</li><li><b>Area 51:</b> get teleported to a random other tile, and its effect applies.</li></ul>
+  </>,
+  CONTROLS: <>
+    <h4>CAMERA</h4><ul><li>Left-drag pans the board; right-drag rotates, and Ctrl / Cmd / Shift + left-drag does too (for trackpads). The wheel or a pinch zooms; W A S D or the arrow keys pan.</li><li>Touch: one finger pans, two fingers pinch to zoom and twist to rotate.</li><li>Camera buttons at the bottom right: + and - zoom, the target jumps to the current player, the globe shows the whole board.</li></ul>
+    <h4>KEYBOARD</h4><ul><li>Space / Enter presses the green button of the top card (or the action bar): roll, end turn, OK. BUY and UPGRADE always need a click.</li><li>Esc closes menus and dialogs; on a game card it hides the card to show the board (same as VIEW BOARD) — Esc again brings it back. F toggles fullscreen.</li></ul>
+    <h4>MENU</h4><p>The ? button in the top bar opens this guide; the menu button next to it holds auto-focus on the current player, HD-2D lighting and fullscreen.</p>
   </>,
 };
 export function RulesCard({ close }: { close(v: string): void }) {
@@ -158,7 +181,7 @@ export function PickCard({ id, p }: { id: number; p: Of<'pick'> }) {
         const t: Tile | null = p.of === 'tile' ? TILES[x.index] : null, who: Player | null = p.of === 'player' ? S.players[x.index] : null;
         return (
           <div className={`item ${sel.includes(x.index) ? 'sel' : ''}`} key={x.index} onClick={() => toggle(x.index)}>
-            <span className="check" />
+            <span className={`check${r.k === 'one' ? ' radio' : ''}`} />
             {t && <><span className="sw" style={{ background: hex(t.color) }} /><Flag name={t.name} /><span className="grow">{t.name}</span></>}
             {who && <><Face color={who.color} /><span className="grow">{who.name}</span></>}
             {x.level !== undefined && <Pips n={x.level} max={maxLevel(TILES[x.index])} />}
@@ -185,7 +208,7 @@ export function DepCard({ id, p }: { id: number; p: Of<'dep'> }) {
   const [termRounds, setTermRounds] = useState(10);
   const interest = depositInterest(principal, termRounds);
   return (
-    <Card title="FIXED DEPOSIT" sub="Bank" tone={0x3b7bd9} foot={<>
+    <Card title="FIXED DEPOSIT" sub={p.step ? `Bank · ${p.step}` : 'Bank'} tone={0x3b7bd9} foot={<>
       <Btn id="leave" onClick={() => reply(id, null)}>LEAVE</Btn>
       <Btn id="dep" cls="primary" onClick={() => reply(id, { principal, termRounds })}>DEPOSIT {money(principal)}</Btn>
     </>}>
@@ -233,9 +256,9 @@ export function OrderCard({ players, passes, order, close }: { players: Player[]
     })();
     return () => { dead = true; };
   }, []);
-  useAuto(ready ? AUTO_CLOSE_MS : 0, close);
+  const auto = useAuto(ready ? AUTO_CLOSE_MS : 0, close);
   return (
-    <Card title="WHO GOES FIRST?" sub="Lowest total moves first" peek={false} foot={<Btn id="go" cls="primary" disabled={!ready} onClick={close}>LET{'\u2019'}S GO</Btn>}>
+    <Card title="WHO GOES FIRST?" sub="Lowest total moves first" peek={false} auto={auto} foot={<Btn id="go" cls="primary" disabled={!ready} onClick={close}>LET{'\u2019'}S GO</Btn>}>
       <div className="list" id="ord">{players.map((p, i) => (
         <div className={`order-row ${tie.includes(i) ? 'tie' : ''}`} key={i}>
           <Face color={p.color} /><span className="nm" style={{ color: hex(p.color) }}>{p.name}</span>
@@ -281,6 +304,8 @@ export function CasinoCard({ ctl, close }: { ctl: Ctl; close(): void }) {
   const v = useCell(ctl.view), ask = useCell(ctl.ask), lucky = v.variant === 'lucky';
   const [bet, setBet] = useState(v.bet);
   useEffect(() => setBet(v.bet), [v.bet]);
+  const minus = useHold(() => setBet((b) => Math.max(lucky ? 100 : 200, b - 100)));
+  const plus = useHold(() => setBet((b) => Math.min(v.maxBet, b + 100)));
   const [num, setNum] = useState(d6);
   const [shown, setShown] = useState(0);
   const [rolling, setRolling] = useState(false);
@@ -314,7 +339,7 @@ export function CasinoCard({ ctl, close }: { ctl: Ctl; close(): void }) {
   const rollNet = last ? last[2] - last[3] : 0;
   const betting = (v.stage === 'bet' && !shown) || (v.stage === 'again' && done);
   const finished = done && v.stage === 'end', me = state().turnOrder[state().turnIndex] === G.myPlayer;
-  useAuto(finished ? AUTO_CLOSE_MS : 0, close);
+  const auto = useAuto(finished ? AUTO_CLOSE_MS : 0, close);
   useEffect(() => { if (done && v.stage === 'cash') close(); }, [done, v.stage]);
 
   const go = () => { setSent(true); setRolling(true); reply(ask!.id, { act: 'roll', bet: betting ? bet : v.bet, pickedNumber: num }); };
@@ -324,26 +349,26 @@ export function CasinoCard({ ctl, close }: { ctl: Ctl; close(): void }) {
   const tally: [string, number][] = [['Bets', -staked], ['Won', won], ['Net', won - staked]];
 
   return (
-    <Card title={lucky ? 'LUCKY CASINO' : 'HIGH STAKES CASINO'} sub={lucky ? 'Bet on a number' : 'Bet, roll, cash out'} cls="casino" peek={false} foot={
+    <Card title={lucky ? 'LUCKY CASINO' : 'HIGH STAKES CASINO'} sub={lucky ? 'Bet on a number' : 'Bet, roll, cash out'} cls="casino" peek={false} auto={auto} foot={
       !rolling && (
-        v.stage === 'bet' && mine ? <Btn id="roll" cls="primary" onClick={go}>{lucky ? `ROLL ${money(bet)}` : 'ROLL 1/2'}</Btn>
-        : v.stage === 'again' && done && mine ? <><Btn id="roll" cls="primary" onClick={go}>ROLL {money(bet)}</Btn><Btn id="cash" cls="gold" onClick={cash}>CASH OUT</Btn></>
+        v.stage === 'bet' && mine ? <Btn id="roll" cls="primary" onClick={go}>{`ROLL ${money(bet)}`}</Btn>
+        : v.stage === 'again' && done && mine ? <><Btn id="roll" cls="primary" onClick={go}>{`ROLL AGAIN ${money(bet)}`}</Btn><Btn id="cash" cls="gold" onClick={cash}>CASH OUT</Btn></>
         : finished ? <Btn id="done" cls={`primary ${v.jailed ? 'danger' : ''}`} onClick={close}>{me ? (v.jailed ? 'GO TO JAIL' : 'COLLECT') : 'OK'}</Btn>
         : null
       )
     }>
       <div className="note" style={{ background: '#2b1a47' }}>
         {lucky ? `Pick a number 1\u20136 and bet on it (min ${money(100)}): one die on it pays ${money(stake * 2 - 10)}, both pay ${money(stake * 5 - 100)}. Up to 2 plays. Two jackpots = JAIL.`
-          : `Place a bet (multiples of $100): each roll stakes a bet of its own and pays (total - 2) \u00D7 ${money((stake - 100) / 5)}. Up to 2 rolls. Same pair twice with total above 7 = JAIL.`}
+          : `Place a bet (multiples of $100). Each roll costs your bet and pays ${money((stake - 100) / 5)} per point above 2: a 7 pays ${money(stake - 100)}, a 12 pays ${money(stake * 2 - 200)}. Up to 2 rolls. Same pair twice with a total above 7 = JAIL.`}
       </div>
       {lucky && betting && mine && (
         <div className="seg">{[1, 2, 3, 4, 5, 6].map((n) => <button key={n} className={n === num ? 'on' : ''} onClick={() => setNum(n)}>{n}</button>)}</div>
       )}
       {betting && mine && (
         <div className="stepper">
-          <button className="btn sm" onClick={() => setBet(Math.max(lucky ? 100 : 200, bet - 100))}><Icon n="minus" /></button>
+          <button className="btn sm" {...minus}><Icon n="minus" /></button>
           <b>BET {money(bet)}</b>
-          <button className="btn sm" onClick={() => setBet(Math.min(v.maxBet, bet + 100))}><Icon n="plus" /></button>
+          <button className="btn sm" {...plus}><Icon n="plus" /></button>
           <button className="btn sm gold" onClick={() => setBet(v.maxBet)}>ALL IN</button>
         </div>
       )}

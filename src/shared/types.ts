@@ -63,7 +63,7 @@ export type Prompt =
   | { k: 'pick'; of: 'tile' | 'player'; title: string; sub: Msg; tone: number; hint: string; items: PickItem[]; rule: PickRule; label: string; skip?: string }
   | { k: 'confirm'; title: string; sub: Msg; tone: number; body: Block[]; yes: string; no: string }
   | { k: 'news'; card: NewsCard }
-  | { k: 'dep'; maxPrincipal: number } // a fixed deposit on offer at the bank (cash rounded down to whole thousands)
+  | { k: 'dep'; maxPrincipal: number; step?: string } // a fixed deposit on offer at the bank (cash rounded down to whole thousands); `step` marks its place in a sequence ('2/2')
   | { k: 'casino'; view: CasinoView };
 // What the roll question of a dev room takes besides the roll (see `Game.debug`).
 export type Cmd =

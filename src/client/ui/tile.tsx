@@ -5,9 +5,9 @@ import { Face, Pips, Rows, hex, money } from './bits';
 
 const CASINO = {
   lucky: 'Pick a number 1\u20136 and stake at least $100 on it: one die on the number pays bet \u00D7 2 \u2212 $10, both pay bet \u00D7 5 \u2212 $100. Up to 2 plays, each with a fresh bet. Two jackpots send you to jail.',
-  stakes: 'Bet any amount (multiples of $100): each roll stakes a bet of your choosing and wins (total - 2) \u00F7 5 \u00D7 (bet - 100), settling on its own. Up to 2 rolls. If both rolls show the same pair with a total above 7, you go to jail.',
+  stakes: 'Bet any amount (multiples of $100). Each roll costs its bet and pays (total \u2212 2) \u00F7 5 \u00D7 (bet \u2212 $100): a 7 pays your bet \u2212 $100, a 12 pays double your bet \u2212 $200. Up to 2 rolls. If both rolls show the same pair with a total above 7, you go to jail.',
 };
-const effectText = (t: Tile) => (t.type === 'special' ? SPECIAL[t.name] : t.type === 'invest' ? INVEST[t.kind as InvestKind].effect : t.kind === 'casino' ? CASINO[t.variant!] : PUBLIC[t.kind as PublicKind].effect);
+const effectText = (t: Tile) => (t.type === 'special' ? SPECIAL[t.name].effect : t.type === 'invest' ? INVEST[t.kind as InvestKind].effect : t.kind === 'casino' ? CASINO[t.variant!] : PUBLIC[t.kind as PublicKind].effect);
 
 export function TileBody({ t, bare = false }: { t: Tile; bare?: boolean }) {
   const S = useGame(), o = S.ownedByTile[t.i], p = o && S.players[o.owner];
@@ -27,7 +27,11 @@ export function TileBody({ t, bare = false }: { t: Tile; bare?: boolean }) {
       {t.type === 'special' && (
         <>
           <Rows a={[['Price', money(t.price)], ['Upgrade', t.upgradeCost ? money(t.upgradeCost) : 'Not upgradable'], ['Lot value', money(lotValue(t, o))]]} />
-          <div className="note">{effectText(t)}{t.upgradeCost > 0 && <><br /><span className="dim">Values listed by level: Empty / Lv 1 / Lv 2</span></>}</div>
+          <div className="note">{effectText(t)}</div>
+          <table className="tbl"><tbody>
+            <tr><th>LEVEL</th><th>X</th></tr>
+            {SPECIAL[t.name].levels.map((v, i) => <tr key={i} className={o?.level === i ? 'cur' : ''}><td>{LEVEL_NAMES[i]}</td><td>{v}</td></tr>)}
+          </tbody></table>
         </>
       )}
       {t.type === 'invest' && (() => {

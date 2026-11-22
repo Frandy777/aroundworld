@@ -48,17 +48,17 @@ function RoomCard({ join, invite, back }: { join: boolean; invite: string; back(
   };
   const enterKey = (e: KeyboardEvent) => { if (e.key === 'Enter') void go(); };
   return (
-    <Card title={join ? 'JOIN ROOM' : 'CREATE ROOM'} sub={join ? 'Enter the room number' : 'Up to 4 players'} dismiss="back" foot={<>
+    <Card title={join ? 'JOIN ROOM' : 'CREATE ROOM'} sub={join ? (invite ? `Joining room ${invite}` : 'Enter the room number') : 'Up to 4 players'} dismiss="back" foot={<>
       <Btn id="back" onClick={back}>BACK</Btn>
       <Btn id="go" cls="primary" disabled={!ok} onClick={() => void go()}>{join ? 'JOIN' : 'CREATE'}</Btn>
     </>}>
       {join && (
         <div className="field"><label>ROOM NUMBER</label>
-          <div className="pl-row"><input autoFocus inputMode="numeric" maxLength={6} placeholder="000000" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} onKeyDown={enterKey} /></div>
+          <div className="pl-row"><input autoFocus={!invite} inputMode="numeric" maxLength={6} placeholder="000000" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} onKeyDown={enterKey} /></div>
         </div>
       )}
       <div className="field"><label>YOUR NAME</label>
-        <div className="pl-row"><input autoFocus={!join} maxLength={NAME_MAX} placeholder="Leave empty for a default name" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={enterKey} /></div>
+        <div className="pl-row"><input autoFocus={!join || !!invite} maxLength={NAME_MAX} placeholder="Leave empty for a default name" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={enterKey} /></div>
       </div>
       {error && <div className="note bad">{error}</div>}
     </Card>
@@ -75,11 +75,13 @@ export function Title() {
       <section id="title" className="screen">
         <h1 className="logo" aria-label="AroundWorld"><Banner text="AROUND" i={0} /><Banner text="WORLD" i={1} /></h1>
         <p className="tagline">Buy cities. Build empires. Bankrupt your friends.</p>
-        <nav className="menu">
-          <button className="btn primary big" onClick={() => setDialog('create')}>CREATE ROOM</button>
-          <button className="btn big" onClick={() => setDialog('join')}>JOIN ROOM</button>
-          <button className="btn big" onClick={() => void openRules()}>HOW TO PLAY</button>
-        </nav>
+        {view === 'title' && (
+          <nav className="menu">
+            <button className="btn primary big" onClick={() => setDialog('create')}>CREATE ROOM</button>
+            <button className="btn big" onClick={() => setDialog('join')}>JOIN ROOM</button>
+            <button className="btn big" onClick={() => void openRules()}>HOW TO PLAY</button>
+          </nav>
+        )}
         <p className="hint">Drag: pan &nbsp;|&nbsp; Right-drag: rotate &nbsp;|&nbsp; Wheel: zoom</p>
         <small className="ver">AROUNDWORLD v0.1</small>
       </section>
@@ -92,12 +94,15 @@ export function Title() {
 const NAME_DELAY_MS = 300;
 
 function NameInput({ name }: { name: string }) {
+  const [text, setText] = useState(name), focused = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => { if (!focused.current) setText(name); }, [name]); // follow the name the room assigned (it may differ from what was sent), but never while typing
   const put = (v: string) => { clearTimeout(timer.current); timer.current = undefined; localStorage.setItem(NAME_KEY, v); send({ t: 'name', name: v }); };
   return (
-    <input maxLength={NAME_MAX} defaultValue={name}
-      onChange={(e) => { const v = e.target.value; clearTimeout(timer.current); timer.current = setTimeout(() => put(v), NAME_DELAY_MS); }}
-      onBlur={(e) => { if (timer.current) put(e.target.value); }} />
+    <input maxLength={NAME_MAX} value={text}
+      onFocus={() => (focused.current = true)}
+      onChange={(e) => { const v = e.target.value; setText(v); clearTimeout(timer.current); timer.current = setTimeout(() => put(v), NAME_DELAY_MS); }}
+      onBlur={(e) => { focused.current = false; if (timer.current) put(e.target.value); else setText(name); }} />
   );
 }
 
@@ -138,16 +143,19 @@ export function Lobby() {
   const put = (s: Partial<Settings>) => send({ t: 'settings', settings: { ...settings, ...s } });
   const step = (d: number) => put({ rounds: Math.max(ROUNDS_MIN, Math.min(ROUNDS_MAX, settings.rounds + d)) });
   return (
-    <Card title="LOBBY" sub={`Room ${room.code}`} cls="wide" peek={false} foot={<>
+    <Card title="LOBBY" cls="wide" peek={false} foot={<>
+      <Btn id="rules" cls="peek" onClick={() => void openRules()}>HOW TO PLAY</Btn>
       <Btn id="leave" onClick={leaveRoom}>LEAVE</Btn>
       {host
-        ? <Btn id="go" cls="primary" disabled={seats.length < 2} onClick={() => send({ t: 'start' })}>START GAME</Btn>
+        ? <Btn id="go" cls="primary" disabled={seats.length < 2} onClick={() => send({ t: 'start' })}>{seats.length < 2 ? 'NEED 1 MORE PLAYER' : 'START GAME'}</Btn>
         : <Btn id="wait" disabled onClick={() => {}}>WAITING FOR HOST</Btn>}
     </>}>
-      <div className="invite">
-        <div className="note">Friends join with the room number <b className="gold">{room.code}</b>.</div>
-        <CopyBtn id="code" text={room.code}>COPY CODE</CopyBtn>
-        <CopyBtn id="link" text={`${location.origin}/?room=${room.code}`}>COPY LINK</CopyBtn>
+      <div className="field"><label>ROOM NUMBER</label>
+        <div className="invite">
+          <b className="code">{room.code}</b>
+          <CopyBtn id="code" text={room.code}>COPY CODE</CopyBtn>
+          <CopyBtn id="link" text={`${location.origin}/?room=${room.code}`}>COPY LINK</CopyBtn>
+        </div>
       </div>
       <div className="field"><label>PLAYERS {seats.length} / {MAX_PLAYERS}</label>
         {PLAYER_DEFS.map((_, i) => <Seat key={i} i={i} s={seats.find((s) => s.seat === i)} me={i === room.mySeat} bots={host && room.dev} />)}

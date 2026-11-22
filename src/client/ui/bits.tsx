@@ -45,12 +45,12 @@ export function Die({ v, cls = '', n = 16 }: { v: number; cls?: string; n?: numb
   return <div className={`die ${cls}`}><Sprite rows={rows} /></div>;
 }
 
-export function Rich({ m }: { m: Msg }) {
+export function Rich({ m, z }: { m: Msg; z?: number }) {
   const S = state();
   return <>{m.map((s, k) => {
     if (typeof s === 'string') return s;
     if ('player' in s) return <b key={k} style={{ color: hex(S.players[s.player].color) }}>{S.players[s.player].name}</b>;
-    if ('tile' in s) { const name = <Named name={TILES[s.tile].name} />; return s.bold ? <b key={k}>{name}</b> : <Fragment key={k}>{name}</Fragment>; }
+    if ('tile' in s) { const name = <Named name={TILES[s.tile].name} z={z} />; return s.bold ? <b key={k}>{name}</b> : <Fragment key={k}>{name}</Fragment>; }
     return <b key={k}>{s.bold}</b>;
   })}</>;
 }

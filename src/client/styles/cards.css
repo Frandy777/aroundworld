@@ -14,7 +14,8 @@
 .hd:has(> span > .flag) small { flex-basis: 100%; }
 .hd small .ic { width: 16px; height: 16px; vertical-align: -3px; }
 .flag { flex: none; }
-.logline .flag, .toast .flag, small .flag { vertical-align: -10px; margin-right: 6px; }
+.toast .flag, small .flag { vertical-align: -10px; margin-right: 6px; }
+.logline .flag { vertical-align: -4px; margin-right: 4px; }
 .bd { padding: 12px 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
 .ft { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px; padding: 0 10px 8px; }
 .ft:empty { display: none; }
@@ -48,6 +49,9 @@
 .item.sel { outline: 2px solid var(--gold); outline-offset: -2px; background: #2a2f70; }
 .check { width: 36px; height: 36px; flex: none; background: var(--navy) padding-box; border: 6px solid transparent; border-image: var(--fr-well) 3 / 6px; }
 .item.sel .check { background: var(--spr-check) center / 24px 18px no-repeat, var(--gold); background-clip: padding-box; }
+.check.radio { position: relative; clip-path: polygon(12px 0, 24px 0, 24px 4px, 32px 4px, 32px 12px, 36px 12px, 36px 24px, 32px 24px, 32px 32px, 24px 32px, 24px 36px, 12px 36px, 12px 32px, 4px 32px, 4px 24px, 0 24px, 0 12px, 4px 12px, 4px 4px, 12px 4px); }
+.item.sel .check.radio { background: var(--navy) padding-box; }
+.item.sel .check.radio::after { content: ''; position: absolute; inset: 6px; background: var(--gold); clip-path: polygon(4px 0, 8px 0, 12px 4px, 12px 8px, 8px 12px, 4px 12px, 0 8px, 0 4px); }
 .grp { display: flex; align-items: center; gap: 8px; color: var(--dim); margin: 8px 0 2px; }
 .grp::after { content: ''; flex: 1; height: 2px; background: var(--indigo); }
 .grp, .tbl tr.cur td, .row.sum > b { font: var(--fs-md) / 28px var(--font-md); }

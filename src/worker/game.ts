@@ -328,12 +328,12 @@ export class Game {
     for (const i of sel) { sum += Math.floor(lotValue(TILES[i], this.S.ownedByTile[i]) * rate); this.own(i, { ...this.S.ownedByTile[i], mortgaged: true }); }
     this.cash(player, sum, m`mortgaged ${tiles(sel)}`);
   }
-  private async deposit(player: number) {
+  private canDeposit(player: number) { const p = this.S.players[player]; return !p.deposit && p.cash >= DEPOSIT_STEP; }
+  private async deposit(player: number, step?: string) {
     const S = this.S;
-    if (S.players[player].deposit) return;
+    if (!this.canDeposit(player)) return;
     const maxPrincipal = Math.floor(S.players[player].cash / DEPOSIT_STEP) * DEPOSIT_STEP;
-    if (maxPrincipal < DEPOSIT_STEP) return;
-    const d = (await this.ask(player, { k: 'dep', maxPrincipal })) as { principal: number; termRounds: number } | null;
+    const d = (await this.ask(player, { k: 'dep', maxPrincipal, step })) as { principal: number; termRounds: number } | null;
     if (!d) return;
     this.emit({ t: 'dep', player, deposit: { principal: d.principal, termRounds: d.termRounds, placedRound: S.round } });
     this.cash(player, -d.principal, m`placed a ${String(d.termRounds)}-round fixed deposit`);
@@ -636,16 +636,16 @@ export class Game {
         if (await this.pay(player, 100, t.name)) this.emit({ t: 'flag', player, flag: 'party', active: true });
         break;
       case 'bank': {
-        const items = this.mortgageable(player, 1);
+        const items = this.mortgageable(player, 1), canDep = this.canDeposit(player);
         if (!items.length) { // nothing to mortgage: the deposit is the only offer, if any
-          if (p.deposit || p.cash < DEPOSIT_STEP) this.toast(`${t.name}: nothing to do`);
-          else await this.deposit(player);
+          if (canDep) await this.deposit(player);
+          else this.toast(`${t.name}: nothing to do`);
           break;
         }
-        const sel = (await this.ask(player, { k: 'pick', of: 'tile', title: 'BANK', sub: [`${p.name} · optional`], tone: t.color,
-          hint: 'Mortgage properties for their full lot value. Redeeming costs the same.', items, rule: { k: 'any' }, label: 'MORTGAGE', skip: 'LEAVE' })) as number[] | null;
+        const sel = (await this.ask(player, { k: 'pick', of: 'tile', title: 'BANK', sub: [`${p.name} · optional${canDep ? ' · 1/2' : ''}`], tone: t.color,
+          hint: 'Mortgage properties for their full lot value. Redeeming costs the same.', items, rule: { k: 'any' }, label: 'MORTGAGE', skip: canDep ? 'NEXT' : 'LEAVE' })) as number[] | null;
         if (sel?.length) this.mortgage(player, sel, 1);
-        await this.deposit(player);
+        await this.deposit(player, canDep ? '2/2' : undefined);
         break;
       }
       case 'news': await this.news(player); break;

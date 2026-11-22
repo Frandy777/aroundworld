@@ -33,15 +33,15 @@ export const INVEST: Record<InvestKind, { label: string; price: number; effect: 
   devil: { label: 'Prison Island', price: 3000, effect: 'Whenever anyone goes to jail, owner earns $700. If the owner is jailed, they may pay $700 bail and skip the stay.' },
 };
 
-export const SPECIAL: Record<string, string> = {
-  'Hong Kong': 'Charges players passing or stopping here 5% / 10% / 15% of their cash.',
-  Pyongyang: 'Owner pays 10% / 15% / 20% less rent on regular cities.',
-  Zurich: 'Whenever anyone gets money from the bank, owner earns $100 / $200 / $300.',
-  'New York': 'Whenever anyone upgrades a city, owner earns $200 / $300 / $500.',
-  'Las Vegas': 'Players stopping here roll the dice and pay the owner the total × $300 / $500 / $700.',
-  Rio: 'Whenever anyone rolls doubles, owner earns $200 / $500 / $1,000.',
-  Jerusalem: 'When the owner stops here, they roll the dice: every other player pays the total × $100 / $200 / $300.',
-  Singapore: "Owner's rent income from regular cities +10% / +15% / +20%.",
+export const SPECIAL: Record<string, { effect: string; levels: [string, string, string] }> = {
+  'Hong Kong': { effect: 'Charges players passing or stopping here X of their cash.', levels: ['5%', '10%', '15%'] },
+  Pyongyang: { effect: 'Owner pays X less rent on regular cities.', levels: ['10%', '15%', '20%'] },
+  Zurich: { effect: 'Whenever anyone gets money from the bank, owner earns X.', levels: ['$100', '$200', '$300'] },
+  'New York': { effect: 'Whenever anyone upgrades a city, owner earns X.', levels: ['$200', '$300', '$500'] },
+  'Las Vegas': { effect: 'Players stopping here roll the dice and pay the owner the total × X.', levels: ['$300', '$500', '$700'] },
+  Rio: { effect: 'Whenever anyone rolls doubles, owner earns X.', levels: ['$200', '$500', '$1,000'] },
+  Jerusalem: { effect: 'When the owner stops here, they roll the dice: every other player pays the total × X.', levels: ['$100', '$200', '$300'] },
+  Singapore: { effect: "Owner's rent income from regular cities +X.", levels: ['10%', '15%', '20%'] },
 };
 
 // City -> country code, which picks its flag.
