@@ -59,7 +59,7 @@ export default {
       final((g) => {
         const W = 0.68, X = -0.85, C = 2.9, E = 3.75, H = 1.4, A = (W + 0.06) / 2;
         const LOW = 0xcdb899, UP = 0xd7caa9, TRIM = 0xece4d0, BAND = 0x5b6d63, SLATE = 0x66625c;
-        const CLOCK = ['....ooooo....', '..oooYYYooo..', '.oooYoooYooo.', '.ooo....YYoo.', 'ooY.....YYYoo', 'oYo....YY.oYo', 'oYYYYYY...oYo', 'oYo.......oYo', 'ooY.......Yoo', '.ooo.....ooo.', '.oooYoooYooo.', '..oooYYYooo..', '....ooooo....'];
+        const CLOCK = ['....OOOOO....', '..OOOYYYOOO..', '.OOOYOOOYOOO.', '.OOO....YYOO.', 'OOY.....YYYOO', 'OYO....YY.OYO', 'OYYYYYY...OYO', 'OYO.......OYO', 'OOY.......YOO', '.OOO.....OOO.', '.OOOYOOOYOOO.', '..OOOYYYOOO..', '....OOOOO....'];
         const LANCET = ['.O.', 'OdO', 'OdO', 'OdO', 'OdO', 'OdO', 'xxx'];
         const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z), top = V(X, E + H, Z);
         const rib = (from: THREE.Vector3) => { const v = top.clone().sub(from), r = new THREE.Group(); r.position.copy(from); r.quaternion.setFromUnitVectors(V(0, 1, 0), v.clone().normalize()); g.add(r); box(r, 0.05, v.length(), 0.05, COPPER); };
@@ -83,7 +83,7 @@ export default {
     [
       final((g) => {
         const W = 0.55, X = 0.93, E = 2.85, SAND = 0xcda57a;
-        const CLOCK = ['...YYYYY...', '..YoooooY..', '.YoooYoooY.', 'YooooooYooY', 'YooooYYoooY', 'YoYYYYYoYoY', 'YooooYooooY', 'YoooooooooY', '.YoooYoooY.', '..YoooooY..', '...YYYYY...'];
+        const CLOCK = ['...YYYYY...', '..YOOOOOY..', '.YOOOYOOOY.', 'YOOOOOOYOOY', 'YOOOOYYOOOY', 'YOYYYYYOYOY', 'YOOOOYOOOOY', 'YOOOOOOOOOY', '.YOOOYOOOY.', '..YOOOOOY..', '...YYYYY...'];
         const WINDOW = ['..O..', '.OdO.', 'OdddO', 'OdOdO', 'OdOdO', 'OdOdO', 'OdOdO', 'OdOdO', 'OeOeO', 'xxxxx'];
         const sides = around(g, X, Z), [front, ...others] = sides;
         bank(g, 0.85, 0.78);

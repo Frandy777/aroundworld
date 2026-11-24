@@ -11,7 +11,7 @@ import { Btn, Card } from './dialogs';
 import { openRules } from './open';
 
 const P = PAL;
-const RAMPS: [string[], string[]][] = [[[P.w, P.a, P.b, P.c], [P.e, P.O, P.O, P.o]], [[P.y, P.Y, P.g, P.G], [P.H, P.H, P.o, P.o]]];
+const RAMPS: [string[], string[]][] = [[[P.w, P.a, P.b, P.c], [P.e, P.O, P.O, P.O]], [[P.y, P.Y, P.g, P.G], [P.H, P.H, P.K, P.K]]];
 
 function Banner({ text, i }: { text: string; i: number }) {
   const ref = useRef<HTMLSpanElement>(null);

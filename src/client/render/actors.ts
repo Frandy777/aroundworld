@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { playDiceBounce, playDiceDoubles, playTokenHop, playTokenTeleport } from '../audio';
 import { scene, toon, lodMap, pixelTexture, texels, tween, easeInOut, dirtyShadow, shakeCamera, DENSITY } from './scene';
 import { LOT, POS } from './layout';
-import { PAL, dieRows, paint, canvas, facePal, FACE, TORSO } from './art';
+import { PAL, dieRows, outline, paint, canvas, facePal, FACE, TORSO } from './art';
 import { TILES } from '../../shared/data';
 
 const U = 1 / DENSITY;
@@ -112,7 +112,7 @@ export const removeToken = async (tok: Token) => { tok.busy = true; await tween(
 const FACES = [3, 4, 1, 6, 2, 5];
 const UP: Record<number, [number, number, number]> = { 1: [0, 0, 0], 6: [Math.PI, 0, 0], 3: [0, 0, Math.PI / 2], 4: [0, 0, -Math.PI / 2], 2: [-Math.PI / 2, 0, 0], 5: [Math.PI / 2, 0, 0] };
 const DIE = 1.2, DIE_N = [7, 12, texels(DIE)];
-const pipMat = (v: number) => lodMap(toon(0xffffff), (L: number) => pixelTexture(canvas(DIE_N[L], DIE_N[L], (g, n) => { g.fillStyle = PAL.o; g.fillRect(0, 0, n, n); paint(g, dieRows(v, n), 0, 0); })));
+const pipMat = (v: number) => lodMap(toon(0xffffff), (L: number) => pixelTexture(canvas(DIE_N[L], DIE_N[L], (g, n) => { g.fillStyle = outline(PAL.a); g.fillRect(0, 0, n, n); paint(g, dieRows(v, n), 0, 0); })));
 const dice = [0, 1].map(() => {
   const d = new THREE.Mesh(new THREE.BoxGeometry(DIE, DIE, DIE), FACES.map(pipMat));
   d.castShadow = true; d.visible = false;

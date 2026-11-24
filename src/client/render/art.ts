@@ -12,13 +12,13 @@ export const PAL: Pal = {
 
 export const svgParts = (rows: string[], pal: Pal = PAL) => {
   const d: Record<string, string> = {};
-  rows.forEach((r, y) => {
+  tones(rows, pal).forEach((r, y) => {
     for (let x = 0, n: number; x < r.length; x += n) {
       for (n = 1; r[x + n] === r[x]; n++);
-      if (r[x] !== '.') d[r[x]] = (d[r[x]] || '') + `M${x} ${y}h${n}v1h-${n}z`;
+      if (r[x]) d[r[x]] = (d[r[x]] || '') + `M${x} ${y}h${n}v1h-${n}z`;
     }
   });
-  return { w: rows[0].length, h: rows.length, paths: Object.entries(d).map(([c, p]): [string, string] => [pal[c], p]) };
+  return { w: rows[0].length, h: rows.length, paths: Object.entries(d) };
 };
 export const svg = (rows: string[], cls = '', pal: Pal = PAL, z = 1) => {
   const { w, h, paths } = svgParts(rows, pal);
@@ -26,7 +26,7 @@ export const svg = (rows: string[], cls = '', pal: Pal = PAL, z = 1) => {
 };
 const uri = (s: string) => `url("data:image/svg+xml,${encodeURIComponent(s)}")`;
 export const paint = (g: CanvasRenderingContext2D, rows: string[], x0: number, y0: number, pal: Pal = PAL) =>
-  rows.forEach((r, y) => [...r].forEach((c, x) => { if (c !== '.') { g.fillStyle = pal[c]; g.fillRect(x0 + x, y0 + y, 1, 1); } }));
+  tones(rows, pal).forEach((r, y) => r.forEach((c, x) => { if (c) { g.fillStyle = c; g.fillRect(x0 + x, y0 + y, 1, 1); } }));
 const ctx2d = () => {
   const store: Record<PropertyKey, unknown> = {};
   const px = new Proxy(store, {
@@ -209,16 +209,16 @@ export const ICONS: Record<string, string[]> = {
     '..ooooo..ooooo..', '................', '................', '................',
   ],
   full: [
-    'ooo..........ooo', 'oa..........ao', 'o.o........o.o', '...o........o...',
-    '....o......o....', '.....o....o.....', '................', '................',
-    '................', '................', '.....o....o.....', '....o......o....',
-    '...o........o...', 'o.o........o.o', 'oa..........ao', 'ooo..........ooo',
+    'ooooooo..ooooooo', 'oaaaaao..oaaaaao', 'oabccco..oaccbco', 'oacoooo..ooooaco',
+    'oaco........oaco', 'oaco........oaco', 'oooo........oooo', '................',
+    '................', 'oooo........oooo', 'oaao........oaao', 'oaco........oaco',
+    'oacoooo..ooooaco', 'oabaaao..oaaabco', 'oacccco..oacccco', 'ooooooo..ooooooo',
   ],
   shrink: [
-    'o..............o', '.o............o.', '..o..........o..', '...o.o....o.o...',
-    '....ao....oa....', '...ooo....ooo...', '................', '................',
-    '................', '................', '...ooo....ooo...', '....ao....oa....',
-    '...o.o....o.o...', '..o..........o..', '.o............o.', 'o..............o',
+    '...oooo..oooo...', '...oaao..oaao...', '...oaco..oaco...', 'ooooaco..oacoooo',
+    'oaaabco..oabaaao', 'oacccco..oacccco', 'ooooooo..ooooooo', '................',
+    '................', 'ooooooo..ooooooo', 'oaaaaao..oaaaaao', 'oaccbco..oabccco',
+    'ooooaco..oacoooo', '...oaco..oaco...', '...oaco..oaco...', '...oooo..oooo...',
   ],
   sound: [
     '................', '......oo........', '.....oao...oo...', '....oaao..oYgo..',
@@ -260,7 +260,7 @@ export const dieRows = (v: number, n = 16) => {
   }));
   const p = Math.max(1, 2 * Math.round(n / 16)), a = Math.round(n * 0.19), at = [a, (n - p) / 2, n - a - p];
   (PIPS[v] || []).forEach((i) => {
-    for (let dy = 0; dy < p; dy++) for (let dx = 0; dx < p; dx++) rows[at[(i / 3) | 0] + dy][at[i % 3] + dx] = v === 1 ? (dx + dy ? 'q' : 'R') : (dx + dy ? 'o' : 'e');
+    for (let dy = 0; dy < p; dy++) for (let dx = 0; dx < p; dx++) rows[at[(i / 3) | 0] + dy][at[i % 3] + dx] = v === 1 ? (dx + dy ? 'q' : 'R') : (dx + dy ? 'O' : 'e');
   });
   return rows.map((r) => r.join(''));
 };
@@ -277,6 +277,46 @@ const HATS = [
 export const hex = (n: number) => '#' + n.toString(16).padStart(6, '0');
 export const lum = (c: number) => (((c >> 16) & 255) * 0.299 + ((c >> 8) & 255) * 0.587 + (c & 255) * 0.114) / 255;
 export const shade = (c: number, k: number, t = 0) => hex([16, 8, 0].reduce((a, s) => a | (Math.min(255, Math.round(((c >> s) & 255) * k + t)) << s), 0));
+
+// Selective outline: the fill's own hue, darker and nudged toward cool, so no outline is a shared near-black. OUTLINE_GLSL mirrors outline() for the depth-edge pass in scene.ts.
+const SELOUT = { valueScale: 0.38, saturationScale: 1.5, saturationFloor: 0.5, valueFloor: 0.17, coolPull: 0.1, coolHueDegrees: 235 };
+export const outline = (color: string) => {
+  const { valueScale, saturationScale, saturationFloor, valueFloor, coolPull, coolHueDegrees } = SELOUT;
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16) / 255);
+  const top = Math.max(r, g, b), span = top - Math.min(r, g, b);
+  const hue = span <= top * 0.05 ? coolHueDegrees : 60 * (top === r ? ((g - b) / span + 6) % 6 : top === g ? (b - r) / span + 2 : (r - g) / span + 4);
+  const saturation = Math.min(1, Math.max(saturationFloor, (span / top || 0) * saturationScale));
+  const value = Math.max(top * valueScale, Math.min(top, valueFloor));
+  const sextant = ((hue + (((coolHueDegrees - hue + 540) % 360) - 180) * coolPull + 360) % 360) / 60;
+  const channel = (n: number) => { const k = (n + sextant) % 6; return Math.round(255 * value * (1 - saturation * Math.max(0, Math.min(k, 4 - k, 1)))); };
+  return '#' + [5, 3, 1].map((n) => channel(n).toString(16).padStart(2, '0')).join('');
+};
+export const outlineVar = (color: number) => ({ '--ol': outline(hex(color)) });
+const glslFloat = (n: number) => n.toFixed(4);
+export const OUTLINE_GLSL = `
+  vec3 outlineOf(vec3 linear) {
+    vec3 c = pow(clamp(linear, 0., 1.), vec3(1. / 2.2));
+    float top = max(c.r, max(c.g, c.b)), spread = top - min(c.r, min(c.g, c.b)), hue = ${glslFloat(SELOUT.coolHueDegrees)};
+    if (spread > top * 0.05) hue = 60. * (top == c.r ? mod((c.g - c.b) / spread + 6., 6.) : top == c.g ? (c.b - c.r) / spread + 2. : (c.r - c.g) / spread + 4.);
+    float sat = clamp(spread / max(top, 1e-4) * ${glslFloat(SELOUT.saturationScale)}, ${glslFloat(SELOUT.saturationFloor)}, 1.), val = max(top * ${glslFloat(SELOUT.valueScale)}, min(top, ${glslFloat(SELOUT.valueFloor)}));
+    vec3 k = mod(vec3(5., 3., 1.) + mod(hue + (mod(${glslFloat(SELOUT.coolHueDegrees)} - hue + 540., 360.) - 180.) * ${glslFloat(SELOUT.coolPull)} + 360., 360.) / 60., 6.);
+    return pow(val * (1. - sat * clamp(min(k, 4. - k), 0., 1.)), vec3(2.2));
+  }`;
+// Sprite key 'o' is not a colour: it takes the outline of the dominant nearby fill (closer pixels weigh more, ties go to the darker). Use 'O' for solid dark fills.
+const neighbourOutline = (rows: string[], pal: Pal, x: number, y: number) => {
+  const hexValue = (key: string) => parseInt(pal[key].slice(1), 16);
+  for (let reach = 1; reach <= 3; reach++) {
+    const weight: Record<string, number> = {};
+    for (let dy = -reach; dy <= reach; dy++) for (let dx = -reach; dx <= reach; dx++) {
+      const key = rows[y + dy]?.[x + dx];
+      if (key && key !== 'o' && pal[key]) weight[key] = (weight[key] ?? 0) + 1 / (dx * dx + dy * dy);
+    }
+    const [best] = Object.keys(weight).sort((a, b) => weight[b] - weight[a] || lum(hexValue(a)) - lum(hexValue(b)));
+    if (best) return outline(pal[best]);
+  }
+  return pal.O;
+};
+const tones = (rows: string[], pal: Pal) => rows.map((row, y) => [...row].map((key, x) => (key === 'o' ? neighbourOutline(rows, pal, x, y) : pal[key] ?? '')));
 export const faceRows = (idx: number) => [...HATS[idx], ...BUST];
 const HAIR = [0x3a2e48, 0xe8c066, 0x7a4a2a, 0xb4502a];
 export const facePal = (c: number, idx = 0): Pal => ({ ...PAL, A: shade(c, 0.5, 128), B: hex(c), C: shade(c, 0.72), D: shade(c, 0.45, 8), h: shade(HAIR[idx], 1), i: shade(HAIR[idx], 0.6), j: shade(HAIR[idx], 1.3, 24) });
@@ -327,13 +367,16 @@ export const logo = (text: string, bands: string[], shadow: string[], font: stri
   g.fillText(text, pad, pad + up);
   const a = g.getImageData(0, 0, W, H).data;
   const on = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && a[(y * W + x) * 4 + 3] > 127;
-  const near = (x: number, y: number) => on(x, y) || on(x - 1, y) || on(x + 1, y) || on(x, y - 1) || on(x, y + 1) || on(x - 1, y - 1) || on(x + 1, y + 1) || on(x - 1, y + 1) || on(x + 1, y - 1);
+  const touching = (x: number, y: number) => [[0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [-1, 1], [1, -1], [-1, -1]].find(([dx, dy]) => on(x + dx, y + dy));
+  const near = (x: number, y: number) => on(x, y) || !!touching(x, y);
   const out = g.createImageData(W, H), put = (x: number, y: number, c: number[]) => out.data.set([...c, 255], (y * W + x) * 4);
   const rgb = (c: string) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
-  const [B, S, ink] = [bands.map(rgb), shadow.map(rgb), rgb(PAL.o)];
+  const [B, S, ring] = [bands.map(rgb), shadow.map(rgb), bands.map((c) => rgb(outline(c)))];
+  const band = (x: number, y: number) => (!on(x, y - 1) || !on(x - 1, y) ? 0 : !on(x, y + 1) ? B.length - 1 : Math.min(B.length - 1, Math.floor(((y - pad) / h) * B.length)));
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    if (on(x, y)) put(x, y, !on(x, y - 1) || !on(x - 1, y) ? B[0] : !on(x, y + 1) ? B[B.length - 1] : B[Math.min(B.length - 1, Math.floor(((y - pad) / h) * B.length))]);
-    else if (near(x, y)) put(x, y, ink);
+    const edge = touching(x, y);
+    if (on(x, y)) put(x, y, B[band(x, y)]);
+    else if (edge) put(x, y, ring[band(x + edge[0], y + edge[1])]);
     else for (let k = 1; k <= 4; k++) if (near(x - k, y - k)) { put(x, y, S[Math.min(S.length - 1, k - 1)]); break; }
   }
   g.clearRect(0, 0, W, H);

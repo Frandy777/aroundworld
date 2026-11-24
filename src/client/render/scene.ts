@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { ORM, hd, lamps, lit, setLamps, spot, texOf, U, type Pbr } from './light';
-import { canvas, flatMask, maskOf } from './art';
+import { OUTLINE_GLSL, canvas, flatMask, maskOf } from './art';
 import { sky, updateSky } from './sky';
 
 export const BOARD_K = 2;
@@ -186,6 +186,7 @@ const post = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMater
   vertexShader: 'varying vec2 v; void main() { v = uv; gl_Position = vec4(position.xy, 0., 1.); }',
   fragmentShader: `
     uniform sampler2D tc, td; uniform vec2 texel; uniform float unit, lim, ramp, span; varying vec2 v;
+    ${OUTLINE_GLSL}
     void main() {
       vec2 n[4] = vec2[4](vec2(1, 0), vec2(-1, 0), vec2(0, 1), vec2(0, -1));
       vec3 c = texture2D(tc, v).rgb;
@@ -196,7 +197,7 @@ const post = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMater
         float d = texture2D(td, u).x * span - z;
         sum += d;
         float s = d - n[i].y * ramp;
-        if (-s > top) { top = -s; c = texture2D(tc, u).rgb * 0.07 + vec3(0.003, 0.006, 0.02); }
+        if (-s > top) { top = -s; c = outlineOf(texture2D(tc, u).rgb); }
         rim = rim || abs(s) > lim;
       }
       float k = rim ? 0. : sum / unit;

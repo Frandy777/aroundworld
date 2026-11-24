@@ -4,6 +4,7 @@ import { maxRounds } from '../../shared/state';
 import { leaveRoom } from '../controller';
 import { playCashTick, playClockWarn } from '../audio';
 import { send } from '../net';
+import { outlineVar } from '../render/art';
 import { CAM, focusTok, lookAtTile } from '../stage';
 import { G, actionBtn, activeTab, cardHitAt, cards, cardsSetAside, cashEls, countdown, floats, fullscreen, hoveredTileTip, hudLive, lastRoll, paused, selectedTile, session, statsOf, toasts, useCell, useGame, viewedPlayer, waitingFor, type Tab } from '../store';
 import { Die, Face, Flag, FullBtn, Icon, Named, Pips, Rich, SoundBtn, hex, money, tileHead } from './bits';
@@ -80,7 +81,7 @@ function PCard({ i, on, viewing }: { i: number; on: boolean; viewing: boolean })
       onClick={() => { viewedPlayer.set(i); activeTab.set('assets'); focusTok(i); }}>
       <Face color={p.color} />
       <div className="nm">
-        <span style={{ color: hex(p.color) }}>{p.name}</span>
+        <span style={{ color: hex(p.color), ...outlineVar(p.color) }}>{p.name}</span>
         <span>
           {i === G.myPlayer && <span className="badge gold">YOU</span>}
           {offline && <span className="badge dim">OFFLINE</span>}
@@ -133,7 +134,7 @@ function Assets() {
           <div className="grp">{(k === 'inv' ? 'INVESTMENTS' : REGIONS[k][0]).toUpperCase()}</div>
           <div className="list">{mine.filter(([t]) => (t.region || 'inv') === k).map(([t, o]) => (
             <div className="item" key={t.i} data-tile={t.i} onClick={() => lookAtTile(t.i)}>
-              <span className="sw" style={{ background: hex(t.color) }} /><Flag name={t.name} /><span className="grow">{t.name}</span>
+              <span className="sw" style={{ background: hex(t.color), ...outlineVar(t.color) }} /><Flag name={t.name} /><span className="grow">{t.name}</span>
               {o.mortgaged && <span className="pill red">MORT</span>}
               {t.type !== 'invest' && <Pips n={o.level} max={maxLevel(t) || 1} />}
             </div>

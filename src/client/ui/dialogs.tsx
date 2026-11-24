@@ -5,6 +5,7 @@ import { canPick } from '../../shared/state';
 import type { CasinoView, NewsCard as News, Notice, OrderPass, Player, Prompt, RankRow } from '../../shared/types';
 import { reply } from '../asks';
 import { playCasinoResult, playCasinoTick, playGameOver, playNewsSpin, playOrderReady, playOrderTick, playUiStep } from '../audio';
+import { outlineVar } from '../render/art';
 import { pace } from '../render/scene';
 import { G, cardsSetAside, paused, state, useCell, type Cell } from '../store';
 import { Blocks, Die, Face, Flag, Icon, Pips, Rich, hex, money, tileHead } from './bits';
@@ -185,7 +186,7 @@ export function PickCard({ id, p }: { id: number; p: Of<'pick'> }) {
         return (
           <div className={`item ${sel.includes(x.index) ? 'sel' : ''}`} key={x.index} onClick={() => toggle(x.index)}>
             <span className={`check${r.k === 'one' ? ' radio' : ''}`} />
-            {t && <><span className="sw" style={{ background: hex(t.color) }} /><Flag name={t.name} /><span className="grow">{t.name}</span></>}
+            {t && <><span className="sw" style={{ background: hex(t.color), ...outlineVar(t.color) }} /><Flag name={t.name} /><span className="grow">{t.name}</span></>}
             {who && <><Face color={who.color} /><span className="grow">{who.name}</span></>}
             {x.level !== undefined && <Pips n={x.level} max={maxLevel(TILES[x.index])} />}
             {x.owned ? <><Rich m={[{ player: x.owned.owner }]} /><Pips n={x.owned.level} max={maxLevel(TILES[x.index])} /></> : <b>{x.amount !== undefined ? money(x.amount) : x.note}</b>}
@@ -275,6 +276,7 @@ export function OrderCard({ players, passes, order, close }: { players: Player[]
   );
 }
 
+const MEDALS = [0xffd23f, 0xc9d3f5, 0xcd7f32];
 export function ResultsCard({ rank, close }: { rank: RankRow[]; close(v: 'menu' | 'again'): void }) {
   const S = state(), rows = rank.map((r) => ({ ...S.players[r.player], netWorth: r.netWorth }));
   const pod = [1, 0, 2].filter((k) => rows[k]).map((k) => ({ r: rows[k], k }));
@@ -290,7 +292,7 @@ export function ResultsCard({ rank, close }: { rank: RankRow[]; close(v: 'menu' 
         <div className="pod" key={k}>
           {k === 0 && <span className="gold"><Icon n="crown" /></span>}
           <Face color={r.color} /><b style={{ color: hex(r.color) }}>{r.name}</b>
-          <div className="blk" style={{ '--c': ['#ffd23f', '#c9d3f5', '#cd7f32'][k], height: [130, 96, 70][k] } as CSSProperties}>{k + 1}</div>
+          <div className="blk" style={{ '--c': hex(MEDALS[k]), ...outlineVar(MEDALS[k]), height: [130, 96, 70][k] } as CSSProperties}>{k + 1}</div>
         </div>
       ))}</div>
       <div className="list">{rows.map((r, k) => (
