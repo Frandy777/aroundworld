@@ -158,7 +158,7 @@ camera.position.set(0, Math.sin(ELEV) * ORBIT, Math.cos(ELEV) * ORBIT);
 export const controls = new OrbitControls(camera);
 Object.assign(controls, {
   enableDamping: true, dampingFactor: 0.12, screenSpacePanning: false, minDistance: ORBIT, maxDistance: ORBIT,
-  maxZoom: 3, minPolarAngle: THREE.MathUtils.degToRad(22), maxPolarAngle: THREE.MathUtils.degToRad(68),
+  maxZoom: 3, minPolarAngle: THREE.MathUtils.degToRad(20), maxPolarAngle: THREE.MathUtils.degToRad(70),
 });
 controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
 controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
@@ -297,7 +297,7 @@ export function updateCamera(dt: number) {
     if (goal.zoom) { camera.zoom += ((goal.zoom === 'fit' ? fitZoom : goal.zoom) - camera.zoom) * k; camera.updateProjectionMatrix(); }
     if (goal.view) {
       const off = camera.position.clone().sub(t), L = off.length(), a0 = Math.atan2(off.x, off.z), e0 = Math.atan2(off.y, Math.hypot(off.x, off.z));
-      const a1 = THREE.MathUtils.degToRad(goal.view.az), e1 = THREE.MathUtils.degToRad(THREE.MathUtils.clamp(goal.view.elev, 22, 68));
+      const a1 = THREE.MathUtils.degToRad(goal.view.az), e1 = THREE.MathUtils.degToRad(THREE.MathUtils.clamp(goal.view.elev, 20, 70));
       const a = a0 + Math.atan2(Math.sin(a1 - a0), Math.cos(a1 - a0)) * k, e = e0 + (e1 - e0) * k;
       camera.position.set(t.x + Math.sin(a) * Math.cos(e) * L, t.y + Math.sin(e) * L, t.z + Math.cos(a) * Math.cos(e) * L);
     }

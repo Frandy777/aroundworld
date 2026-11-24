@@ -9,7 +9,7 @@ import { camera, controls, finishTweens, focus, frame, initScene, overview, pan,
 import { strike } from './render/strike';
 import { FLOAT, initWorld, updateWorld } from './render/world';
 import { DEMO_LOTS, DEMO_TOKEN_TILES } from './seed';
-import { G, activeTab, hd2d, hoveredTileTip, hudLive, selectedTile } from './store';
+import { G, activeTab, autoFocus, hd2d, hoveredTileTip, hudLive, selectedTile } from './store';
 
 let board: ReturnType<typeof createBoard>;
 export const cam = { follow: -1 };
@@ -58,11 +58,12 @@ export function enterGame() {
   controls.autoRotate = false;
   cam.follow = -1;
   frame(true);
-  resetView();
-  focus(0, 0, 'fit');
+  const cur = G.S!.turnOrder[G.S!.turnIndex];
+  if (autoFocus.get() && tokens[cur]) focusTok(cur);
+  else { resetView(); focus(0, 0, 'fit'); }
 }
 
-const FOCUS_VIEW = { az: 50, elev: 25 };
+const FOCUS_VIEW = { az: 45, elev: 20 };
 export const focusTok = (pi: number, zoom = 2) => {
   const t = tokens[pi];
   if (!t) return;

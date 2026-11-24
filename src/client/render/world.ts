@@ -12,7 +12,7 @@ const rng = (s: number) => () => (s = (s * 16807) % 2147483647) / 2147483647;
 const smooth = (t: number) => t * t * (3 - 2 * t);
 
 export const SEA_Y = -0.8;
-const SEA = 1600, SNAP = 64, SHORE = 100, GRID = 400, DAIS = 7;
+const SEA = 1600, SNAP = 64, SHORE = 100, GRID = 400, DAIS = 3.75;
 const PALETTE = ['#1b3f8e', '#20469a', '#264ea6', '#2c57b2', '#3170c0', '#3a92d0', '#5ec2dc'].map((c) => new THREE.Color(c));
 
 const dist = new Uint16Array(GRID * GRID);
@@ -118,8 +118,9 @@ dim.rotation.x = sea.rotation.x;
 dim.position.y = sea.position.y + 0.01;
 dim.receiveShadow = true;
 
-const PLINTH = 3.6, PLINTH_H = 0.45, BALL = 2.8 * BOARD_K;
-export const FLOAT = 8;
+const PLINTH = 1.9, PLINTH_H = 0.25, BALL_GAP = 0.7;
+// A bigger or higher ball hides Zurich and Berlin in the focus view (FOCUS_VIEW in stage.ts).
+export const BALL = 1.5 * BOARD_K, FLOAT = TOP + PLINTH_H + BALL_GAP + BALL;
 const LATTICE = Array.from({ length: 1024 }, rng(3));
 const vnoise = (x: number, y: number, z: number) => {
   const i = Math.floor(x), j = Math.floor(y), k = Math.floor(z), fx = smooth(x - i), fy = smooth(y - j), fz = smooth(z - k);
@@ -236,7 +237,7 @@ const globe = new THREE.Group(), ball = new THREE.Mesh(new THREE.SphereGeometry(
 {
   const dais = new THREE.Mesh(new THREE.CylinderGeometry(DAIS, DAIS, SLAB, 64), [stone(DAIS, SLAB), glassy(lodMap(toon(0xffffff), (L) => pixelTexture(dial(L))), 0), toon(0x6a7898)]);
   dais.position.y = TOP - SLAB / 2;
-  const plinth = new THREE.Mesh(new THREE.CylinderGeometry(PLINTH, PLINTH + 0.3, PLINTH_H, 48), [stone(PLINTH, PLINTH_H), toon(0x9ea9c6), toon(0x6a7898)]);
+  const plinth = new THREE.Mesh(new THREE.CylinderGeometry(PLINTH, PLINTH + 0.15, PLINTH_H, 48), [stone(PLINTH, PLINTH_H), toon(0x9ea9c6), toon(0x6a7898)]);
   plinth.position.y = TOP + PLINTH_H / 2;
   ball.position.y = FLOAT;
   ball.castShadow = plinth.castShadow = true;
@@ -255,5 +256,5 @@ export function updateWorld(t: number, dt: number) {
   ocean.position.z = Math.round(hdCam.position.z / SNAP) * SNAP;
   updateScenery(t, dt);
   ball.rotation.y += dt * 0.35;
-  ball.position.y = FLOAT + Math.sin(t * 1.2) * 0.4;
+  ball.position.y = FLOAT + Math.sin(t * 1.2) * 0.2;
 }
