@@ -1,15 +1,14 @@
 import * as THREE from 'three';
 import { box, cyl, final, glass, hip, lamplit, part, prism, prismMat, stone, GOLD, INK, type ModelDef } from '../../builder';
-import { glow, switchOf } from '../../light';
+import { switchOf } from '../../light';
 
 const HW = 0.6, MOD = 1.1, RISE = 0.5, WARM = 0xffd9a0;
-const GLASS = [1, 2, 3, 4].map((n) => prismMat(HW, n * MOD, RISE, MOD, 4 * n)), DOORS = glass(0x1d2c4d, WARM, 0.9), beacon = glow(new THREE.MeshBasicMaterial({ color: INK }));
+const GLASS = [1, 2, 3, 4].map((n) => prismMat(HW, n * MOD, RISE, MOD, 4 * n)), DOORS = glass(0x1d2c4d, WARM, 0.9), beacon = new THREE.MeshBasicMaterial({ color: INK });
 const shine = (c: number | null) => { [...GLASS.flat(), DOORS].forEach((m) => (switchOf(m).value = +(c !== null))); beacon.color.set(c ?? INK); };
 shine(null);
 
 export default {
   key: 'Hong Kong',
-  lamps: [{ at: [-0.4, 1.0, -0.15], color: 0xdce8ff, power: 6, reach: 7, final: true, owned: true }],
   props: [
     final((g) => {
       const TX = -0.4, TZ = -0.35, BASE = 0.44, RED = 0xd9423e, WHITE = 0xf4f6fa, GREEN = 0x2f8f5a, WOOD = 0x6e3a12, TAR = 0x3a2008, PANE = 0xe8edf6, ROCK = 0x8a8f9c, SHRUB = 0x4f9d4f;

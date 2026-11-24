@@ -1,10 +1,8 @@
 import * as THREE from 'three';
 import { box, cyl, final, glass, mat, part, plaque, GOLD, IRON, INK, type ModelDef } from '../../builder';
-import { LAYER_FX, fxOf } from '../../scene';
 
 export default {
   key: 'area51',
-  lamps: [{ at: [0.6, 2.4, 0], color: 0x5dfff0, power: 14, reach: 8, final: true }],
   props: [
     final((g) => {
       const [UX, UZ, BY, HX] = [0.62, 0.1, 2.0, -0.6];
@@ -25,10 +23,10 @@ export default {
       cyl(g, 0.27, 0.03, INK, UX, BY + 0.35, UZ); part(g, new THREE.SphereGeometry(0.24, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.8, 1), 0, glass(0x6fe0ee), UX, BY + 0.36, UZ);
       box(g, 0.02, 0.1, 0.02, IRON, UX, BY + 0.54, UZ); box(g, 0.05, 0.05, 0.05, 0xff5de0, UX, BY + 0.64, UZ);
       for (let k = 0; k < 10; k++) { const a = (k * Math.PI) / 5; box(g, 0.07, 0.06, 0.07, [0xfff6b0, 0xff5de0][k & 1], UX + 0.5 * Math.cos(a), BY + 0.18, UZ + 0.5 * Math.sin(a)); }
-      const BEAM = fxOf(new THREE.MeshBasicMaterial({ color: 0xc8fff9, transparent: true, opacity: 0.42, depthWrite: false, side: THREE.BackSide }));
+      const BEAM = new THREE.MeshBasicMaterial({ color: 0xc8fff9, transparent: true, opacity: 0.42, depthWrite: false, side: THREE.BackSide });
       const beam = part(g, new THREE.CylinderGeometry(0.18, 0.5, BY - 0.12, 14, 1, true), BY - 0.12, BEAM, UX, 0.12, UZ);
       beam.castShadow = beam.receiveShadow = false;
-      beam.layers.set(LAYER_FX); beam.name = 'ufo-beam'; beam.geometry.userData.own = true;
+      beam.name = 'ufo-beam'; beam.geometry.userData.own = true;
       [0.28, 0.4, 0.52, 1.3, 1.45, 1.6, 1.75].forEach((y, i) => { const r = 0.7 * (0.5 - (0.32 * (y - 0.12)) / (BY - 0.12)), a = i * 2.4; box(g, 0.05, 0.05, 0.05, i & 1 ? STRAW : 0xfff6b0, UX + r * Math.cos(a), y, UZ + r * Math.sin(a)); });
       const cow = new THREE.Group(); cow.position.set(UX, 0.85, UZ); cow.rotation.set(0, 0.2, 0.4); cow.scale.setScalar(0.9); g.add(cow);
       const leg = (x: number, z: number, a: number) => { hang(cow, 0.07, 0.22, WHITE, x, -0.12, z, a); hang(cow, 0.075, 0.06, INK, x + Math.sin(a) * 0.22, -0.12 - Math.cos(a) * 0.22, z, a); };

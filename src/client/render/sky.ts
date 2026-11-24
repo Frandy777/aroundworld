@@ -1,11 +1,9 @@
 import * as THREE from 'three';
-import { hd } from './light';
 
 const LAT = THREE.MathUtils.degToRad(38), DECL = 0;
 const DAY = 600;
 const STEP = THREE.MathUtils.degToRad(0.2);
 const FLIP = -3;
-const SWAP = -2;
 const FLOOR = Math.sin(THREE.MathUtils.degToRad(3));
 
 const sunAt = (h: number, v: THREE.Vector3) =>
@@ -31,11 +29,10 @@ export const sky = {
   lightC: new THREE.Color(), lightK: 1,
   skyC: new THREE.Color(), skyK: 1,
   lampK: 1,
-  glow: 1,
   zenith: new THREE.Color(), horizon: new THREE.Color(),
 };
 
-const c0 = new THREE.Color(), c1 = new THREE.Color(), c2 = new THREE.Color();
+const c0 = new THREE.Color(), c1 = new THREE.Color();
 const mix = (out: THREE.Color, a: number, b: number, t: number) => out.lerpColors(c0.set(a), c1.set(b), t);
 const between = (alt: number) => {
   let i = 1;
@@ -48,18 +45,12 @@ export function updateSky(now = Date.now()) {
   const hour = clock.stop ?? (wallHour(now) + clock.shift) % 24;
   const h = (hour / 24 - 0.5) * 2 * Math.PI;
   sunAt(h, sky.sun);
-  sunAt(hd.on ? h : Math.round(h / STEP) * STEP, sky.light);
+  sunAt(Math.round(h / STEP) * STEP, sky.light);
   const alt = THREE.MathUtils.radToDeg(Math.asin(sky.sun.y));
-  if (alt < (hd.on ? SWAP : FLIP)) sky.light.negate();
+  if (alt < FLIP) sky.light.negate();
   else if (sky.light.y < FLOOR) sky.light.setY(FLOOR).normalize();
   const [a, b, t] = between(alt);
   mix(sky.lightC, a[1], b[1], t); mix(sky.skyC, a[3], b[3], t); mix(sky.zenith, a[5], b[5], t); mix(sky.horizon, a[6], b[6], t);
   sky.lightK = THREE.MathUtils.lerp(a[2], b[2], t); sky.skyK = THREE.MathUtils.lerp(a[4], b[4], t);
-  if (hd.on) {
-    const [sa, sb, st] = between(Math.max(alt, 0)), [ma, mb, mt] = between(Math.min(alt, -6));
-    sky.lightK = THREE.MathUtils.lerp(sa[2], sb[2], st) * THREE.MathUtils.smoothstep(alt, -2, 2) + THREE.MathUtils.lerp(ma[2], mb[2], mt) * (1 - THREE.MathUtils.smoothstep(alt, -6, -2));
-    mix(sky.lightC, ma[1], mb[1], mt).lerp(mix(c2, sa[1], sb[1], st), THREE.MathUtils.smoothstep(alt, -4, 0));
-  }
   sky.lampK = THREE.MathUtils.lerp(1, 0.12, THREE.MathUtils.smoothstep(alt, -3, 18));
-  sky.glow = THREE.MathUtils.smoothstep(alt, -12, -6);
 }

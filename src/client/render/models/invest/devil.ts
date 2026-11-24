@@ -2,7 +2,6 @@ import { box, cyl, final, glass, plaque, GOLD, IRON, INK, type ModelDef } from '
 
 export default {
   key: 'devil',
-  lamps: [{ at: [0.72, 2.95, -0.15], color: 0xffe494, power: 4.5, reach: 6, final: true }],
   props: [
     final((g) => {
       const P = 1.1, SEA = 0x2c6fd2, FOAM = 0xdcefff, WHITE = 0xf4f6fa, CREAM = 0xe4ddc8, TRIM = 0xf4eedb, NAVY = 0x1a2250, GLASS = 0x7db6ff, BLUE = 0x2447a8, LEAF = 0x4f9d4f, GREY = 0xcfd6e6;

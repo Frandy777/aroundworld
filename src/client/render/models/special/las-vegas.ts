@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { box, cyl, final, glass, part, rnd, sprite, stone, GOLD, type ModelDef } from '../../builder';
 import { canvas, shade } from '../../art';
-import { glow, switchOf } from '../../light';
+import { switchOf } from '../../light';
 import { lodMap, pixelTexture, texels, toon } from '../../scene';
 
 const R = 0.74, FOOT = 0.7, DEG = Math.PI / 180, [PA, PE] = [-55 * DEG, -5 * DEG], POLE = [Math.sin(PA) * Math.cos(PE), Math.sin(PE), Math.cos(PA) * Math.cos(PE)];
@@ -18,12 +18,11 @@ const led = (L: number, night: boolean) => {
     }
   }));
 };
-const SKIN = lodMap(lodMap(toon(0xffffff, { emissive: 0xffffff }, [0.6, 0.5, 0, 0]), (L) => led(L, false)), (L) => led(L, true), 'emissiveMap');
+const SKIN = lodMap(lodMap(toon(0xffffff, { emissive: 0xffffff }), (L) => led(L, false)), (L) => led(L, true), 'emissiveMap');
 const shine = (c: number | null) => { switchOf(SKIN).value = +(c !== null); SKIN.color.set(c ?? 0x707890).multiplyScalar(1.5); SKIN.emissive.set(c ?? 0).multiplyScalar(1.5); };
 
 export default {
   key: 'Las Vegas',
-  lamps: [{ at: [-0.3, 1.5, 0.45], color: 0xffae52, power: 5.5, reach: 6, final: true }],
   props: [
     final((g) => {
       const [SX, SZ, SY] = [-0.34, 0.2, 0.99];
@@ -59,7 +58,7 @@ export default {
       [-1, -0.55, -0.1, 0.35, 0.8].forEach((x) => box(g, 0.24, 0.01, 0.04, GOLD, x, 0.13, 0.75));
       stone(g, 1.8, 0.07, 0.74, KERB, SX + 0.04, 0.1, 0.2); box(g, 1.68, 0.03, 0.62, GRAVEL, SX + 0.04, 0.17, 0.2);
       LENS.forEach((w, i) => box(g, w / 22, 2 / 22, 0.1, 0xffffff, SX, SY + (20 - 2 * i) / 22, SZ));
-      part(g, new THREE.PlaneGeometry(37 / 22, 24 / 22), 24 / 22, glow(new THREE.MeshBasicMaterial({ map: sprite(SIGN), alphaTest: 0.5 }), 1.2), SX, SY, SZ + 0.06).castShadow = false;
+      part(g, new THREE.PlaneGeometry(37 / 22, 24 / 22), 24 / 22, new THREE.MeshBasicMaterial({ map: sprite(SIGN), alphaTest: 0.5 }), SX, SY, SZ + 0.06).castShadow = false;
       for (const x of [-0.52, -0.16]) box(g, 0.08, 2.32, 0.05, POLE, SX + x, 0.17, SZ - 0.06);
       box(g, 0.44, 0.07, 0.05, POLE, SX - 0.34, 2.42, SZ - 0.06);
       const arm = (w: number, h: number, a: number) => { box(g, w, h, 0.05, STAR, SX - 0.34, 2.17 - h / 2, SZ + 0.02).rotation.z = a; };

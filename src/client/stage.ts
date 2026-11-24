@@ -5,11 +5,11 @@ import { playTileHover, playTileSelect } from './audio';
 import { addToken, clearTokens, initActors, placeAt, setActive, tokens, updateActors } from './render/actors';
 import { createBoard } from './render/board';
 import { POS } from './render/layout';
-import { camera, controls, finishTweens, focus, frame, initScene, overview, pan, pick, render, renderer, resetView, setLighting, toScreen, updateCamera, updateTweens } from './render/scene';
+import { camera, controls, finishTweens, focus, frame, initScene, overview, pan, pick, render, renderer, resetView, toScreen, updateCamera, updateTweens } from './render/scene';
 import { strike } from './render/strike';
 import { FLOAT, initWorld, updateWorld } from './render/world';
 import { DEMO_LOTS, DEMO_TOKEN_TILES } from './seed';
-import { G, activeTab, autoFocus, hd2d, hoveredTileTip, hudLive, selectedTile } from './store';
+import { G, activeTab, autoFocus, hoveredTileTip, hudLive, selectedTile } from './store';
 
 let board: ReturnType<typeof createBoard>;
 export const cam = { follow: -1 };
@@ -134,8 +134,6 @@ export function initStage() {
   const undo: (() => void)[] = [], dispose = () => undo.splice(0).reverse().forEach((f) => f());
   try {
     undo.push(initScene());
-    undo.push(hd2d.sub(() => void setLighting(hd2d.get())));
-    void setLighting(hd2d.get());
     initWorld(); initActors();
     board = createBoard();
     if (G.S) { showState(G.S); enterGame(); } else enterDemo();

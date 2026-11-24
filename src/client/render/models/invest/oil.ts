@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { bake, box, cyl, final, glass, mat, part, INK, IRON, LAVA, type ModelDef } from '../../builder';
-import { glow } from '../../light';
 
 type V3 = [number, number, number];
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
@@ -47,7 +46,7 @@ const flame = (parent: THREE.Group, x: number, y: number, z: number) => {
 function oil(g: THREE.Group) {
   const [dx, dz] = [-0.68, -0.58], [ox, oz] = [0.34, 0.47], TZ = -0.7, HZ = -0.2, GY = 1.36, FX = 0.99, PY = 0.275;
   const xw = ox + WELL;
-  const LED = glow(new THREE.MeshBasicMaterial({ color: 0x35e07a }));
+  const LED = new THREE.MeshBasicMaterial({ color: 0x35e07a });
   const strut = (p: THREE.Group, c: number, t: number, a: V3, b: V3) => {
     const d = new THREE.Vector3(...b).sub(new THREE.Vector3(...a)), m = box(p, t, d.length(), t, c);
     m.position.set(...a).addScaledVector(d, 0.5); m.quaternion.setFromUnitVectors(Y_AXIS, d.normalize());
@@ -139,7 +138,6 @@ function oil(g: THREE.Group) {
 
 export default {
   key: 'oil',
-  lamps: [{ at: [0.99, 2.95, -0.65], color: 0xff8524, power: 6, reach: 6.5, final: true, flicker: true }],
   props: [
     final(oil),
   ],

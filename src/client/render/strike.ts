@@ -3,10 +3,8 @@ import { playStrikeImpact, startStrikeFlight } from '../audio';
 import { exhaust } from './exhaust';
 import { flight } from './flight';
 import { LOT, PAD, POS } from './layout';
-import { LAMP, glow, lamps } from './light';
 import { LAUNCH_PAD, MISSILE_LENGTH, MISSILE_SCALE, missile } from './models/missile';
-import { LAYER_FX, fxOf, scene, shakeCamera, tween } from './scene';
-import { sky } from './sky';
+import { scene, shakeCamera, tween } from './scene';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const IGNITION_TIME = 0.24, BLAST_TIME = 1.3;
@@ -28,8 +26,7 @@ export async function strike(from: number, to: number, start = launchPoint(from)
   const material = (color: number, additive = false) => {
     const m = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, depthWrite: false,
       side: THREE.DoubleSide, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending });
-    if (additive) glow(m);
-    owned.push(m); return fxOf(m);
+    owned.push(m); return m;
   };
   const puffs = (count: number, color: number) => Array.from({ length: count }, (_, i) => {
     const mesh = new THREE.Mesh(PUFF, material(color)); mesh.visible = false;
@@ -52,11 +49,9 @@ export async function strike(from: number, to: number, start = launchPoint(from)
   });
   const ringMaterial = material(0xffdc95, true);
   const ring = new THREE.Mesh(RING, ringMaterial); ring.position.y = -0.25; blast.add(ring);
-  effects.traverse((o) => o.layers.set(LAYER_FX));
   scene.add(rocket, effects);
 
   const p = new THREE.Vector3(), v = new THREE.Vector3(), tp = new THREE.Vector3(), tv = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3();
-  const fire = lamps[LAMP.strike]; fire.distance = 24;
   const cloud = (meshes: typeof smoke, origin: THREE.Vector3, age: number, duration: number, spread: number) => {
     const q = THREE.MathUtils.clamp(age / duration, 0, 1);
     meshes.forEach((mesh, i) => {
@@ -74,7 +69,6 @@ export async function strike(from: number, to: number, start = launchPoint(from)
   try {
     await tween(total, (k) => {
       const time = k * total, flightTime = Math.max(0, time - IGNITION_TIME), hit = time - impactTime;
-      const dim = THREE.MathUtils.lerp(0.28, 1, sky.lampK);
       cloud(launchDust, ground, time, 1.6, 1.5);
       cloud(impactDust, end, hit - 0.05, BLAST_TIME - 0.05, 2);
       smoke.forEach((mesh, i) => {
@@ -109,7 +103,6 @@ export async function strike(from: number, to: number, start = launchPoint(from)
         const dive = THREE.MathUtils.clamp((flightTime - plan.boost - plan.coast) / plan.terminal, 0, 1), thrust = dive * dive * (3 - 2 * dive);
         flame.update(time, ignition * (1 - 0.4 * sustain + 0.25 * terminal + 0.45 * thrust));
         flightAudio.update(p, ignition, dive);
-        fire.position.copy(p).addScaledVector(v, -MISSILE_LENGTH * MISSILE_SCALE); fire.color.setHex(0xffa860); fire.intensity = 26 * ignition * dim;
         aim.scale.setScalar(0.8 + 0.07 * Math.sin(time * 8));
         aimMaterial.opacity = Math.min(1, flightTime / plan.duration * 2) * (0.22 + terminal * 0.3);
         return;
@@ -125,7 +118,6 @@ export async function strike(from: number, to: number, start = launchPoint(from)
       flash.visible = flashAge < 1;
       flash.scale.setScalar(0.3 + Math.sin(flashAge * Math.PI / 2) * 1.7);
       flashMaterial.opacity = (1 - flashAge) ** 2;
-      fire.position.copy(end); fire.position.y += 1.2; fire.color.setHex(0xffd08a); fire.intensity = (150 * (1 - flashAge) ** 2 + 40 * fade ** 2) * dim;
       sparkMaterial.opacity = fade ** 2;
       sparks.forEach(({ mesh, velocity }, i) => {
         mesh.position.copy(velocity).multiplyScalar(hit);
@@ -139,7 +131,6 @@ export async function strike(from: number, to: number, start = launchPoint(from)
     });
   } finally {
     flightAudio.stop();
-    fire.intensity = 0;
     scene.remove(rocket, effects);
     flame.dispose();
     owned.forEach((m) => m.dispose());

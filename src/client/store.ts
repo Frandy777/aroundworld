@@ -50,9 +50,6 @@ export const countdown = cell<{ player: number; totalMs: number; remainingMs: nu
 const FOCUS_KEY = 'autoFocus';
 export const autoFocus = cell(localStorage.getItem(FOCUS_KEY) !== 'false'); // the view goes to the player whose turn begins (mine too); on unless turned off
 autoFocus.sub(() => localStorage.setItem(FOCUS_KEY, String(autoFocus.get())));
-const HD_KEY = 'hd2d';
-export const hd2d = cell(localStorage.getItem(HD_KEY) === 'true'); // the HD-2D light (see render/light.ts) instead of the restrained pixel look; off until asked for
-hd2d.sub(() => localStorage.setItem(HD_KEY, String(hd2d.get())));
 const VOLUME_KEY = 'soundVolume', MUTED_KEY = 'soundMuted';
 const readVolume = () => {
   const raw = Number(localStorage.getItem(VOLUME_KEY));

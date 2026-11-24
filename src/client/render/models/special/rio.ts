@@ -5,7 +5,6 @@ const CONCRETE = 0xded8c6, SNOW = 0xf4f6fa, BLUE = 0x2b68d4, YELLOW = 0xf4c430, 
 
 export default {
   key: 'Rio',
-  lamps: [{ at: [0, 2.2, 0.7], color: 0xffe8c0, power: 3.4, reach: 6.5, final: true }],
   props: [
     final((g) => {
       const [SX, SZ, H, D] = [0, -0.15, 0.115, 0.7];

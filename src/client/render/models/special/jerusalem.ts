@@ -28,7 +28,6 @@ const person = (g: THREE.Group, x: number, y: number, z: number, c: number, lean
 
 export default {
   key: 'Jerusalem',
-  lamps: [{ at: [0, 0.95, 0.75], color: 0xffc870, power: 4, reach: 6.5, final: true }],
   props: [
     final((g) => {
       const [CX, CZ, PY] = [0, -0.2, 0.236];

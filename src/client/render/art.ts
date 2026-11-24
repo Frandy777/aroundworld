@@ -42,24 +42,8 @@ export const canvas = (w: number, h: number, draw: (g: CanvasRenderingContext2D,
   return c;
 };
 
-export type Mask = [gloss: number, height: number];
-export type Fill = (c: string, x: number, y: number, w: number, h: number, m?: Mask | false) => void;
-const FLAT: Mask = [0, 1], rgb = ([a, b]: Mask) => `rgb(${Math.round(a * 255)},${Math.round(b * 255)},0)`;
-export const PANE: Mask = [1, 0.35];
-export const SEAM: Mask = [0, 0.35];
-export const GROOVE: Mask = [0, 0.7];
-const masks = new WeakMap<HTMLCanvasElement, HTMLCanvasElement>();
-export const maskOf = (c: HTMLCanvasElement) => masks.get(c);
-export const flatMask = (c: HTMLCanvasElement) => canvas(c.width, c.height, (g, w, h) => { g.fillStyle = rgb(FLAT); g.fillRect(0, 0, w, h); });
-export const filler = (g: CanvasRenderingContext2D): Fill => {
-  let k: CanvasRenderingContext2D | undefined;
-  return (c, x, y, w, h, m) => {
-    g.fillStyle = c; g.fillRect(x, y, w, h);
-    if (typeof document === 'undefined' || !(m || k)) return;
-    if (!k) { const mask = flatMask(g.canvas); masks.set(g.canvas, mask); k = mask.getContext('2d')!; }
-    k.fillStyle = rgb(m || FLAT); k.fillRect(x, y, w, h);
-  };
-};
+export type Fill = (c: string, x: number, y: number, w: number, h: number) => void;
+export const filler = (g: CanvasRenderingContext2D): Fill => (c, x, y, w, h) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
 
 const TINY: Record<string, string> = {
   A: '.#./#.#/###/#.#/#.#', B: '##./#.#/##./#.#/##.', C: '.##/#../#../#../.##', D: '##./#.#/#.#/#.#/##.', E: '###/#../##./#../###',

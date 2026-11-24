@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { scene, artH, camera, controls, lod, toon, lodMap, pixelTexture, texels, dirtyShadow, pxUnit, fitZoom, ELEV, DENSITY } from './scene';
-import { PAINT, backlit, backlitOf, flat, glassy, hd } from './light';
+import { backlit, flat } from './light';
 import { TILES, type Tile } from '../../shared/data';
 import { canvas, codePixels, shade } from './art';
 import { CARD_SIZE, codeOf, drawCard, drawGround, drawPad } from './labels';
@@ -11,18 +11,13 @@ import { buildLevels, buildProps, building, flag, modelKey, modelOwner, setModel
 import { MISSILE_NAME } from './models/missile';
 
 const VACANT = 0xb9b2a0;
-export interface CityLamp { tile: number; g: THREE.Group; level: number }
-export const cityLamps: CityLamp[] = [];
-const tileGroups: THREE.Group[] = [];
-export const lotVisible = (i: number) => tileGroups[i]?.visible ?? true;
-export const lotLit = (i: number): boolean => tileGroups[i]?.userData.lit ?? false;
 
-const THROUGH = { floor: 0.1, plot: 0.5, plotHd: 0.18, ink: 0.9, card: { white: 0.3, dark: 0.85 }, cardHd: 0.12 };
+const THROUGH = { floor: 0.1, plot: 0.5, ink: 0.9, card: { white: 0.3, dark: 0.85 } };
 
-const cardTex = (t: Tile, L: number, hd: boolean) => pixelTexture(canvas(...CARD_SIZE[L], (g) => drawCard(g, t, L, hd)));
-const groundTex = memo((type: string, kind: string, color: number, L: number, hd: boolean) => pixelTexture(canvas(32 << L, 32 << L, (g) => drawGround(g, type, kind, color, L, hd))));
+const cardTex = (t: Tile, L: number) => pixelTexture(canvas(...CARD_SIZE[L], (g) => drawCard(g, t, L)));
+const groundTex = memo((type: string, kind: string, color: number, L: number) => pixelTexture(canvas(32 << L, 32 << L, (g) => drawGround(g, type, kind, color, L))));
 const padMats = memo((color: number) => {
-  const side = backlit(toon(shade(color, 0.6)), THROUGH.plot), top = glassy(lodMap(backlit(toon(0xffffff), THROUGH.plot), (L, hd) => pixelTexture(canvas(texels(PAD.w, L), texels(PAD.d, L), (g, w, h) => drawPad(g, color, w, h, L, hd)))), 0);
+  const side = backlit(toon(shade(color, 0.6)), THROUGH.plot), top = lodMap(backlit(toon(0xffffff), THROUGH.plot), (L) => pixelTexture(canvas(texels(PAD.w, L), texels(PAD.d, L), (g, w, h) => drawPad(g, color, w, h, L))));
   return [side, top];
 });
 
@@ -41,7 +36,6 @@ const BRACKET_Y = PAD.h + BAR / 2;
 const BRACKET = new THREE.ExtrudeGeometry(new THREE.Shape().moveTo(0, 0).lineTo(ARM, 0).lineTo(ARM, BAR).lineTo(BAR, BAR).lineTo(BAR, ARM).lineTo(0, ARM), { depth: BAR, bevelEnabled: false }).rotateX(Math.PI / 2).translate(0, BAR, 0);
 
 export function createBoard() {
-  cityLamps.length = tileGroups.length = 0;
   const root = new THREE.Group();
   scene.add(root);
   const cursor = (color: number) => {
@@ -53,14 +47,14 @@ export function createBoard() {
   const tiles = TILES.map((t) => {
     const g = new THREE.Group();
     g.position.set(POS[t.i].x, 0, POS[t.i].z);
-    g.userData = { lift: 0, lit: false };
+    g.userData = { lift: 0 };
     const side = lodMap(toon(t.color), sideTex);
-    const ground = glassy(lodMap(backlit(toon(0xffffff), THROUGH.floor), (L, hd) => groundTex(t.type, t.kind, t.color, L, hd)), 0);
+    const ground = lodMap(backlit(toon(0xffffff), THROUGH.floor), (L) => groundTex(t.type, t.kind, t.color, L));
     const slab = new THREE.Mesh(slabGeo(SZ, SLAB, SZ), [side, ground]);
     slab.position.y = (TOP - 0.8) / 2;
     slab.receiveShadow = slab.castShadow = true;
     const [code, fg] = codeOf(t), letters = new THREE.Mesh(codeGeo(code), inkMat(fg, false));
-    const card = new THREE.Mesh(CARD_GEO, flat(backlit(glassy(lodMap(toon(0xffffff, {}, PAINT), (L, hd) => cardTex(t, L, hd)), 0), THROUGH.cardHd), fg === 0xffffff ? THROUGH.card.white : THROUGH.card.dark));
+    const card = new THREE.Mesh(CARD_GEO, flat(lodMap(toon(0xffffff), (L) => cardTex(t, L)), fg === 0xffffff ? THROUGH.card.white : THROUGH.card.dark));
     card.receiveShadow = true;
     card.position.set(CARD.x, TOP + 0.03, CARD.z);
     letters.position.copy(card.position);
@@ -76,9 +70,7 @@ export function createBoard() {
     if (pad) g.add(pad);
     root.add(g);
     if (pad) { sign(bld); bake(bld); }
-    tileGroups[t.i] = g;
-    const lamp = t.type === 'city' ? (cityLamps.push({ tile: t.i, g, level: 0 }), cityLamps[cityLamps.length - 1]) : null;
-    return { g, slab, card, letters, props, rocket, side, tint: [ground, card.material], pad, bld, lamp, key: '', pop: 1, redo: () => {} };
+    return { g, slab, card, letters, props, rocket, side, tint: [ground, card.material], pad, bld, key: '', pop: 1, redo: () => {} };
   });
   const liveOf = (g: THREE.Group) => { const l: THREE.Object3D[] = []; g.traverse((c) => c.userData.tick && l.push(c)); return l; };
   const live = tiles.map((o) => liveOf(o.g));
@@ -99,12 +91,10 @@ export function createBoard() {
     const col = st?.mortgaged ? 0x555555 : st?.color ?? VACANT;
     o.pad!.material = padMats(col);
     const lit = st && !st.mortgaged ? st.color : null;
-    o.g.userData.lit = lit !== null; modelOwner(t, lit);
-    padMats(col).forEach((m) => (backlitOf(m).value = lit !== null ? THROUGH.plotHd : 0));
+    modelOwner(t, lit);
     if (!st) { if (opts?.sign !== false) sign(o.bld); }
     else if (t.type === 'special') buildLevels(o.bld, t, st.level, st.mortgaged);
     else if (t.type === 'city') st.level ? building(o.bld, st.level, st.mortgaged ? 0x8c8c8c : new THREE.Color(t.color).lerp(new THREE.Color(0xffffff), 0.6).getHex(), col, st.mortgaged) : flag(o.bld, st.mortgaged ? 0x666666 : st.color);
-    if (o.lamp) o.lamp.level = st && !st.mortgaged ? st.level : 0;
     bake(o.bld); live[i] = liveOf(o.g);
     dirtyShadow();
   }
@@ -162,14 +152,6 @@ export function createBoard() {
       const u = Math.min(pxUnit(fitZoom), CARD.w / 11), p = pxUnit(), h = lod.n ? u / 2 : u / 25, s = Math.sin(ELEV), c = Math.cos(ELEV);
       const odd = (n: number) => 2 * Math.round((n - 1) / 2) + 1, w = odd(CARD.w / p), d = odd((CARD.d * s) / p);
       tiles.forEach((o) => {
-        if (hd.on) {
-          o.card.scale.set(1, 1, 1);
-          o.card.position.set(CARD.x, TOP + 0.015, CARD.z);
-          o.letters.visible = p <= 1.01 * u;
-          o.letters.scale.set(u, 0.06, u);
-          o.letters.position.copy(o.card.position);
-          return;
-        }
         const { x, y, z } = o.g.position, g = (y + TOP + 0.03) * c;
         const mx = (Math.floor((x + CARD.x) / p) + 0.5) * p, my = (Math.floor((g - (z + CARD.z) * s) / p) + 0.5) * p;
         o.card.scale.set((w * p) / CARD.w, 1, (d * p) / (s * CARD.d));

@@ -7,16 +7,16 @@ import { leaveRoom, quickGame } from './controller';
 import { busy } from './director';
 import { send, socketReadyState } from './net';
 import { LOT, PAD, POS } from './render/layout';
-import { U, hd } from './render/light';
-import { camera, controls, dirtyShadow, finishTweens, fitZoom, hdCam, jumpTo, lod, renderer, scene, setLighting, viewAngles } from './render/scene';
+import { U } from './render/light';
+import { camera, controls, dirtyShadow, finishTweens, fitZoom, jumpTo, lod, renderer, scene, viewAngles } from './render/scene';
 import { clock, sky, wallHour } from './render/sky';
 import { FLOAT } from './render/world';
 import { SCENARIOS, runScenario, type SceneDrv } from './scenarios';
 import { cam, isolateTile, loop, playStrike, rebuildTile, selectTile, setLot } from './stage';
-import { G, actionBtn, cards, cardsSetAside, hd2d, paused, session, stageOnly, waitingFor } from './store';
+import { G, actionBtn, cards, cardsSetAside, paused, session, stageOnly, waitingFor } from './store';
 
 // ---- Dev bridge (development builds only, loaded from main.tsx) ----
-// URL flags set the stage on boot (?dev=1&hd=1&hour=0&tile=1&zoom=2&autostart=1&clean=1&ui=0);
+// URL flags set the stage on boot (?dev=1&hour=0&tile=1&zoom=2&autostart=1&clean=1&ui=0);
 // `window.__aw` gives scripts and browser tools one live handle to drive the scene without clicking UI or fighting HMR module copies;
 // `until` / `idle` / `ui` / `click` / `cmd` (below) drive the HUD and cards the way a player does, with waits that follow the game instead of fixed sleeps.
 
@@ -30,7 +30,6 @@ export interface ViewOpts {
   elev?: number;
   az?: number;
   rotate?: boolean;
-  hd?: boolean;
   hour?: number | null; // 0..24 freezes the clock there; null returns to live wall time
   clean?: boolean; // hide Title / Lobby / HUD chrome while keeping the DEV button
   ui?: boolean; // false hides #root altogether for bare-canvas captures
@@ -46,7 +45,6 @@ export function preBoot() {
   if (hmrData.booted) return;
   const q = new URLSearchParams(location.search);
   if (q.get('fresh') === '1' || q.get('autostart') === '1' || q.has('bots') || q.has('scenario')) sessionStorage.removeItem('room');
-  if (q.has('hd')) hd2d.set(q.get('hd') === '1');
   const h = num(q.get('hour'));
   if (h !== undefined) clock.stop = mod24(h);
   if (q.get('clean') === '1') stageOnly.set(true);
@@ -59,7 +57,6 @@ export function preBoot() {
 async function setView(opts: ViewOpts = {}) {
   if (opts.clean !== undefined) stageOnly.set(opts.clean);
   if (opts.ui !== undefined) document.getElementById('root')!.hidden = !opts.ui;
-  if (opts.hd !== undefined) { hd2d.set(opts.hd); await setLighting(opts.hd); }
   if (opts.hour !== undefined) {
     clock.stop = opts.hour === null ? null : mod24(opts.hour);
     if (opts.hour === null) clock.shift = 0;
@@ -90,7 +87,6 @@ function readState() {
   const { elev, az } = viewAngles(), t = controls.target, hour = clock.stop ?? mod24(wallHour() + clock.shift);
   return {
     view: session.get().view,
-    look: hd.on ? 'hd2d' : 'pixel',
     hour: +hour.toFixed(3),
     zoom: +camera.zoom.toFixed(3),
     fitZoom: +fitZoom.toFixed(3),
@@ -238,7 +234,6 @@ export function initDev() {
     ui: () => (live ? ui() : null),
   };
   const ready = (async () => {
-    await setLighting(hd2d.get());
     if (startBots !== null) await driver.quickGame(startBots);
     if (scenarioName && !booted) console.log(`scenario ${scenarioName}:`, await runScenario(scenarioName, driver));
     if (urlView) await setView(urlView);
@@ -251,7 +246,6 @@ export function initDev() {
     ready,
     state: readState,
     setView,
-    setLook: (on: boolean) => setView({ hd: on }),
     setHour: (hour: number | null) => setView({ hour }),
     setClean: (clean: boolean) => setView({ clean }),
     setUi: (ui: boolean) => setView({ ui }),
@@ -289,7 +283,7 @@ export function initDev() {
     scenarios: Object.fromEntries(Object.entries(SCENARIOS).map(([k, s]) => [k, s.hint])),
     snapDataUrl: () => (loop.draw(), renderer.domElement.toDataURL('image/png')),
     audio: { labels: AUDIO_AUDITIONS.map(([k]) => k), play: auditionSound, renderPcm: renderAuditionPcm },
-    refs: { G, TILES, POS, LOT, PAD, clock, sky, U, camera, hdCam, controls, renderer, scene, loop },
+    refs: { G, TILES, POS, LOT, PAD, clock, sky, U, camera, controls, renderer, scene, loop },
   };
   (window as unknown as { __aw?: typeof api }).__aw = api;
   return () => { live = false; delete (window as unknown as { __aw?: typeof api }).__aw; };

@@ -8,7 +8,6 @@ const around = (g: THREE.Group, x: number, z: number) => [0, 1, 2, 3].map((k) =>
 
 export default {
   key: 'Zurich',
-  lamps: [{ at: [0, 0.85, 0.95], color: 0xffbe66, power: 3.8, reach: 5.5, final: true }],
   props: [
     final((r) => {
       const g = new THREE.Group(); g.position.z = FWD; r.add(g);

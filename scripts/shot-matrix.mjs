@@ -2,8 +2,8 @@
 // Capture a labeled visual comparison sheet — or a scripted list of single shots — via headless Chrome + `window.__aw`.
 // Usage:
 //   npm run shots
-//   node scripts/shot-matrix.mjs --hours=0,6.2,12,18 --looks=pixel,hd2d --tile=1 --zoom=2.2
-//   node scripts/shot-matrix.mjs --tile=28 --zoom=1.6 --looks=hd2d --hours=0,12 --strike=6,28,4.9
+//   node scripts/shot-matrix.mjs --hours=0,6.2,12,18 --tile=1 --zoom=2.2
+//   node scripts/shot-matrix.mjs --tile=28 --zoom=1.6 --hours=0,12 --strike=6,28,4.9
 // Close-ups (aim at the building, not the lot centre; crop and upscale the cells). --tile takes a name or kind too (--tile=rio,
 // --tile="Las Vegas", --tile=bank — a slug ignoring case, spaces and hyphens; a bare number stays an index):
 //   node scripts/shot-matrix.mjs --tiles=1,20 --owners=0,1 --lv=2 --az=0,-35 --zoom=3 --tx=1.6 --tz=1 --lift=0.9 --crop=420x340 --scale=2
@@ -11,12 +11,12 @@
 //   node scripts/shot-matrix.mjs --tile=jerusalem --lot=1 --zoom=3 --crop=420x340 --scale=2
 //   node scripts/shot-matrix.mjs --tile=hong-kong --lx=-0.4 --ly=1 --lz=-0.15 --zoom=3
 // Scripted single shots (one named PNG per entry plus <out>/sheet.png — JSON array inline or a file path; --out=....png or --sheet=file puts the sheet elsewhere):
-//   node scripts/shot-matrix.mjs --out=/tmp/aw-shots/hk --list='[{"name":"hk-nite","tile":13,"hd":true,"hour":0,"zoom":3,"lot":true,"lx":-0.25,"ly":2.6,"crop":{"w":360,"h":420,"dx":0,"dy":0},"scale":2}]'
+//   node scripts/shot-matrix.mjs --out=/tmp/aw-shots/hk --list='[{"name":"hk-nite","tile":13,"hour":0,"zoom":3,"lot":true,"lx":-0.25,"ly":2.6,"crop":{"w":360,"h":420,"dx":0,"dy":0},"scale":2}]'
 // Compare with another version instead of eyeballing two sheets: --vs[=git-ref] shoots that commit (HEAD when bare: what the uncommitted edits changed)
 // from a throwaway copy, and the working tree, each with the world frozen; the sheet lays BEFORE | AFTER | DIFF out per shot and a table says how far
 // each moved against the noise between two shots of the same code. --expect=same exits 1 if any shot moved. --cmp=<dir> takes the BEFORE from the
 // <name>.png files of an earlier --list run instead of a commit:
-//   node scripts/shot-matrix.mjs --looks=pixel --hours=0,12,18 --vs --expect=same
+//   node scripts/shot-matrix.mjs --hours=0,12,18 --vs --expect=same
 //   node scripts/shot-matrix.mjs --list=shots.json --out=/tmp/aw-shots/new --cmp=/tmp/aw-shots/old
 // No dev server where the script runs (worktree, delegated checkout): --serve spawns `vite --port 0` for the run.
 // Whichever way the server is found it is checked against /__aw-id (the checkout it serves): another worktree's server is
@@ -47,7 +47,7 @@ Target:   [--url=http://localhost:5173] [--serve]      without --url/--serve, po
           without the endpoint) is rejected — restart it or pass --serve.
           [--scene=buy|news|mortgage|casino|spectate]   one named HUD scene (fresh dev room, ends paused); same as a --list shot with "scene"
           [--q=vol=1&x=2]                              extra query for the page URL
-Rows:     [--looks=pixel,hd2d] [--zooms=fit|N,...] [--elevs=deg,...] [--tiles=N|name,...] [--owners=p,...] [--lv=0,1,2,3]
+Rows:     [--zooms=fit|N,...] [--elevs=deg,...] [--tiles=N|name,...] [--owners=p,...] [--lv=0,1,2,3]
 Cols:     [--hours=12,18,0] [--az=deg,...] [--time=sec,...]
 Lots:     [--m=1] [--nosign=1] [--iso=1|tile] [--lots=t:p:lv[:m[:sign]],...]
 Camera:   [--elev=deg] [--tx=N] [--tz=N] [--lift=N]  tile-space aim over the tile centre POS[i]
@@ -69,7 +69,7 @@ Output:   [--crop=WxH] [--dx=px] [--dy=px] [--scale=N] [--cols=N] [--raw[=dir]] 
 Tiles take an index, a name or a kind (--tile=rio|"Las Vegas"|bank, slug-matched); names resolve in --tile(s),
 --iso, --lots' first field and the --list shot's tile/iso/lots too.
 
-Shot object (--list): {name, tile, tx, tz, x, z, lift, lot, lx, ly, lz, zoom, elev, az, hour, hd, ui, time, iso, scene,
+Shot object (--list): {name, tile, tx, tz, x, z, lift, lot, lx, ly, lz, zoom, elev, az, hour, ui, time, iso, scene,
   setlot:{owner,level,mortgaged,sign}, lots:[[t,owner,level,mortgaged,sign]], strike:[from,to,sec], crop:[x,y,w,h]|{w,h,dx,dy}, scale}
   scene: a named HUD scene (see __aw.scenarios) run before the shot's view is posed`);
   process.exit(0);
@@ -109,7 +109,6 @@ if (shotList) for (const s of shotList) { // names resolve up front, so a bad on
   if (s.lots) s.lots = s.lots.map((l) => (Array.isArray(l) ? [tileIx(l[0], 'shot.lots'), ...l.slice(1)] : { ...l, t: tileIx(l.t, 'shot.lots') }));
 }
 
-const looks = (args.looks ?? 'pixel,hd2d').split(',').map((s) => s.trim()).filter(Boolean);
 const hours = (args.hours ?? '12,18,0').split(',').map((s) => Number(s.trim())).filter(Number.isFinite);
 // HUD shots need the wide layout (the #narrow mask covers anything else): autostart and named scenes get 1600x900 unless --size says otherwise; bare model shots keep the old default.
 const hud = args.autostart === '1' || args.scene !== undefined || !!shotList?.some((s) => s.scene || s.ui);
@@ -425,7 +424,7 @@ async function capture(base, dir, quiet = false) {
         if (s.setlot !== undefined) await evalJs(`window.__aw.setLot(${s.tile ?? tiles[0] ?? 0}, ${JSON.stringify({ owner: s.setlot.owner ?? s.setlot.p, level: s.setlot.level ?? s.setlot.lv, mortgaged: s.setlot.mortgaged ?? s.setlot.m, sign: s.setlot.sign })}).then(() => window.__aw.step(0.6))`);
         await evalJs(`(async () => { const a = window.__aw, s = ${JSON.stringify(s)};
           ${freeze ? `await ${HOLD};` : ''}
-          const v = { hd: s.hd ?? true, hour: s.hour ?? 12, rotate: !!s.rotate, ui: s.ui ?? (${autostart} || !!s.scene), zoom: s.zoom ?? (s.tile !== undefined ? 3 : 'fit') };
+          const v = { hour: s.hour ?? 12, rotate: !!s.rotate, ui: s.ui ?? (${autostart} || !!s.scene), zoom: s.zoom ?? (s.tile !== undefined ? 3 : 'fit') };
           if (s.tile !== undefined) {
             const P = a.refs.POS[s.tile];
             if (s.lot || s.lx !== undefined || s.ly !== undefined || s.lz !== undefined) { // lot space: over the props origin, ly up from the plot top
@@ -447,35 +446,32 @@ async function capture(base, dir, quiet = false) {
         if (!quiet) console.log(`${name}: ${c.out}`);
       }
     } else {
-      // ---- Matrix: rows = looks x zooms x elevs x tiles x owners x lvs, cols = hours x azs x times ----
+      // ---- Matrix: rows = zooms x elevs x tiles x owners x lvs, cols = hours x azs x times ----
       phase = 'shots';
-      for (const look of looks) {
-        const hd = look === 'hd2d' || look === 'hd' || look === '1';
-        for (const zoom of zooms) for (const elev of elevs) for (const tile of tiles) for (const p of owners) for (const lv of lvs) {
-          if (tile !== undefined) {
-            if (iso) await evalJs(`window.__aw.isolate(${iso === 'self' ? tile : iso})`);
-            if (p !== undefined || lv !== undefined) {
-              const o = { owner: p ?? 0, ...(lv !== undefined ? { level: lv } : {}), ...(mort ? { mortgaged: true } : {}), ...(nosign ? { sign: false } : {}) };
-              await evalJs(`window.__aw.setLot(${tile}, ${JSON.stringify(o)}).then(() => window.__aw.step(0.6))`); // let the pop-in squash settle before the shots
-            } else if (nosign) await evalJs(`window.__aw.setLot(${tile}, { owner: -1, sign: false })`);
-          }
-          for (const hour of hours) {
-            for (const az of azs) for (const time of times) {
-              const viewOpts = { hd, hour, rotate: false, ui: autostart, zoom, ...(elev !== undefined ? { elev } : {}), ...(az !== undefined ? { az } : {}) };
-              if (freeze) await evalJs(HOLD);
-              await evalJs(aimView(viewOpts, tile));
-              if (strikeSpec) {
-                const [from = 6, to = 28, sec = 1.4] = strikeSpec;
-                await evalJs(`window.__aw.strike(${from}, ${to}, ${sec})`);
-              }
-              if (time !== undefined) await evalJs(`window.__aw.scrub(${time})`);
-              const state = await evalJs('window.__aw.state()');
-              if (strikeSpec && !freeze) await evalJs('window.__aw.setLoop({ paused: false })');
-              const label = `${hd ? 'HD-2D' : 'PIXEL'}  ${hhmm(hour)}${tile !== undefined ? `  t${tile}` : ''}${p !== undefined ? `  p${p}` : ''}${lv !== undefined ? `  lv${lv}` : ''}${mort ? '  MORT' : ''}${az !== undefined ? `  az${az}` : ''}${elev !== undefined ? `  el${elev}` : ''}${time !== undefined ? `  t${time}` : ''}  z=${state.zoom} (${state.lodName})`;
-              const c = await snap(label);
-              if (crop) c.crop = { w: crop[0], h: crop[1], dx: cdx, dy: cdy };
-              if (scale !== 1) c.scale = scale;
+      for (const zoom of zooms) for (const elev of elevs) for (const tile of tiles) for (const p of owners) for (const lv of lvs) {
+        if (tile !== undefined) {
+          if (iso) await evalJs(`window.__aw.isolate(${iso === 'self' ? tile : iso})`);
+          if (p !== undefined || lv !== undefined) {
+            const o = { owner: p ?? 0, ...(lv !== undefined ? { level: lv } : {}), ...(mort ? { mortgaged: true } : {}), ...(nosign ? { sign: false } : {}) };
+            await evalJs(`window.__aw.setLot(${tile}, ${JSON.stringify(o)}).then(() => window.__aw.step(0.6))`); // let the pop-in squash settle before the shots
+          } else if (nosign) await evalJs(`window.__aw.setLot(${tile}, { owner: -1, sign: false })`);
+        }
+        for (const hour of hours) {
+          for (const az of azs) for (const time of times) {
+            const viewOpts = { hour, rotate: false, ui: autostart, zoom, ...(elev !== undefined ? { elev } : {}), ...(az !== undefined ? { az } : {}) };
+            if (freeze) await evalJs(HOLD);
+            await evalJs(aimView(viewOpts, tile));
+            if (strikeSpec) {
+              const [from = 6, to = 28, sec = 1.4] = strikeSpec;
+              await evalJs(`window.__aw.strike(${from}, ${to}, ${sec})`);
             }
+            if (time !== undefined) await evalJs(`window.__aw.scrub(${time})`);
+            const state = await evalJs('window.__aw.state()');
+            if (strikeSpec && !freeze) await evalJs('window.__aw.setLoop({ paused: false })');
+            const label = `${hhmm(hour)}${tile !== undefined ? `  t${tile}` : ''}${p !== undefined ? `  p${p}` : ''}${lv !== undefined ? `  lv${lv}` : ''}${mort ? '  MORT' : ''}${az !== undefined ? `  az${az}` : ''}${elev !== undefined ? `  el${elev}` : ''}${time !== undefined ? `  t${time}` : ''}  z=${state.zoom} (${state.lodName})`;
+            const c = await snap(label);
+            if (crop) c.crop = { w: crop[0], h: crop[1], dx: cdx, dy: cdy };
+            if (scale !== 1) c.scale = scale;
           }
         }
       }

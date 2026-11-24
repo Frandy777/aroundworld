@@ -1,12 +1,12 @@
 import * as THREE from 'three';
-import { box, box as solid, cyl, decal, final, glass, lamplit, memo, metal, part, rnd, sprite, stone, GOLD, INK, IRON, OFFICE, type ModelDef } from '../../builder';
+import { box, box as solid, cyl, decal, final, glass, lamplit, memo, part, rnd, sprite, stone, GOLD, INK, IRON, OFFICE, type ModelDef } from '../../builder';
 import { canvas, hex, shade } from '../../art';
 import { nightlit } from '../../light';
 import { DENSITY, pixelTexture, toon } from '../../scene';
 
 const FWD = 0.7, BANK = 0.24, Z = -0.8, GRANITE = 0xcfc8b6, STEEL = 0xe4eaf4, LIP = 0xf1eee4;
 const px = (n: number) => n / DENSITY;
-const steel = metal(STEEL, [0.35, 1, 0.4, 0]);
+const steel = toon(STEEL);
 const around = (g: THREE.Group, x: number, z: number) => [0, 1, 2, 3].map((k) => { const p = new THREE.Group(); p.position.set(x, 0, z); p.rotation.y = (k * Math.PI) / 2; g.add(p); return p; });
 const wall = (w: number, h: number) => Array.from({ length: h }, (_, y) => Array.from({ length: w }, (_, x) => (y > 0 && y < h - 1 && Math.min(x, w - 1 - x) % 4 === 3 ? (y % 4 ? 'O' : 'e') : 'x')).join(''));
 const wallLamps = (w: number, h: number) => wall(w, h).map((row) => row.replace(/./g, (c) => (c === 'O' ? 'Y' : '.')));
@@ -22,7 +22,7 @@ const bay = (w: number, h: number, lamps = false) => wall(w, h).map((row, y) => 
   const d = Math.hypot(x + 0.5 - w / 2, Math.max(0, w / 2 - y - 0.5));
   return lamps ? (c === 'O' && d <= w / 2 - 2 ? 'Y' : '.') : d > w / 2 ? 'b' : d > w / 2 - 1 ? 'w' : d > w / 2 - 2 ? 'a' : c;
 }).join(''));
-const crown = memo((rows: string[], lamps: string[]) => toon(0xffffff, { map: sprite(rows), emissive: 0xffffff, emissiveMap: sprite(lamps) }, [0.4, 1, 0.3, 0.5]));
+const crown = memo((rows: string[], lamps: string[]) => toon(0xffffff, { map: sprite(rows), emissive: 0xffffff, emissiveMap: sprite(lamps) }));
 const windows = memo((rows: string[], lamps: string[]) => toon(0xffffff, { map: sprite(rows), emissive: 0xffffff, emissiveMap: sprite(lamps) }));
 const W = 19, NH = 110, NW = W + 2, MID = (NW - 1) / 2, PANE = ['#c4d7ee', '#a9c7e8', '#86aad3', '#6f93c0'], COOL = [0xa8ccff, 0x6fa3ff, 0x6fa3ff, 0xd6e6ff];
 const clad = (night: boolean) => pixelTexture(canvas(8 * NW, NH, (g) => {
@@ -41,8 +41,8 @@ const clad = (night: boolean) => pixelTexture(canvas(8 * NW, NH, (g) => {
     for (let y = 0; y < NH; y++) { const e = Math.floor((W / 2) * (i % 2 ? up(y) / Math.SQRT2 : 1 - up(y))); for (const x of [MID - e, MID + e]) at('#9cc4ff', o + x, y); }
   }
 }));
-const GLASS = toon(0xffffff, { map: clad(false), emissive: 0xffffff, emissiveMap: clad(true) }, [0.5, 1, 0, 0.1]);
-const led = nightlit(toon(STEEL, {}, [0.35, 1, 0.4, 0]), 0x9cc4ff, 0.6), mast = lamplit(LIP, 0xa8ccff, 0.8);
+const GLASS = toon(0xffffff, { map: clad(false), emissive: 0xffffff, emissiveMap: clad(true) });
+const led = nightlit(toon(STEEL), 0x9cc4ff, 0.6), mast = lamplit(LIP, 0xa8ccff, 0.8);
 const shaft = memo((a: number, h: number) => {
   const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z), pos: number[] = [], uv: number[] = [], g = new THREE.BufferGeometry();
   let k = 0;
@@ -61,7 +61,6 @@ const shaft = memo((a: number, h: number) => {
 
 export default {
   key: 'New York',
-  lamps: [{ at: [0, 1.3, 1.15], color: 0xffc878, power: 3.2, reach: 6.5, final: true }],
   props: [
     final((r) => {
       const g = new THREE.Group(); g.position.z = FWD; r.add(g);

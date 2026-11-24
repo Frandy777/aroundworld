@@ -1,8 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { bake, box, cyl, hip, mat, part, GOLD, INK, IRON, LAVA } from './builder';
-import { hd } from './light';
-import { LAYER_FX, fxOf, movers } from './scene';
 import { sky } from './sky';
 
 const SEA = -0.8;
@@ -99,7 +97,7 @@ const moving = (build: (g: THREE.Group) => void) => {
   const g = new THREE.Group();
   build(g);
   bake(g);
-  g.traverse((o) => { if (o instanceof THREE.Mesh) { o.castShadow = hd.on; movers.push(o); } });
+  g.traverse((o) => { if (o instanceof THREE.Mesh) o.castShadow = false; });
   return g;
 };
 const afloat = (build: (g: THREE.Group) => void, k = 1) => {
@@ -155,7 +153,7 @@ const sails = moving((g) => { box(g, 3.6, 0.2, 0.08, WOOD, 0, -0.1); box(g, 0.2,
 sails.position.set(mx - 1.5, 2.5, mz + 0.5);
 const PUFF = mergeGeometries([[0, 0, 0, 0.5], [0.3, -0.12, 0.1, 0.34], [-0.28, 0.1, -0.12, 0.36], [0.08, 0.3, -0.22, 0.3], [-0.1, -0.2, 0.3, 0.3], [0.2, 0.18, 0.28, 0.26]].map(([x, y, z, r]) => new THREE.IcosahedronGeometry(r, 1).translate(x, y, z)));
 const GREY = [0xa9a6bd, 0x948fab, 0xb8b6ca, 0x827e99, 0xa9a6bd, 0x9d9ab2].map((c) => new THREE.Color(c)), HOT = new THREE.Color(0xff8a3a);
-const smoke = GREY.map(() => { const m = new THREE.Mesh(PUFF, fxOf(new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false }))); m.layers.set(LAYER_FX); return m; });
+const smoke = GREY.map(() => new THREE.Mesh(PUFF, new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false })));
 
 export const scenery = new THREE.Group().add(isles, sails, ...smoke, dolphin, ...fleet.map((b) => b.g));
 

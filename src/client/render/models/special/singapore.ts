@@ -1,18 +1,17 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { block, box, cyl, final, memo, stone, INK, type ModelDef } from '../../builder';
-import { glassy, glow, nightlit, switchOf } from '../../light';
+import { nightlit, switchOf } from '../../light';
 import { toon } from '../../scene';
 
 const WARM = 0xffd9a0;
-const LIT = new Set<THREE.Material>(), beacon = glow(new THREE.MeshBasicMaterial({ color: INK }));
+const LIT = new Set<THREE.Material>(), beacon = new THREE.MeshBasicMaterial({ color: INK });
 let own: number | null = null;
-const lit = memo((c: number, k: number, light: number = WARM, pane: boolean = false) => { const m = nightlit(toon(c), light, k); LIT.add(m); switchOf(m).value = +(own !== null); return pane ? glassy(m) : m; });
+const lit = memo((c: number, k: number, light: number = WARM, _pane: boolean = false) => { const m = nightlit(toon(c), light, k); LIT.add(m); switchOf(m).value = +(own !== null); return m; });
 const shine = (c: number | null) => { own = c; LIT.forEach((m) => (switchOf(m).value = +(c !== null))); beacon.color.set(c ?? INK); };
 
 export default {
   key: 'Singapore',
-  lamps: [{ at: [0, 0.8, 0.85], color: WARM, power: 3.6, reach: 6.5, final: true, owned: true }],
   props: [
     final((g) => {
       const BASE = 0.46, H = 1.8, ZC = -0.26, OFF = 0.4, LEAN = 0.11, TOP = BASE + H, DY = TOP + 0.08, LX = -0.08, TW = 0.88, TD = 0.8;

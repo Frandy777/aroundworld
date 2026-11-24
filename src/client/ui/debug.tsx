@@ -10,7 +10,7 @@ import { POS } from '../render/layout';
 import { camera, controls, dirtyShadow, fitZoom, jumpTo, lod, resetView, viewAngles } from '../render/scene';
 import { clock, wallHour } from '../render/sky';
 import { loop, playStrike } from '../stage';
-import { G, actionBtn, hd2d, paused, selectedTile, session, stageOnly, useCell, type View } from '../store';
+import { G, actionBtn, paused, selectedTile, session, stageOnly, useCell, type View } from '../store';
 import { openAlert, openAsk, openNews, openNotice } from './open';
 
 const SAMPLES: Record<string, Notice | NewsCard | Prompt> = {
@@ -58,7 +58,7 @@ const LOD_NAMES = ['far', 'mid', 'near'] as const;
 interface Pane { show: boolean; tile: number; setTile: (i: number) => void }
 
 function Scene({ show, tile, setTile, view, bump }: Pane & { view: View; bump: () => void }) {
-  const isHd = useCell(hd2d), bare = useCell(stageOnly), { elev } = viewAngles();
+  const bare = useCell(stageOnly), { elev } = viewAngles();
   const wall = wallHour(), hour = clock.stop ?? mod24(wall + clock.shift);
   const setClock = (shift: number, stop: number | null) => { clock.shift = shift; clock.stop = stop; dirtyShadow(); loop.draw(); bump(); };
   const seek = (h: number) => setClock(clock.stop === null ? mod24(h - wall) : clock.shift, clock.stop === null ? null : mod24(h));
@@ -76,7 +76,7 @@ function Scene({ show, tile, setTile, view, bump }: Pane & { view: View; bump: (
         </TilePick>
       </Field>
       <Field label="LOOK">
-        <Seg opts={[['PIXEL', !isHd, () => hd2d.set(false)], ['HD-2D', isHd, () => hd2d.set(true)], ['STAGE ONLY', bare, () => stageOnly.set(!bare)]]} />
+        <Seg opts={[['STAGE ONLY', bare, () => stageOnly.set(!bare)]]} />
       </Field>
       <Field label="CAMERA" note={`z ${camera.zoom.toFixed(2)} · fit ${fitZoom.toFixed(2)} · ${LOD_NAMES[lod.n] ?? '-'} · ${Math.round(elev)}°`}>
         <Seg opts={[['FIT', false, cam(() => { jumpTo(0, 0, 'fit'); loop.draw(); })], ['RESET', false, cam(() => void resetView())], ...orbit]} />

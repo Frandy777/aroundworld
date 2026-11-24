@@ -15,7 +15,6 @@ const MURAL = toon(0xffffff, { map: mural(false), emissive: 0xffffff, emissiveMa
 
 export default {
   key: 'Pyongyang',
-  lamps: [{ at: [-0.26, 5.7, -0.35], color: 0xff4d3b, power: 5, reach: 6.5, final: true }],
   props: [
     final((g) => {
       const [TX, TZ, SX, SZ, FY, P] = [-0.26, -0.5, 0.76, 0.1, 5.05, 0.63];

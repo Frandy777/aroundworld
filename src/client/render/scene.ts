@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { ORM, hd, lamps, lit, setLamps, spot, texOf, U, type Pbr } from './light';
-import { OUTLINE_GLSL, canvas, flatMask, maskOf } from './art';
+import { lit, U } from './light';
+import { OUTLINE_GLSL } from './art';
 import { sky, updateSky } from './sky';
 
 export const BOARD_K = 2;
@@ -16,66 +16,25 @@ function drain(d?: IdleDeadline) {
   if (renderer) for (const end = performance.now() + (d?.timeRemaining() ?? 8); later.length && performance.now() < end;) later.shift()!();
   if (later.length) idle(drain);
 }
-export const lodMap = <M extends THREE.Material & { map: THREE.Texture | null }>(mat: M, make: (L: number, hd: boolean) => THREE.Texture, slot: 'map' | 'emissiveMap' = 'map'): M => {
-  const maps = (mat.userData.maps ??= []) as THREE.Texture[], was = mat.onBeforeRender, toony = mat instanceof THREE.MeshToonMaterial;
-  const mine = <T extends THREE.Texture>(t: T) => (maps.push(t), (t.userData.lod = true), t);
-  const drawn: THREE.Texture[] = [], get = (L: number) => (drawn[L] ??= mine(make(L, false)));
-  let ch: THREE.Texture | undefined;
-  const chain = () => {
-    if (ch) return ch;
-    const src = [2, 1, 0].map((L) => (make.length > 1 ? make(L, true) : get(L))), cs = src.map((t) => t.image as HTMLCanvasElement);
-    let t = chains.get(cs[0]);
-    if (!t) {
-      const ms = cs.map(maskOf);
-      chains.set(cs[0], (t = chainOf(cs, src[0])));
-      if (slot === 'map' && ms.some(Boolean)) t.userData.orm = chainOf(cs.map((c, k) => ms[k] ?? flatMask(c)), src[0], true);
-    }
-    if (t.userData.orm) mine(t.userData.orm);
-    if (slot === 'map') texOf(mat).uLv.value.forEach((v, k) => v.set(cs[k].width, cs[k].height));
-    return (ch = mine(t));
-  };
+export const lodMap = <M extends THREE.Material & { map: THREE.Texture | null }>(mat: M, make: (L: number) => THREE.Texture, slot: 'map' | 'emissiveMap' = 'map'): M => {
+  const maps = (mat.userData.maps ??= []) as THREE.Texture[], was = mat.onBeforeRender;
+  const mine = <T extends THREE.Texture>(t: T) => (maps.push(t), t);
+  const drawn: THREE.Texture[] = [], get = (L: number) => (drawn[L] ??= mine(make(L)));
   mat.onBeforeRender = (...a) => {
     was.apply(mat, a);
-    const chained = hd.on && toony;
-    if (chained) Object.assign(mat, { [slot]: chain() });
-    else if (lod.n >= 0) Object.assign(mat, { [slot]: get(lod.n) });
-    if (slot === 'map' && toony) { const u = texOf(mat), orm = chained ? (ch!.userData.orm as THREE.Texture | undefined) : undefined; u.ormMap.value = orm ?? ORM; u.uOrm.value = +!!orm; }
+    if (lod.n >= 0) Object.assign(mat, { [slot]: get(lod.n) });
   };
   if (typeof document !== 'undefined') {
     if (!later.length) idle(drain);
     for (const L of [0, 1, 2]) later.push(() => renderer.initTexture(get(L)));
-    if (toony) {
-      const job = () => { const c = chain(); renderer.initTexture(c); if (c.userData.orm) renderer.initTexture(c.userData.orm); };
-      (mat.userData.warm ??= []).push(job);
-      if (hd.on) later.push(job);
-    }
   }
   return mat;
 };
-const padded = (c: HTMLCanvasElement, w: number, h: number) => (w === c.width && h === c.height ? c : canvas(w, h, (g) => {
-  const [cw, ch] = [c.width, c.height], [dx, dy] = [w - cw, h - ch];
-  g.imageSmoothingEnabled = false;
-  g.drawImage(c, 0, dy);
-  g.drawImage(c, 0, 0, cw, 1, 0, 0, cw, dy);
-  g.drawImage(c, cw - 1, 0, 1, ch, cw, dy, dx, ch);
-  g.drawImage(c, cw - 1, 0, 1, 1, cw, 0, dx, dy);
-}));
-const halved = (c: HTMLCanvasElement) => canvas(Math.max(1, c.width >> 1), Math.max(1, c.height >> 1), (g, w, h) => { g.imageSmoothingQuality = 'high'; g.drawImage(c, 0, 0, w, h); });
-const chainOf = (cs: HTMLCanvasElement[], like: THREE.Texture, mask = false) => {
-  const [w, h] = [(c: HTMLCanvasElement) => c.width, (c: HTMLCanvasElement) => c.height].map((side) => Math.max(...cs.map((c, k) => side(c) << k)));
-  const mips = cs.map((c, k) => padded(c, w >> k, h >> k));
-  for (let c = mips[2]; c.width > 1 || c.height > 1;) mips.push((c = halved(c)));
-  const t = new THREE.CanvasTexture(mips[0]);
-  Object.assign(t, { mipmaps: mips, generateMipmaps: false, magFilter: THREE.LinearFilter, minFilter: THREE.LinearMipmapLinearFilter, wrapS: like.wrapS, wrapT: like.wrapT, colorSpace: mask ? THREE.NoColorSpace : like.colorSpace });
-  t.repeat.copy(like.repeat); t.offset.copy(like.offset);
-  return t;
-};
-const chains = new WeakMap<HTMLCanvasElement, THREE.Texture>();
 
-let PX = 2;
+const PX = 2;
 const VIEW_H = 50;
-const cssH = () => (hd.on ? renderer.domElement.clientHeight : rt.height * PX);
-export const artH = () => (hd.on ? renderer.domElement.clientHeight / 2 : rt.height);
+const cssH = () => rt.height * PX;
+export const artH = () => rt.height;
 const texelPx = () => (cssH() * camera.zoom * Math.sin(ELEV)) / (VIEW_H * DENSITY);
 export const pxUnit = (zoom = camera.zoom) => VIEW_H / (zoom * artH());
 const levelNow = () => {
@@ -88,7 +47,6 @@ const levelNow = () => {
 const kept = import.meta.hot?.data ?? {};
 export let renderer!: THREE.WebGLRenderer;
 export const dirtyShadow = () => { if (renderer) renderer.shadowMap.needsUpdate = true; };
-export const movers: THREE.Object3D[] = [];
 
 export const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x14213d);
@@ -96,15 +54,9 @@ scene.background = new THREE.Color(0x14213d);
 const GRAD = new THREE.DataTexture(new Uint8Array([66, 90, 118, 150, 188, 224, 255]), 7, 1, THREE.RedFormat);
 GRAD.minFilter = GRAD.magFilter = THREE.NearestFilter;
 GRAD.needsUpdate = true;
-const follow = (t: THREE.Texture | null) => {
-  const min = hd.on ? THREE.LinearMipmapLinearFilter : THREE.NearestMipmapNearestFilter;
-  if (t && !t.userData.lod && t.minFilter !== min) { t.minFilter = min; t.magFilter = hd.on ? THREE.LinearFilter : THREE.NearestFilter; t.needsUpdate = true; }
-};
-export const toon = (color: THREE.ColorRepresentation, extra: THREE.MeshToonMaterialParameters = {}, pbr?: Pbr) => {
+export const toon = (color: THREE.ColorRepresentation, extra: THREE.MeshToonMaterialParameters = {}) => {
   const m = new THREE.MeshToonMaterial({ color, gradientMap: GRAD, ...extra });
   m.onBeforeCompile = lit;
-  m.onBeforeRender = () => { follow(m.map); follow(m.emissiveMap); };
-  if (pbr) m.userData.pbr = pbr;
   return m;
 };
 
@@ -118,39 +70,7 @@ export const pixelTexture = (src: HTMLCanvasElement, repeat?: number) => {
   return t;
 };
 
-export const LAYER_FX = 1;
-export const AIR = {
-  aFog: { value: new THREE.Vector4(-1.2, 40, 0.07, 0.005) },
-  aHor: { value: sky.horizon }, aLit: { value: sky.light }, aSun: { value: sky.sun }, aGlow: { value: 1 },
-};
-export const AIR_GLSL = /* glsl */`
-uniform vec3 aHor, aLit, aSun; uniform vec4 aFog; uniform float aGlow;
-float lobe( vec2 h, vec3 d ) { return pow( clamp( dot( h, normalize( d.xz ) ), 0.0, 1.0 ), 4.0 ); }
-vec3 haze( vec3 rd ) { vec2 h = normalize( rd.xz ); return aHor * ( 0.85 + 0.3 * mix( lobe( h, aLit ), lobe( h, aSun ), aGlow ) ); }
-float tau( vec3 ro, vec3 rd, float tm ) {
-	float k = aFog.z, y0 = aFog.x, ye = ro.y + rd.y * tm;
-	return aFog.w * abs( exp( - k * max( ro.y - y0, 0.0 ) ) - exp( - k * max( ye - y0, 0.0 ) ) ) / ( k * max( abs( rd.y ), 1e-3 ) );
-}
-vec4 airOver( vec4 c, vec3 wp, float add ) {
-	vec3 d = wp - cameraPosition; float tm = length( d ); vec3 rd = d / tm; float tr = exp( - tau( cameraPosition, rd, tm ) );
-	return vec4( c.rgb * tr + haze( rd ) * ( 1.0 - tr ) * ( 1.0 - add ), c.a );
-}
-`;
-export const fxOf = <M extends THREE.MeshBasicMaterial>(m: M) => {
-  const was = m.onBeforeCompile, key = `fx ${was}`;
-  m.onBeforeCompile = (sh, r) => {
-    was.call(m, sh, r);
-    Object.assign(sh.uniforms, AIR, { uFxHd: U.uHd, uFxAdd: { value: +(m.blending === THREE.AdditiveBlending) } });
-    sh.vertexShader = `varying vec3 vFx;\n${sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nvFx = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;')}`;
-    sh.fragmentShader = `${AIR_GLSL}\nuniform float uFxHd, uFxAdd; varying vec3 vFx;\n${sh.fragmentShader.replace('#include <opaque_fragment>', '#include <opaque_fragment>\nif ( uFxHd > 0.5 ) {\n\tif ( gl_FragColor.a <= 0.05 ) discard;\n\tgl_FragColor = airOver( gl_FragColor, vFx, uFxAdd );\n}')}`;
-  };
-  m.customProgramCacheKey = () => key;
-  m.onBeforeRender = () => { m.depthWrite = hd.on; };
-  return m;
-};
-
 export const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -600, 600);
-camera.layers.enable(LAYER_FX);
 export const ELEV = THREE.MathUtils.degToRad(52);
 const ORBIT = 150;
 camera.position.set(0, Math.sin(ELEV) * ORBIT, Math.cos(ELEV) * ORBIT);
@@ -162,21 +82,6 @@ Object.assign(controls, {
 });
 controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
 controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
-
-export const hdCam = new THREE.PerspectiveCamera();
-export const LENS = 300;
-const EDGE = 24 * BOARD_K, NEAR = LENS / (LENS - EDGE * Math.cos(ELEV)), FAR = LENS / (LENS + EDGE * Math.cos(ELEV)), DROP = (EDGE * Math.sin(ELEV) * (NEAR - FAR)) / 2;
-export const zoomed = () => THREE.MathUtils.smoothstep(camera.zoom / fitZoom, 1, 2);
-const lensView = [1, 1, 0];
-function lens() {
-  const t = controls.target;
-  hdCam.position.copy(camera.position).sub(t).setLength(LENS).add(t);
-  hdCam.quaternion.copy(camera.quaternion);
-  Object.assign(hdCam, { fov: THREE.MathUtils.radToDeg(2 * Math.atan(VIEW_H / 2 / LENS)), zoom: camera.zoom, aspect: (camera.right - camera.left) / (camera.top - camera.bottom), near: 40, far: LENS + 900 });
-  const drop = (DROP * (1 - zoomed()) * lensView[1] * camera.zoom) / VIEW_H;
-  hdCam.setViewOffset(lensView[0], lensView[1], lensView[2], Math.round(drop), lensView[0], lensView[1]);
-  hdCam.updateMatrixWorld();
-}
 
 const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthTexture: new THREE.DepthTexture(1, 1) });
 rt.texture.minFilter = rt.texture.magFilter = THREE.NearestFilter;
@@ -222,8 +127,6 @@ export function shakeCamera(intensity: number, durationSec: number) {
   shake.tick = 0;
 }
 
-export const shakeOffset = (): [number, number] => [shake.sx * SHAKE_ART_PX, shake.sy * SHAKE_ART_PX];
-
 function snap() {
   camera.updateMatrixWorld();
   const m = camera.matrixWorld.elements, p = camera.position, u = pxUnit();
@@ -240,7 +143,6 @@ function snap() {
   lim.value = Math.max(0.72, 1.25 * u * (t + 1 / t));
 }
 export function render() {
-  if (hd.on && hdMod) { dirtyShadow(); return hdMod.render(); }
   snap();
   renderer.setRenderTarget(rt);
   renderer.render(scene, camera);
@@ -252,28 +154,23 @@ export function render() {
 
 let framed = false;
 export let fitZoom = 0.5;
-export const free = { w: 1 };
 export const frame = (on: boolean) => { if (on !== framed) { framed = on; resize(); } };
 
 function resize() {
   const cv = renderer.domElement, w = cv.clientWidth, h = cv.clientHeight;
   if (!w || !h) return;
-  PX = hd.on ? 1 / Math.max(1, Math.min(devicePixelRatio, Math.sqrt(3.2e6 / (w * h)))) : 2;
   renderer.setPixelRatio(1 / PX);
   renderer.setSize(w, h, false);
   const buf = renderer.getDrawingBufferSize(new THREE.Vector2());
-  if (hd.on) { rt.setSize(1, 1); hdMod?.resize(buf.x, buf.y); } else rt.setSize(buf.x, buf.y);
+  rt.setSize(buf.x, buf.y);
   texel.set(1 / buf.x, 1 / buf.y);
   const a = buf.x / buf.y;
   Object.assign(camera, { left: -VIEW_H * a / 2, right: VIEW_H * a / 2, top: VIEW_H / 2, bottom: -VIEW_H / 2 });
   const cr = framed ? parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cr')) || 0 : 0;
-  free.w = 1 - cr / w;
+  const freeW = 1 - cr / w;
   camera.setViewOffset(buf.x, buf.y, Math.round(cr / 2 / PX), 0, buf.x, buf.y);
-  lensView.splice(0, 3, buf.x, buf.y, Math.round(cr / 2 / PX));
-  const wide = hd.on ? NEAR : 1;
-  fitZoom = cr ? (VIEW_H / (52 * BOARD_K)) * Math.min((a * free.w) / wide, 1 / Math.sin(ELEV)) : Math.min(1, (a * VIEW_H) / 52 / wide) / BOARD_K;
+  fitZoom = cr ? (VIEW_H / (52 * BOARD_K)) * Math.min(a * freeW, 1 / Math.sin(ELEV)) : Math.min(1, (a * VIEW_H) / 52) / BOARD_K;
   controls.minZoom = fitZoom;
-  if (hd.on) lens();
 }
 
 let goal: { x: number; z: number; zoom?: number | 'fit'; view?: { az: number; elev: number } } | null = null;
@@ -307,7 +204,6 @@ export function updateCamera(dt: number) {
   lod.n = levelNow();
   daylight();
   fitShadow();
-  if (hd.on) lens();
 }
 
 export function overview(lift: number) {
@@ -404,19 +300,19 @@ const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 export function pick(x: number, y: number, objects: THREE.Object3D[]) {
   const r = renderer.domElement.getBoundingClientRect();
   ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
-  ray.setFromCamera(ndc, hd.on ? hdCam : camera);
+  ray.setFromCamera(ndc, camera);
   const hit = ray.intersectObjects(objects, false)[0]?.object;
   return hit ? objects.indexOf(hit) : -1;
 }
 export function toScreen(v: THREE.Vector3): [number, number] {
-  const p = v.clone().project(hd.on ? hdCam : camera);
+  const p = v.clone().project(camera);
   return [(p.x + 1) / 2, (1 - p.y) / 2];
 }
 
 const hemi = new THREE.HemisphereLight();
-const DAYLIGHT = [[0xd8ecff, 0x56648a, 1.6, 0xfff0d0, 2.4], [0xa9c4ff, 0x6b5a58, 1.1, 0xffe0b0, 3.4]];
+const DAYLIGHT = [0xd8ecff, 0x56648a, 1.6, 0xfff0d0, 2.4] as const;
 const SUN_AT = 100 * BOARD_K;
-export const sun = new THREE.DirectionalLight();
+const sun = new THREE.DirectionalLight();
 sun.castShadow = true;
 sun.shadow.mapSize.set(4096, 4096);
 Object.assign(sun.shadow.camera, { near: 1, far: 220 * BOARD_K });
@@ -434,7 +330,7 @@ function fitShadow() {
     shadowH = Math.max(L.y, LOW);
   }
   const t = controls.target, off = camera.position.clone().sub(t), half = 2048 / DENSITY;
-  const reach = (Math.hypot(camera.right - camera.left, ((camera.top - camera.bottom) * off.length()) / off.y) / (2 * camera.zoom)) * (hd.on ? 1.3 : 1);
+  const reach = Math.hypot(camera.right - camera.left, ((camera.top - camera.bottom) * off.length()) / off.y) / (2 * camera.zoom);
   const s = reach > half ? 2 : 1, tx = s / DENSITY, ty = tx * shadowH, x = t.dot(SUN_X), y = t.dot(SUN_Y), i = Math.round(x / tx), j = Math.round(y / ty);
   if (turned || s !== shadowScale || i !== shadowX || j !== shadowY) {
     if (turned || s !== shadowScale) {
@@ -444,45 +340,17 @@ function fitShadow() {
     [shadowScale, shadowX, shadowY] = [s, i, j];
     dirtyShadow();
   }
-  U.uSh.value.set(sun.shadow.camera.far - sun.shadow.camera.near, tx);
   sun.target.position.copy(t).addScaledVector(SUN_X, i * tx - x).addScaledVector(SUN_Y, j * ty - y);
   sun.position.copy(sun.target.position).addScaledVector(L, SUN_AT);
 }
 
 function daylight() {
   updateSky();
-  const [skyC, groundC, skyI, sunC, sunI] = DAYLIGHT[+hd.on];
+  const [skyC, groundC, skyI, sunC, sunI] = DAYLIGHT;
   hemi.color.set(skyC).multiply(sky.skyC); hemi.groundColor.set(groundC).multiply(sky.skyC); hemi.intensity = skyI * sky.skyK;
   sun.color.set(sunC).multiply(sky.lightC); sun.intensity = sunI * sky.lightK;
   U.uLamp.value = sky.lampK;
   (scene.background as THREE.Color).copy(sky.horizon);
-}
-
-let hdMod: typeof import('./hd2d') | null = null, wanted = false;
-function look(on: boolean) {
-  hd.on = on; U.uHd.value = +on;
-  setLamps(on);
-  for (const o of movers) o.castShadow = on;
-  renderer.domElement.style.imageRendering = on ? 'auto' : '';
-  resize();
-  dirtyShadow();
-  if (!on) hdMod?.release();
-}
-const warm = () => new Promise<void>((done) => {
-  const jobs = new Set<() => void>(), gl = renderer.getContext() as WebGL2RenderingContext;
-  scene.traverse((o) => { if (o instanceof THREE.Mesh) for (const m of [o.material].flat()) m.userData.warm?.forEach((j: () => void) => jobs.add(j)); });
-  const run = () => {
-    for (const end = performance.now() + 6; jobs.size && performance.now() < end;) { const [j] = jobs; jobs.delete(j); j(); }
-    if (!jobs.size) return done();
-    const fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0)!, poll = () => (gl.getSyncParameter(fence, gl.SYNC_STATUS) === gl.SIGNALED ? (gl.deleteSync(fence), run()) : void setTimeout(poll, 4));
-    poll();
-  };
-  run();
-});
-export async function setLighting(on: boolean) {
-  wanted = on;
-  if (on) { hdMod ??= await import('./hd2d'); if (!hd.on) await warm(); }
-  if (wanted === on && hd.on !== on) look(on);
 }
 
 function disposeTree(root: THREE.Object3D) {
@@ -498,8 +366,7 @@ export function initScene() {
   renderer.shadowMap.type = THREE.BasicShadowMap;
   renderer.shadowMap.autoUpdate = false;
   controls.connect(renderer.domElement);
-  for (const l of [hemi, sun, spot, ...lamps]) l.layers.enable(LAYER_FX);
-  scene.add(hemi, sun, sun.target, ...lamps, spot, spot.target);
+  scene.add(hemi, sun, sun.target);
   daylight();
   renderer.domElement.style.width = renderer.domElement.style.height = '';
   const fit = new ResizeObserver(() => { resize(); render(); });
@@ -511,7 +378,6 @@ export function initScene() {
     finishTweens();
     goal = null;
     later.length = 0;
-    look(false);
     disposeTree(scene);
     scene.clear();
     for (const o of [rt, post.geometry, post.material, sun.shadow]) o.dispose();

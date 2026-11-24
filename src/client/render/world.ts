@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { scene, toon, lodMap, pixelTexture, texels, lod, hdCam, DENSITY, BOARD_K } from './scene';
-import { glassy, hd, lit, soft } from './light';
+import { scene, toon, lodMap, pixelTexture, texels, lod, DENSITY, BOARD_K } from './scene';
+import { lit } from './light';
 import { sky } from './sky';
 import { canvas } from './art';
 import { EARTH } from './earth';
@@ -12,7 +12,7 @@ const rng = (s: number) => () => (s = (s * 16807) % 2147483647) / 2147483647;
 const smooth = (t: number) => t * t * (3 - 2 * t);
 
 export const SEA_Y = -0.8;
-const SEA = 1600, SNAP = 64, SHORE = 100, GRID = 400, DAIS = 3.75;
+const SHORE = 100, GRID = 400, DAIS = 3.75;
 const PALETTE = ['#1b3f8e', '#20469a', '#264ea6', '#2c57b2', '#3170c0', '#3a92d0', '#5ec2dc'].map((c) => new THREE.Color(c));
 
 const dist = new Uint16Array(GRID * GRID);
@@ -30,20 +30,8 @@ const shore = new THREE.DataTexture(dist, GRID, GRID, THREE.RedFormat, THREE.Hal
 shore.minFilter = shore.magFilter = THREE.LinearFilter;
 shore.needsUpdate = true;
 
-const U = { uShore: { value: shore }, uPal: { value: PALETTE }, uTexel: { value: 1 / DENSITY }, uTime: { value: 0 }, uGlint: { value: new THREE.Color() }, uWake: { value: WAKES }, uSplash: { value: SPLASH } };
-const SHADE = /* glsl */`
-float seaSh = 1.0;
-void RE_Direct_Sea( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in ToonMaterial material, inout ReflectedLight reflectedLight ) {
-	vec3 spec = reflectedLight.directSpecular;
-	RE_Direct_Toon( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
-	#if NUM_DIR_LIGHTS > 0
-		if ( uHd > 0.5 && directLight.direction == directionalLights[ 0 ].direction ) reflectedLight.directSpecular = mix( spec, reflectedLight.directSpecular, seaSh );
-	#endif
-}
-#undef RE_Direct
-#define RE_Direct RE_Direct_Sea
-`;
-const mat = toon(0x20469a, {}, [0.22, 1, 0, 0]);
+const U = { uShore: { value: shore }, uPal: { value: PALETTE }, uTexel: { value: 1 / DENSITY }, uTime: { value: 0 }, uWake: { value: WAKES }, uSplash: { value: SPLASH } };
+const mat = toon(0x20469a);
 mat.onBeforeCompile = (sh) => {
   lit.call(mat, sh);
   Object.assign(sh.uniforms, U);
@@ -52,39 +40,20 @@ mat.onBeforeCompile = (sh) => {
     .replace('#include <begin_vertex>', '#include <begin_vertex>\nvW = (modelMatrix * vec4(transformed, 1.)).xz;');
   sh.fragmentShader = sh.fragmentShader
     .replace('#include <common>', `#include <common>
-      varying vec2 vW; uniform sampler2D uShore; uniform vec3 uPal[7], uSplash[2], uGlint; uniform vec4 uWake[${WAKES.length}]; uniform float uTexel, uTime;
+      varying vec2 vW; uniform sampler2D uShore; uniform vec3 uPal[7], uSplash[2]; uniform vec4 uWake[${WAKES.length}]; uniform float uTexel, uTime;
       float hash(vec2 p) { p = fract(p * vec2(0.1031, 0.1030)); p += dot(p, p.yx + 33.33); return fract((p.x + p.y) * p.x); }`)
-    .replace('#include <bumpmap_pars_fragment>', `${SHADE}\n#include <bumpmap_pars_fragment>`)
     .replace('#include <color_fragment>', `#include <color_fragment>
-      float tx = uTexel, px = 0.;
-      if (uHd > 0.5) { vec2 ax = dFdx(vW), ay = dFdy(vW); px = sqrt(max(dot(ax, ax), dot(ay, ay))); tx *= exp2(ceil(log2(max(px / tx, 1.)))); }
+      float tx = uTexel;
       vec2 c = floor(vW / tx), q = (c + 0.5) * tx;
       float chk = mod(c.x + c.y, 2.) - 0.5, t = uTime;
-      if (uHd > 0.5) chk *= 1. - smoothstep(0.4, 1.2, px);
       float d0 = texture2D(uShore, q / ${2 * SHORE}. + 0.5).r, d = d0 + chk * 1.5 * tx;
       float warp = sin(q.x * 0.53 + t * 0.3) * 1.3 + sin(dot(q, vec2(0.31, 0.23)) - t * 0.2) * 0.9;
       float s = sin(q.y * 1.05 + warp + t * 0.6) + 0.4 * sin(dot(q, vec2(1.9, 1.3)) + t * 0.9) + 0.4 * sin(dot(q, vec2(0.09, 0.06)) + t * 0.05) + chk * 3. * tx;
       float depth = step(-0.6, s) + step(0., s) + step(0.6, s);
       float shallow = step(d, 1.2) + step(d, 0.75) + step(d, 0.38);
-      vec3 sn = vec3(0., 0., 1.);
-      float lobe = 0.;
-      if (uHd > 0.5) {
-        float e = cos(dot(q, vec2(0.31, 0.23)) - t * 0.2);
-        vec2 g = cos(q.y * 1.05 + warp + t * 0.6) * vec2(0.689 * cos(q.x * 0.53 + t * 0.3) + 0.279 * e, 1.05 + 0.207 * e)
-          + 0.4 * cos(dot(q, vec2(1.9, 1.3)) + t * 0.9) * vec2(1.9, 1.3) + 0.4 * cos(dot(q, vec2(0.09, 0.06)) + t * 0.05) * vec2(0.09, 0.06);
-        g = floor(g / 0.5 + 0.5) * 0.5;
-        sn = normalize((viewMatrix * vec4(normalize(vec3(-0.07 * g.x, 1., -0.07 * g.y)), 0.)).xyz);
-        #if NUM_DIR_LIGHTS > 0
-          lobe = pow(saturate(dot(sn, normalize(directionalLights[0].direction + normalize(vViewPosition)))), 12.);
-          #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
-            seaSh = getShadow(directionalShadowMap[0], directionalLightShadows[0].shadowMapSize, directionalLightShadows[0].shadowIntensity, directionalLightShadows[0].shadowBias, directionalLightShadows[0].shadowRadius, vDirectionalShadowCoord[0]);
-          #endif
-        #endif
-      }
       vec3 sea = uPal[int(depth + shallow)];
       float run = max(1., floor(0.14 / tx + 0.5));
-      float glint = 0.;
-      if (depth > 2.5 && d0 > 0.5 && hash(vec2(floor((c.x + 9. * hash(vec2(c.y, 1.))) / run), c.y) + floor(t * 2.)) > 0.992) { glint = 1.; if (uHd < 0.5) sea = vec3(0.62, 0.8, 1.); }
+      if (depth > 2.5 && d0 > 0.5 && hash(vec2(floor((c.x + 9. * hash(vec2(c.y, 1.))) / run), c.y) + floor(t * 2.)) > 0.992) sea = vec3(0.62, 0.8, 1.);
       float ph = fract(t * 0.18 + 0.15 * sin(dot(q, vec2(0.21, 0.17))));
       if (abs(d0 - 0.15 - 0.6 * ph) < 0.5 * max(0.045, tx) && hash(c + 5.) > ph) sea = vec3(0.45, 0.75, 0.9);
       float fw = max(0.09, tx);
@@ -98,22 +67,15 @@ mat.onBeforeCompile = (sh) => {
         float k = uSplash[i].z;
         if (k >= 0. && k <= 1. && abs(length(q - uSplash[i].xy) - 0.25 - 1.6 * k) < 0.5 * fw && hash(c + 7.) > k) sea = vec3(0.9, 0.97, 1.);
       }
-      if (uHd > 0.5) sea = mix(sea, uPal[0], 0.65 * (1. - seaSh));
-      diffuseColor.rgb = sea;
-      if (uHd > 0.5) totalEmissiveRadiance += glint * lobe * seaSh * uGlint;`)
-    .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-      if (uHd > 0.5) normal = sn;`);
+      diffuseColor.rgb = sea;`);
 };
 mat.customProgramCacheKey = () => `${SHORE} ${WAKES.length} ${mat.onBeforeCompile}`;
 const sea = new THREE.Mesh(new THREE.PlaneGeometry(500, 500), mat);
 sea.rotation.x = -Math.PI / 2;
 sea.position.y = SEA_Y;
-const ocean = new THREE.Mesh(new THREE.CircleGeometry(SEA, 64), mat);
-ocean.rotation.x = sea.rotation.x;
-ocean.position.y = SEA_Y;
-mat.onBeforeRender = () => (U.uTexel.value = 2 ** (hd.on ? 0 : 2 - lod.n) / DENSITY);
+mat.onBeforeRender = () => (U.uTexel.value = 2 ** (2 - lod.n) / DENSITY);
 const DIM = new THREE.Color(0x0a1a5c);
-const dim = new THREE.Mesh(sea.geometry, soft(new THREE.ShadowMaterial({ color: DIM, opacity: 0.34 })));
+const dim = new THREE.Mesh(sea.geometry, new THREE.ShadowMaterial({ color: DIM, opacity: 0.34 }));
 dim.rotation.x = sea.rotation.x;
 dim.position.y = sea.position.y + 0.01;
 dim.receiveShadow = true;
@@ -170,26 +132,6 @@ const planet = (L: number) => canvas(texels(2 * Math.PI * BALL, L), texels(Math.
   g.putImageData(img, 0, 0);
 });
 
-const CITY = [0xffe9a8, 0xffc25a, 0xff9f3a], BUILT = [0.5, 0.12, 1, 0.3, 0];
-let people: Float32Array | undefined;
-const populated = () => people ??= Float32Array.from(LAND, (land, c) => {
-  const i = c % EW, j = Math.floor(c / EW), u = (i + 0.5) / EW, v = (j + 0.5) / EH, a = 2 * Math.PI * u, b = Math.PI * (0.5 - v), X = Math.cos(b) * Math.cos(a), Y = Math.sin(b), Z = Math.cos(b) * Math.sin(a), ss = THREE.MathUtils.smoothstep;
-  const pole = Math.abs(v - 0.5) * 2, lat = pole + (fbm(X, Y, Z, 1.5) - 0.5) * 0.6;
-  return land ? BUILT[BIOME.findIndex(([k]) => lat < k)] * (1 - ss(pole, 0.5, 0.78)) * (1.25 - 0.7 * ss(NEAR[c], 0.6, 0.95)) * ss(fbm(X, Y, Z, 3, 21), 0.35, 0.65) : 0;
-});
-const planetNight = (L: number) => canvas(texels(2 * Math.PI * BALL, L), texels(Math.PI * BALL, L), (g, w, h) => {
-  const img = g.createImageData(w, h), px = new Uint32Array(img.data.buffer).fill(0xff000000), pop = populated();
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    const u = x / w, v = y / h, p = grid(pop, u, v);
-    if (p < 0.03 || grid(LAND, u, v) <= 0.5) continue;
-    const a = 2 * Math.PI * u, b = Math.PI * (0.5 - v), n = fbm(Math.cos(b) * Math.cos(a), Math.sin(b), Math.cos(b) * Math.sin(a), 26, 33) - (0.74 - 0.1 * p);
-    if (n > 0.05) px[y * w + x] = rgba(CITY[0]);
-    else if (n > 0) px[y * w + x] = rgba(CITY[1]);
-    else if (n > -0.025) px[y * w + x] = rgba(CITY[2]);
-  }
-  g.putImageData(img, 0, 0);
-});
-
 const DIAL = [0x95a0be, 0xaeb8d0, 0xcdd5e8, 0xdcae3e, 0x6f7a9a];
 const dial = (L: number) => canvas(texels(2 * DAIS, L), texels(2 * DAIS, L), (g, n) => {
   const img = g.createImageData(n, n), px = new Uint32Array(img.data.buffer), h = n / 2, t = 1 / h;
@@ -221,21 +163,10 @@ const wrapped = (draw: (L: number) => HTMLCanvasElement) => (L: number) => {
   map.wrapS = THREE.RepeatWrapping;
   return map;
 };
-const GLOBE = /* glsl */`
-vec3 gn = inverseTransformDirection( normal, viewMatrix );
-float gs = dot( gn, uSunW );
-totalEmissiveRadiance *= uHd * smoothstep( 0.35, - 0.15, gs ) * 1.4;
-totalEmissiveRadiance += uHd * vec3( 0.42, 0.68, 1.0 ) * ( pow( 1.0 - saturate( dot( normal, normalize( vViewPosition ) ) ), 3.0 ) * ( 0.25 + 0.75 * smoothstep( - 0.3, 0.5, gs ) ) );
-#include <lights_toon_fragment>`;
-const globeMat = glassy(lodMap(lodMap(toon(0xffffff, { emissive: 0xffffff }), wrapped(planet)), wrapped(planetNight), 'emissiveMap'), 0);
-globeMat.onBeforeCompile = (sh) => {
-  lit.call(globeMat, sh);
-  sh.uniforms.uSunW = { value: sky.sun };
-  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec3 uSunW;').replace('#include <lights_toon_fragment>', GLOBE);
-};
+const globeMat = lodMap(toon(0xffffff), wrapped(planet));
 const globe = new THREE.Group(), ball = new THREE.Mesh(new THREE.SphereGeometry(BALL, 48, 32), globeMat);
 {
-  const dais = new THREE.Mesh(new THREE.CylinderGeometry(DAIS, DAIS, SLAB, 64), [stone(DAIS, SLAB), glassy(lodMap(toon(0xffffff), (L) => pixelTexture(dial(L))), 0), toon(0x6a7898)]);
+  const dais = new THREE.Mesh(new THREE.CylinderGeometry(DAIS, DAIS, SLAB, 64), [stone(DAIS, SLAB), lodMap(toon(0xffffff), (L) => pixelTexture(dial(L))), toon(0x6a7898)]);
   dais.position.y = TOP - SLAB / 2;
   const plinth = new THREE.Mesh(new THREE.CylinderGeometry(PLINTH, PLINTH + 0.15, PLINTH_H, 48), [stone(PLINTH, PLINTH_H), toon(0x9ea9c6), toon(0x6a7898)]);
   plinth.position.y = TOP + PLINTH_H / 2;
@@ -245,15 +176,11 @@ const globe = new THREE.Group(), ball = new THREE.Mesh(new THREE.SphereGeometry(
   globe.add(dais, plinth, ball);
 }
 
-export const initWorld = () => scene.add(sea, ocean, dim, globe, scenery);
+export const initWorld = () => scene.add(sea, dim, globe, scenery);
 
 export function updateWorld(t: number, dt: number) {
   U.uTime.value = Math.floor(t * 4) / 4;
-  U.uGlint.value.copy(sky.lightC).multiplyScalar(2.4 * sky.lightK);
-  sea.visible = dim.visible = !hd.on; ocean.visible = hd.on;
   dim.material.opacity = 0.34 * sky.lightK; dim.material.color.copy(DIM).multiplyScalar(sky.skyK);
-  ocean.position.x = Math.round(hdCam.position.x / SNAP) * SNAP;
-  ocean.position.z = Math.round(hdCam.position.z / SNAP) * SNAP;
   updateScenery(t, dt);
   ball.rotation.y += dt * 0.35;
   ball.position.y = FLOAT + Math.sin(t * 1.2) * 0.2;
